@@ -1,0 +1,15 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`Library Controller - Comprehensive Tests Response Structure Snapshots should match GET /api/yourbrands response structure 1`] = `
+{
+  "data": Any<Array>,
+  "success": true,
+}
+`;
+
+exports[`Library Controller - Comprehensive Tests Response Structure Snapshots should match GET /api/yourvendors response structure 1`] = `
+{
+  "data": Any<Array>,
+  "success": true,
+}
+`;

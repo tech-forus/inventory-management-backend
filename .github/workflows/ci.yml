@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: inventory_db_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: BACKEND/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./BACKEND
+        run: npm ci
+
+      - name: Create test database
+        working-directory: ./BACKEND
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: inventory_db_test
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+          NODE_ENV: test
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -c "CREATE DATABASE inventory_db_test;"
+
+      - name: Run migrations
+        working-directory: ./BACKEND
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: inventory_db_test
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+          NODE_ENV: test
+        run: npm run migrate:legacy
+
+      - name: Run tests
+        working-directory: ./BACKEND
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: inventory_db_test
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+          NODE_ENV: test
+          JWT_SECRET: test-secret-key-for-ci
+        run: npm test
+
+      - name: Upload coverage
+        if: always
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./BACKEND/coverage/lcov.info
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+
