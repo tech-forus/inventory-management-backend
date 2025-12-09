@@ -35,11 +35,22 @@ const gracefulShutdown = async (signal) => {
 
 // Start server
 const server = app.listen(PORT, async () => {
-  logger.info({
-    port: PORT,
-    environment: process.env.NODE_ENV || 'development',
-    apiUrl: `http://localhost:${PORT}`,
-  }, 'Server started');
+  logger.info(
+    {
+      port: PORT,
+      environment: process.env.NODE_ENV || 'development',
+      apiUrl: `http://localhost:${PORT}`,
+    },
+    'Server started'
+  );
+
+  // Log CORS env for debugging
+  logger.info(
+    {
+      corsOriginsEnv: process.env.CORS_ORIGINS || null,
+    },
+    'CORS_ORIGINS environment value'
+  );
   
   // Check database connection
   try {
@@ -66,4 +77,3 @@ process.on('unhandledRejection', (reason, promise) => {
   logger.error({ reason, promise }, 'Unhandled promise rejection');
   gracefulShutdown('unhandledRejection');
 });
-

@@ -8,56 +8,95 @@ require('dotenv').config();
 
 const app = express();
 
+// ----------------------
 // Security middleware - Helmet (must be first)
+// ----------------------
 app.use(helmet());
 
+// ----------------------
 // Request logging middleware (after helmet, before other middleware)
+// ----------------------
 app.use(requestLogger);
 
-// CORS configuration - stricter for production
-const allowedOrigins = (process.env.CORS_ORIGINS || '').split(',').filter(Boolean);
+// ----------------------
+// CORS configuration (patched)
+// ----------------------
 
-app.use(cors({
+// Read and parse CORS_ORIGINS env
+const rawOrigins = process.env.CORS_ORIGINS || '';
+const allowedOrigins = rawOrigins
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+// Log CORS config clearly
+console.log('[CORS] NODE_ENV:', process.env.NODE_ENV);
+console.log('[CORS] CORS_ORIGINS raw:', rawOrigins);
+console.log('[CORS] allowedOrigins parsed:', allowedOrigins);
+
+const corsOptions = {
   origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps or curl requests) in development
-    if (!origin && process.env.NODE_ENV !== 'production') {
+    // Log what origin we are evaluating
+    console.log('[CORS] Incoming Origin:', origin || '(no origin)');
+
+    // 1. Allow no-origin requests (curl, server-to-server, some mobile apps)
+    if (!origin) {
+      console.log('[CORS] Allowing request with no Origin header');
       return callback(null, true);
     }
-    
-    // If no allowed origins configured, allow all (development only)
+
+    // 2. Always allow local React dev server explicitly
+    if (origin === 'http://localhost:3000') {
+      console.log('[CORS] Allowing http://localhost:3000 explicitly');
+      return callback(null, true);
+    }
+
+    // 3. If no allowedOrigins configured, TEMP: allow all (to avoid hard 500s)
     if (allowedOrigins.length === 0) {
-      if (process.env.NODE_ENV === 'production') {
-        return callback(new Error('CORS_ORIGINS must be configured in production'));
-      }
+      console.warn(
+        '[CORS] allowedOrigins is empty. Temporarily allowing all origins. ' +
+          'Set CORS_ORIGINS in env for stricter control.'
+      );
       return callback(null, true);
     }
-    
-    // Check if origin is in allowed list
+
+    // 4. Check against allowedOrigins from env
     if (allowedOrigins.includes(origin)) {
+      console.log('[CORS] Origin is in allowedOrigins → allowed');
       return callback(null, true);
     }
-    
-    return callback(new Error('Not allowed by CORS'));
+
+    // 5. Origin not allowed: do NOT throw, just deny CORS (no header)
+    console.warn('[CORS] Origin NOT allowed by CORS:', origin, 'Allowed:', allowedOrigins);
+    // Returning false does not create a 500; it just means no CORS headers
+    return callback(null, false);
   },
   credentials: true,
-  optionsSuccessStatus: 200, // Some legacy browsers (IE11, various SmartTVs) choke on 204
-}));
+  optionsSuccessStatus: 200, // For older browsers
+};
 
+// Apply CORS middleware globally
+app.use(cors(corsOptions));
+
+// Explicitly handle all OPTIONS preflight requests
+app.options('*', cors(corsOptions));
+
+// ----------------------
 // Body parsing middleware
+// ----------------------
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Note: Conditional rate limiters are now used
-// - Authenticated users (valid JWT): Unlimited requests for 12 hours (JWT lifetime)
-// - Unauthenticated users: Rate limited based on IP address
-// See ./middlewares/conditionalRateLimit.js for details
-
+// ----------------------
 // Routes
+// ----------------------
+
+// Simple root endpoint
 app.get('/', (req, res) => {
-  res.json({ 
+  res.json({
     message: 'Inventory Management System API',
     status: 'Server is running',
-    version: '1.0.0'
+    version: '1.0.0',
   });
 });
 
@@ -70,11 +109,11 @@ app.get('/ping', (req, res) => {
 app.get('/api/health', async (req, res) => {
   const pool = require('./models/database');
   const timestamp = new Date().toISOString();
-  
+
   try {
     // Check database connection
     await pool.query('SELECT 1');
-    
+
     res.json({
       status: 'OK',
       db: 'UP',
@@ -90,7 +129,9 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
+// ----------------------
 // API Routes
+// ----------------------
 const companiesRoutes = require('./routes/companies');
 const authRoutes = require('./routes/auth');
 const onboardingRoutes = require('./routes/onboarding');
@@ -101,6 +142,7 @@ const inventoryRoutes = require('./routes/inventory');
 // Apply conditional rate limiting to routes
 // Authenticated users get unlimited requests (JWT valid for 12 hours)
 // Unauthenticated users are rate limited
+
 app.use('/api/companies', companiesRoutes);
 app.use('/api/auth', authRateLimiter, authRoutes); // 5 requests/15min for unauthenticated
 app.use('/api/onboarding', onboardingRoutes);
@@ -108,18 +150,22 @@ app.use('/api/library', apiRateLimiter, libraryRoutes); // 100 requests/15min fo
 app.use('/api/categories', apiRateLimiter, libraryRoutes);
 app.use('/api/skus', apiRateLimiter, skusRoutes); // 100 requests/15min for unauthenticated
 app.use('/api/inventory', strictRateLimiter, inventoryRoutes); // 50 requests/15min for unauthenticated
+
 // New "your" prefixed routes (must be last to avoid catching other routes)
 app.use('/api', apiRateLimiter, libraryRoutes);
 
+// ----------------------
 // 404 handler (must be after all routes, before error handler)
+// ----------------------
 const { notFoundHandler } = require('./middlewares/errorHandler');
 app.use(notFoundHandler);
 
+// ----------------------
 // Error handling middleware (must be last, 4 parameters)
+// ----------------------
 const { errorHandler } = require('./middlewares/errorHandler');
 app.use((err, req, res, next) => {
   errorHandler(err, req, res, next);
 });
 
 module.exports = app;
-
