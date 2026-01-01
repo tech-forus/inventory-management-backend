@@ -35,8 +35,8 @@ class TransportorModel {
       `INSERT INTO transportors (
         company_id, transporter_name, contact_person_name, contact_number,
         email_id, gst_number, vehicle_type, capacity, pricing_type, rate,
-        is_active, remarks
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        sub_vendor, is_active, remarks
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING *`,
       [
         companyId,
@@ -49,6 +49,7 @@ class TransportorModel {
         transportorData.capacity,
         transportorData.pricingType,
         transportorData.rate || 0,
+        transportorData.subVendor || '',
         transportorData.isActive !== undefined ? transportorData.isActive : true,
         transportorData.remarks || null,
       ]
@@ -71,10 +72,11 @@ class TransportorModel {
         capacity = COALESCE($7, capacity),
         pricing_type = COALESCE($8, pricing_type),
         rate = COALESCE($9, rate),
-        is_active = COALESCE($10, is_active),
-        remarks = COALESCE($11, remarks),
+        sub_vendor = COALESCE($10, sub_vendor),
+        is_active = COALESCE($11, is_active),
+        remarks = COALESCE($12, remarks),
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $12 AND company_id = $13
+      WHERE id = $13 AND company_id = $14
       RETURNING *`,
       [
         transportorData.name || transportorData.transporterName || null,
@@ -86,6 +88,7 @@ class TransportorModel {
         transportorData.capacity || null,
         transportorData.pricingType || null,
         transportorData.rate !== undefined ? transportorData.rate : null,
+        transportorData.subVendor || null,
         transportorData.isActive !== undefined ? transportorData.isActive : null,
         transportorData.remarks || null,
         id,

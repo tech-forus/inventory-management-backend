@@ -134,6 +134,7 @@ const transformTransportor = (transportor) => {
     capacity: transportor.capacity,
     pricingType: transportor.pricing_type,
     rate: parseFloat(transportor.rate || 0),
+    subVendor: transportor.sub_vendor,
     isActive: transportor.is_active,
     remarks: transportor.remarks,
     createdAt: transportor.created_at,
