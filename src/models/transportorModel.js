@@ -34,9 +34,8 @@ class TransportorModel {
     const result = await pool.query(
       `INSERT INTO transportors (
         company_id, transporter_name, contact_person_name, contact_number,
-        email_id, gst_number, vehicle_type, capacity, pricing_type, rate,
-        sub_vendor, is_active, remarks
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        email_id, gst_number, sub_vendor, is_active, remarks
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING *`,
       [
         companyId,
@@ -45,10 +44,6 @@ class TransportorModel {
         transportorData.contactNumber,
         transportorData.email || transportorData.emailId,
         transportorData.gstNumber,
-        transportorData.vehicleType,
-        transportorData.capacity,
-        transportorData.pricingType,
-        transportorData.rate || 0,
         transportorData.subVendor || '',
         transportorData.isActive !== undefined ? transportorData.isActive : true,
         transportorData.remarks || null,
@@ -68,15 +63,11 @@ class TransportorModel {
         contact_number = COALESCE($3, contact_number),
         email_id = COALESCE($4, email_id),
         gst_number = COALESCE($5, gst_number),
-        vehicle_type = COALESCE($6, vehicle_type),
-        capacity = COALESCE($7, capacity),
-        pricing_type = COALESCE($8, pricing_type),
-        rate = COALESCE($9, rate),
-        sub_vendor = COALESCE($10, sub_vendor),
-        is_active = COALESCE($11, is_active),
-        remarks = COALESCE($12, remarks),
+        sub_vendor = COALESCE($6, sub_vendor),
+        is_active = COALESCE($7, is_active),
+        remarks = COALESCE($8, remarks),
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $13 AND company_id = $14
+      WHERE id = $9 AND company_id = $10
       RETURNING *`,
       [
         transportorData.name || transportorData.transporterName || null,
@@ -84,10 +75,6 @@ class TransportorModel {
         transportorData.contactNumber || null,
         transportorData.email || transportorData.emailId || null,
         transportorData.gstNumber || null,
-        transportorData.vehicleType || null,
-        transportorData.capacity || null,
-        transportorData.pricingType || null,
-        transportorData.rate !== undefined ? transportorData.rate : null,
         transportorData.subVendor || null,
         transportorData.isActive !== undefined ? transportorData.isActive : null,
         transportorData.remarks || null,
