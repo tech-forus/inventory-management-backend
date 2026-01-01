@@ -286,6 +286,17 @@ const deleteBrand = async (req, res, next) => {
 const getProductCategories = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
+
+    // If ID is provided, get single category
+    if (req.params.id) {
+      const category = await CategoryModel.getProductCategoryById(req.params.id, companyId);
+      if (!category) {
+        throw new NotFoundError('Product category not found');
+      }
+      return res.json({ success: true, data: transformCategory(category) });
+    }
+
+    // Otherwise get all categories
     const categories = await CategoryModel.getProductCategories(companyId);
     const transformedData = transformArray(categories, transformCategory);
     res.json({ success: true, data: transformedData });
@@ -354,6 +365,17 @@ const deleteProductCategory = async (req, res, next) => {
 const getItemCategories = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
+
+    // If ID is provided, get single category
+    if (req.params.id) {
+      const category = await CategoryModel.getItemCategoryById(req.params.id, companyId);
+      if (!category) {
+        throw new NotFoundError('Item category not found');
+      }
+      return res.json({ success: true, data: transformCategory(category) });
+    }
+
+    // Otherwise get all categories (with optional productCategoryId filter)
     const productCategoryId = req.query.productCategoryId || null;
     const categories = await CategoryModel.getItemCategories(companyId, productCategoryId);
     const transformedData = transformArray(categories, transformCategory);
@@ -423,6 +445,17 @@ const deleteItemCategory = async (req, res, next) => {
 const getSubCategories = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
+
+    // If ID is provided, get single category
+    if (req.params.id) {
+      const category = await CategoryModel.getSubCategoryById(req.params.id, companyId);
+      if (!category) {
+        throw new NotFoundError('Sub category not found');
+      }
+      return res.json({ success: true, data: transformCategory(category) });
+    }
+
+    // Otherwise get all categories (with optional itemCategoryId filter)
     const itemCategoryId = req.query.itemCategoryId || null;
     const categories = await CategoryModel.getSubCategories(companyId, itemCategoryId);
     const transformedData = transformArray(categories, transformCategory);

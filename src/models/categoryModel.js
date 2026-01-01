@@ -16,6 +16,14 @@ class CategoryModel {
     return result.rows;
   }
 
+  static async getProductCategoryById(id, companyId) {
+    const result = await pool.query(
+      'SELECT * FROM product_categories WHERE id = $1 AND company_id = $2 AND is_active = true',
+      [id, companyId.toUpperCase()]
+    );
+    return result.rows[0];
+  }
+
   static async createProductCategory(categoryData, companyId) {
     const result = await pool.query(
       `INSERT INTO product_categories (company_id, name, description, is_active)
@@ -65,15 +73,23 @@ class CategoryModel {
   static async getItemCategories(companyId, productCategoryId = null) {
     let query = 'SELECT * FROM item_categories WHERE company_id = $1 AND is_active = true';
     const params = [companyId.toUpperCase()];
-    
+
     if (productCategoryId) {
       query += ' AND product_category_id = $2';
       params.push(productCategoryId);
     }
-    
+
     query += ' ORDER BY name';
     const result = await pool.query(query, params);
     return result.rows;
+  }
+
+  static async getItemCategoryById(id, companyId) {
+    const result = await pool.query(
+      'SELECT * FROM item_categories WHERE id = $1 AND company_id = $2 AND is_active = true',
+      [id, companyId.toUpperCase()]
+    );
+    return result.rows[0];
   }
 
   static async createItemCategory(categoryData, companyId) {
@@ -126,15 +142,23 @@ class CategoryModel {
   static async getSubCategories(companyId, itemCategoryId = null) {
     let query = 'SELECT * FROM sub_categories WHERE company_id = $1 AND is_active = true';
     const params = [companyId.toUpperCase()];
-    
+
     if (itemCategoryId) {
       query += ' AND item_category_id = $2';
       params.push(itemCategoryId);
     }
-    
+
     query += ' ORDER BY name';
     const result = await pool.query(query, params);
     return result.rows;
+  }
+
+  static async getSubCategoryById(id, companyId) {
+    const result = await pool.query(
+      'SELECT * FROM sub_categories WHERE id = $1 AND company_id = $2 AND is_active = true',
+      [id, companyId.toUpperCase()]
+    );
+    return result.rows[0];
   }
 
   static async createSubCategory(categoryData, companyId) {
