@@ -1,0 +1,8 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`Onboarding Controller - Comprehensive Tests Response Structure Snapshots should match GET /api/onboarding/status response structure 1`] = `
+{
+  "onboardingCompleted": Any<Boolean>,
+  "success": true,
+}
+`;
