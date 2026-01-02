@@ -31,7 +31,7 @@ router.put('/:id/suspend', authenticate, userController.suspendUser);
 router.post(
   '/invite',
   authenticate,
-  validateRequired(['email', 'firstName', 'lastName', 'role']),
+  validateRequired(['email', 'firstName', 'role']),
   validateEmail('email'),
   userController.inviteUser
 );

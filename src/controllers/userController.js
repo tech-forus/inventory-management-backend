@@ -64,6 +64,11 @@ const inviteUser = async (req, res, next) => {
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
     // Insert user into users table
+    // Combine firstName and lastName (lastName is optional)
+    const fullName = lastName && lastName.trim() 
+      ? `${firstName} ${lastName}`.trim()
+      : firstName.trim();
+    
     const userResult = await client.query(
       `INSERT INTO users (
         company_id, email, password, full_name, phone, role,
@@ -74,7 +79,7 @@ const inviteUser = async (req, res, next) => {
         companyId,
         normalizedEmail,
         hashedPassword,
-        `${firstName} ${lastName}`,
+        fullName,
         null, // phone can be added later
         role === 'admin' ? 'admin' : 'user',
         passwordResetToken,
@@ -90,6 +95,9 @@ const inviteUser = async (req, res, next) => {
     const dataTable = isAdmin ? 'admins' : 'users_data';
 
     // Insert into admins or users_data table
+    // lastName is optional, so use null if not provided or empty
+    const lastNameValue = lastName && lastName.trim() ? lastName.trim() : null;
+    
     await client.query(
       `INSERT INTO ${dataTable} (
         user_id, company_id, first_name, last_name, employee_id,
@@ -99,7 +107,7 @@ const inviteUser = async (req, res, next) => {
         user.id,
         companyId,
         firstName,
-        lastName,
+        lastNameValue,
         employeeId || null,
         normalizedEmail,
         department || null,
@@ -117,7 +125,7 @@ const inviteUser = async (req, res, next) => {
       await sendInvitationEmail(
         normalizedEmail,
         firstName,
-        lastName,
+        lastNameValue || '', // Use lastNameValue or empty string
         passwordResetToken,
         companyId
       );
