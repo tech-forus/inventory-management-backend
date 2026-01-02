@@ -34,8 +34,8 @@ class TransportorModel {
     const result = await pool.query(
       `INSERT INTO transportors (
         company_id, transporter_name, contact_person_name, contact_number,
-        email_id, gst_number, sub_vendor, is_active, remarks
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        email_id, gst_number, sub_vendor, whatsapp_number, is_active, remarks
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *`,
       [
         companyId,
@@ -44,7 +44,8 @@ class TransportorModel {
         transportorData.contactNumber,
         transportorData.email || transportorData.emailId,
         transportorData.gstNumber,
-        transportorData.subVendor || '',
+        transportorData.subVendor || null,
+        transportorData.whatsappNumber || null,
         transportorData.isActive !== undefined ? transportorData.isActive : true,
         transportorData.remarks || null,
       ]
@@ -64,10 +65,11 @@ class TransportorModel {
         email_id = COALESCE($4, email_id),
         gst_number = COALESCE($5, gst_number),
         sub_vendor = COALESCE($6, sub_vendor),
-        is_active = COALESCE($7, is_active),
-        remarks = COALESCE($8, remarks),
+        whatsapp_number = COALESCE($7, whatsapp_number),
+        is_active = COALESCE($8, is_active),
+        remarks = COALESCE($9, remarks),
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $9 AND company_id = $10
+      WHERE id = $10 AND company_id = $11
       RETURNING *`,
       [
         transportorData.name || transportorData.transporterName || null,
@@ -76,6 +78,7 @@ class TransportorModel {
         transportorData.email || transportorData.emailId || null,
         transportorData.gstNumber || null,
         transportorData.subVendor || null,
+        transportorData.whatsappNumber || null,
         transportorData.isActive !== undefined ? transportorData.isActive : null,
         transportorData.remarks || null,
         id,

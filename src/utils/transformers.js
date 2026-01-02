@@ -129,6 +129,7 @@ const transformTransportor = (transportor) => {
     contactPerson: transportor.contact_person_name,
     contactPersonName: transportor.contact_person_name,
     contactNumber: transportor.contact_number,
+    whatsappNumber: transportor.whatsapp_number,
     email: transportor.email_id,
     emailId: transportor.email_id,
     gstNumber: transportor.gst_number,
