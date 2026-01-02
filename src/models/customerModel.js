@@ -37,8 +37,8 @@ class CustomerModel {
         address_line1, address_line2, city, state, country, postal_code,
         company_name, gst_number, tax_id,
         credit_limit, outstanding_balance,
-        is_active, notes
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+        is_active, notes, date_of_birth, personal_address
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
       RETURNING *`,
       [
         companyId,
@@ -60,6 +60,8 @@ class CustomerModel {
         customerData.outstandingBalance || 0.00,
         customerData.isActive !== undefined ? customerData.isActive : true,
         customerData.notes || null,
+        customerData.dateOfBirth || null,
+        customerData.personalAddress || null,
       ]
     );
     return result.rows[0];
@@ -89,8 +91,10 @@ class CustomerModel {
         outstanding_balance = COALESCE($16, outstanding_balance),
         is_active = COALESCE($17, is_active),
         notes = COALESCE($18, notes),
+        date_of_birth = COALESCE($19, date_of_birth),
+        personal_address = COALESCE($20, personal_address),
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $19 AND company_id = $20
+      WHERE id = $21 AND company_id = $22
       RETURNING *`,
       [
         customerData.customerName || customerData.name || null,
@@ -111,6 +115,8 @@ class CustomerModel {
         customerData.outstandingBalance !== undefined ? customerData.outstandingBalance : null,
         customerData.isActive !== undefined ? customerData.isActive : null,
         customerData.notes || null,
+        customerData.dateOfBirth || null,
+        customerData.personalAddress || null,
         id,
         companyId,
       ]

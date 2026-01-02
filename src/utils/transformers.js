@@ -95,6 +95,8 @@ const transformCustomer = (customer) => {
     addressLine1: customer.address_line1,
     addressLine2: customer.address_line2,
     address: customer.address_line1, // Alias for compatibility
+    personalAddress: customer.personal_address,
+    dateOfBirth: customer.date_of_birth,
     city: customer.city,
     state: customer.state,
     country: customer.country,
