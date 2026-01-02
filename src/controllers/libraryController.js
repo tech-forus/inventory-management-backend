@@ -553,7 +553,31 @@ const createTeam = async (req, res, next) => {
   try {
     await client.query('BEGIN');
     const companyId = getCompanyId(req);
-    const team = await TeamModel.create(req.body, companyId);
+    
+    // Validate and trim department and designation
+    const teamData = { ...req.body };
+    
+    // Validate department
+    if (!teamData.department || !teamData.department.toString().trim()) {
+      throw new ValidationError('Department is required');
+    }
+    const department = teamData.department.toString().trim();
+    if (department.length > 255) {
+      throw new ValidationError('Department must be 255 characters or less');
+    }
+    teamData.department = department;
+    
+    // Validate designation
+    if (!teamData.designation || !teamData.designation.toString().trim()) {
+      throw new ValidationError('Designation is required');
+    }
+    const designation = teamData.designation.toString().trim();
+    if (designation.length > 255) {
+      throw new ValidationError('Designation must be 255 characters or less');
+    }
+    teamData.designation = designation;
+    
+    const team = await TeamModel.create(teamData, companyId);
     await client.query('COMMIT');
     res.json({ success: true, data: transformTeam(team) });
   } catch (error) {
@@ -1359,7 +1383,33 @@ const updateTeam = async (req, res, next) => {
   try {
     await client.query('BEGIN');
     const companyId = getCompanyId(req);
-    const team = await TeamModel.update(req.params.id, req.body, companyId);
+    
+    // Validate and trim department and designation if provided
+    const teamData = { ...req.body };
+    
+    if (teamData.department !== undefined) {
+      if (!teamData.department || !teamData.department.toString().trim()) {
+        throw new ValidationError('Department cannot be empty');
+      }
+      const department = teamData.department.toString().trim();
+      if (department.length > 255) {
+        throw new ValidationError('Department must be 255 characters or less');
+      }
+      teamData.department = department;
+    }
+    
+    if (teamData.designation !== undefined) {
+      if (!teamData.designation || !teamData.designation.toString().trim()) {
+        throw new ValidationError('Designation cannot be empty');
+      }
+      const designation = teamData.designation.toString().trim();
+      if (designation.length > 255) {
+        throw new ValidationError('Designation must be 255 characters or less');
+      }
+      teamData.designation = designation;
+    }
+    
+    const team = await TeamModel.update(req.params.id, teamData, companyId);
     
     if (!team) {
       await client.query('ROLLBACK');
