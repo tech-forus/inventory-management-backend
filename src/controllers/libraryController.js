@@ -348,13 +348,17 @@ const updateProductCategory = async (req, res, next) => {
 const deleteProductCategory = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
-    const result = await CategoryModel.deleteProductCategory(req.params.id, companyId);
+    const hardDelete = req.query.force === 'true' || req.query.force === true;
+    const result = await CategoryModel.deleteProductCategory(req.params.id, companyId, hardDelete);
     
     if (!result) {
       throw new NotFoundError('Product category not found');
     }
     
-    res.json({ success: true, message: 'Product category deleted successfully' });
+    const message = hardDelete 
+      ? 'Product category permanently deleted from database' 
+      : 'Product category deleted successfully';
+    res.json({ success: true, message });
   } catch (error) {
     next(error);
   }
@@ -428,13 +432,17 @@ const updateItemCategory = async (req, res, next) => {
 const deleteItemCategory = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
-    const result = await CategoryModel.deleteItemCategory(req.params.id, companyId);
+    const hardDelete = req.query.force === 'true' || req.query.force === true;
+    const result = await CategoryModel.deleteItemCategory(req.params.id, companyId, hardDelete);
     
     if (!result) {
       throw new NotFoundError('Item category not found');
     }
     
-    res.json({ success: true, message: 'Item category deleted successfully' });
+    const message = hardDelete 
+      ? 'Item category permanently deleted from database' 
+      : 'Item category deleted successfully';
+    res.json({ success: true, message });
   } catch (error) {
     next(error);
   }
@@ -508,13 +516,17 @@ const updateSubCategory = async (req, res, next) => {
 const deleteSubCategory = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
-    const result = await CategoryModel.deleteSubCategory(req.params.id, companyId);
+    const hardDelete = req.query.force === 'true' || req.query.force === true;
+    const result = await CategoryModel.deleteSubCategory(req.params.id, companyId, hardDelete);
     
     if (!result) {
       throw new NotFoundError('Sub category not found');
     }
     
-    res.json({ success: true, message: 'Sub category deleted successfully' });
+    const message = hardDelete 
+      ? 'Sub category permanently deleted from database' 
+      : 'Sub category deleted successfully';
+    res.json({ success: true, message });
   } catch (error) {
     next(error);
   }
@@ -553,31 +565,7 @@ const createTeam = async (req, res, next) => {
   try {
     await client.query('BEGIN');
     const companyId = getCompanyId(req);
-    
-    // Validate and trim department and designation
-    const teamData = { ...req.body };
-    
-    // Validate department
-    if (!teamData.department || !teamData.department.toString().trim()) {
-      throw new ValidationError('Department is required');
-    }
-    const department = teamData.department.toString().trim();
-    if (department.length > 255) {
-      throw new ValidationError('Department must be 255 characters or less');
-    }
-    teamData.department = department;
-    
-    // Validate designation
-    if (!teamData.designation || !teamData.designation.toString().trim()) {
-      throw new ValidationError('Designation is required');
-    }
-    const designation = teamData.designation.toString().trim();
-    if (designation.length > 255) {
-      throw new ValidationError('Designation must be 255 characters or less');
-    }
-    teamData.designation = designation;
-    
-    const team = await TeamModel.create(teamData, companyId);
+    const team = await TeamModel.create(req.body, companyId);
     await client.query('COMMIT');
     res.json({ success: true, data: transformTeam(team) });
   } catch (error) {
@@ -828,10 +816,8 @@ const uploadTransportors = async (req, res, next) => {
           name: row.transporter_name || row.name,
           contactPerson: row.contact_person_name || row.contactPersonName || row.contact_person || row.contactPerson,
           contactNumber: row.contact_number || row.contactNumber,
-          whatsappNumber: row.whatsapp_number || row.whatsappNumber || row['WhatsApp Number'] || null,
           email: row.email_id || row.emailId || row.email,
           gstNumber: row.gst_number || row.gstNumber,
-          subVendor: row.sub_vendor || row.subVendor || row['Sub Vendor'] || null,
           vehicleType: row.vehicle_type || row.vehicleType,
           capacity: row.capacity,
           pricingType: row.pricing_type || row.pricingType,
@@ -1385,33 +1371,7 @@ const updateTeam = async (req, res, next) => {
   try {
     await client.query('BEGIN');
     const companyId = getCompanyId(req);
-    
-    // Validate and trim department and designation if provided
-    const teamData = { ...req.body };
-    
-    if (teamData.department !== undefined) {
-      if (!teamData.department || !teamData.department.toString().trim()) {
-        throw new ValidationError('Department cannot be empty');
-      }
-      const department = teamData.department.toString().trim();
-      if (department.length > 255) {
-        throw new ValidationError('Department must be 255 characters or less');
-      }
-      teamData.department = department;
-    }
-    
-    if (teamData.designation !== undefined) {
-      if (!teamData.designation || !teamData.designation.toString().trim()) {
-        throw new ValidationError('Designation cannot be empty');
-      }
-      const designation = teamData.designation.toString().trim();
-      if (designation.length > 255) {
-        throw new ValidationError('Designation must be 255 characters or less');
-      }
-      teamData.designation = designation;
-    }
-    
-    const team = await TeamModel.update(req.params.id, teamData, companyId);
+    const team = await TeamModel.update(req.params.id, req.body, companyId);
     
     if (!team) {
       await client.query('ROLLBACK');

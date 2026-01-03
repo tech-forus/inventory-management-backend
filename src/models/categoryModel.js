@@ -59,12 +59,22 @@ class CategoryModel {
     return result.rows[0];
   }
 
-  static async deleteProductCategory(id, companyId) {
-    const result = await pool.query(
-      'UPDATE product_categories SET is_active = false WHERE id = $1 AND company_id = $2 RETURNING id',
-      [id, companyId.toUpperCase()]
-    );
-    return result.rows[0];
+  static async deleteProductCategory(id, companyId, hardDelete = false) {
+    if (hardDelete) {
+      // Hard delete - completely remove from database
+      const result = await pool.query(
+        'DELETE FROM product_categories WHERE id = $1 AND company_id = $2 RETURNING id',
+        [id, companyId.toUpperCase()]
+      );
+      return result.rows[0];
+    } else {
+      // Soft delete - set is_active = false
+      const result = await pool.query(
+        'UPDATE product_categories SET is_active = false WHERE id = $1 AND company_id = $2 RETURNING id',
+        [id, companyId.toUpperCase()]
+      );
+      return result.rows[0];
+    }
   }
 
   /**
@@ -128,12 +138,22 @@ class CategoryModel {
     return result.rows[0];
   }
 
-  static async deleteItemCategory(id, companyId) {
-    const result = await pool.query(
-      'UPDATE item_categories SET is_active = false WHERE id = $1 AND company_id = $2 RETURNING id',
-      [id, companyId.toUpperCase()]
-    );
-    return result.rows[0];
+  static async deleteItemCategory(id, companyId, hardDelete = false) {
+    if (hardDelete) {
+      // Hard delete - completely remove from database
+      const result = await pool.query(
+        'DELETE FROM item_categories WHERE id = $1 AND company_id = $2 RETURNING id',
+        [id, companyId.toUpperCase()]
+      );
+      return result.rows[0];
+    } else {
+      // Soft delete - set is_active = false
+      const result = await pool.query(
+        'UPDATE item_categories SET is_active = false WHERE id = $1 AND company_id = $2 RETURNING id',
+        [id, companyId.toUpperCase()]
+      );
+      return result.rows[0];
+    }
   }
 
   /**
@@ -197,12 +217,22 @@ class CategoryModel {
     return result.rows[0];
   }
 
-  static async deleteSubCategory(id, companyId) {
-    const result = await pool.query(
-      'UPDATE sub_categories SET is_active = false WHERE id = $1 AND company_id = $2 RETURNING id',
-      [id, companyId.toUpperCase()]
-    );
-    return result.rows[0];
+  static async deleteSubCategory(id, companyId, hardDelete = false) {
+    if (hardDelete) {
+      // Hard delete - completely remove from database
+      const result = await pool.query(
+        'DELETE FROM sub_categories WHERE id = $1 AND company_id = $2 RETURNING id',
+        [id, companyId.toUpperCase()]
+      );
+      return result.rows[0];
+    } else {
+      // Soft delete - set is_active = false
+      const result = await pool.query(
+        'UPDATE sub_categories SET is_active = false WHERE id = $1 AND company_id = $2 RETURNING id',
+        [id, companyId.toUpperCase()]
+      );
+      return result.rows[0];
+    }
   }
 }
 
