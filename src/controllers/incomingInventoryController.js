@@ -557,7 +557,26 @@ const getPriceHistory = async (req, res, next) => {
       throw new ValidationError('SKU ID is required');
     }
 
-    const history = await PriceHistoryModel.getPriceHistory(parseInt(skuId), companyId);
+    // Check if skuId is a numeric ID or a SKU code string
+    let numericSkuId = parseInt(skuId);
+    
+    // If parseInt returns NaN, it means skuId is a SKU code string
+    // We need to look up the numeric ID from the skus table
+    if (isNaN(numericSkuId)) {
+      const pool = require('../models/database');
+      const skuResult = await pool.query(
+        'SELECT id FROM skus WHERE sku_id = $1 AND company_id = $2 AND is_active = true',
+        [skuId, companyId.toUpperCase()]
+      );
+      
+      if (skuResult.rows.length === 0) {
+        throw new ValidationError('SKU not found');
+      }
+      
+      numericSkuId = skuResult.rows[0].id;
+    }
+
+    const history = await PriceHistoryModel.getPriceHistory(numericSkuId, companyId);
     res.json({ success: true, data: history });
   } catch (error) {
     next(error);
@@ -576,7 +595,26 @@ const hasPriceHistory = async (req, res, next) => {
       throw new ValidationError('SKU ID is required');
     }
 
-    const hasHistory = await PriceHistoryModel.hasPriceHistory(parseInt(skuId), companyId);
+    // Check if skuId is a numeric ID or a SKU code string
+    let numericSkuId = parseInt(skuId);
+    
+    // If parseInt returns NaN, it means skuId is a SKU code string
+    // We need to look up the numeric ID from the skus table
+    if (isNaN(numericSkuId)) {
+      const pool = require('../models/database');
+      const skuResult = await pool.query(
+        'SELECT id FROM skus WHERE sku_id = $1 AND company_id = $2 AND is_active = true',
+        [skuId, companyId.toUpperCase()]
+      );
+      
+      if (skuResult.rows.length === 0) {
+        return res.json({ success: true, data: { hasHistory: false } });
+      }
+      
+      numericSkuId = skuResult.rows[0].id;
+    }
+
+    const hasHistory = await PriceHistoryModel.hasPriceHistory(numericSkuId, companyId);
     res.json({ success: true, data: { hasHistory } });
   } catch (error) {
     next(error);
