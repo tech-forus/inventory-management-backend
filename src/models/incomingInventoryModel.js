@@ -747,15 +747,20 @@ class IncomingInventoryModel {
       // Stock behavior: Short changes directly affect stock
       // When short decreases (items arrive): stock increases
       // When short increases (items become short): stock decreases
-      const shortDiff = newShort - oldShort;
-      if (shortDiff !== 0) {
-        // shortDiff is negative when short decreases (items arrived), so we subtract (which adds to stock)
-        // shortDiff is positive when short increases (items become short), so we subtract (which removes from stock)
-        await client.query(
-          'UPDATE skus SET current_stock = GREATEST(0, current_stock - $1) WHERE id = $2',
-          [-shortDiff, currentItem.sku_id]
-        );
-        logger.debug({ skuId: currentItem.sku_id, stockChange: -shortDiff }, `Updated SKU ${currentItem.sku_id} stock: ${-shortDiff > 0 ? '+' : ''}${-shortDiff} (from short update - short directly affects available stock)`);
+      // Skip stock update if flag is set (used when stock was already updated by incoming inventory record)
+      if (!updates.skipStockUpdate) {
+        const shortDiff = newShort - oldShort;
+        if (shortDiff !== 0) {
+          // shortDiff is negative when short decreases (items arrived), so we subtract (which adds to stock)
+          // shortDiff is positive when short increases (items become short), so we subtract (which removes from stock)
+          await client.query(
+            'UPDATE skus SET current_stock = GREATEST(0, current_stock - $1) WHERE id = $2',
+            [-shortDiff, currentItem.sku_id]
+          );
+          logger.debug({ skuId: currentItem.sku_id, stockChange: -shortDiff }, `Updated SKU ${currentItem.sku_id} stock: ${-shortDiff > 0 ? '+' : ''}${-shortDiff} (from short update - short directly affects available stock)`);
+        }
+      } else {
+        logger.debug({ skuId: currentItem.sku_id }, `Skipped stock update for SKU ${currentItem.sku_id} (skipStockUpdate flag set)`);
       }
 
       await client.query('COMMIT');
