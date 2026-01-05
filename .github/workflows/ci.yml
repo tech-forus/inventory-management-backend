@@ -47,7 +47,7 @@ jobs:
           DB_PASSWORD: postgres
           NODE_ENV: test
         run: |
-          PGPASSWORD=postgres psql -h localhost -U postgres -c "CREATE DATABASE inventory_db_test;"
+          PGPASSWORD=postgres psql -h localhost -U postgres -c "CREATE DATABASE inventory_db_test;" || true
 
       - name: Run migrations
         env:
