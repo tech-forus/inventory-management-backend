@@ -107,7 +107,9 @@ class IncomingInventoryModel {
 
         // Update SKU stock if status is 'completed'
         // IMPORTANT: Only add RECEIVED items to stock, not total quantity
-        if (inventoryData.status === 'completed') {
+        // Skip stock update if skipStockUpdate flag is set (used for "received back" short items)
+        // to avoid double-counting - stock will be updated via updateShortItem instead
+        if (inventoryData.status === 'completed' && !inventoryData.skipStockUpdate) {
           const receivedQty = item.received || 0;
           if (receivedQty > 0) {
             await client.query(
