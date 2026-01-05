@@ -71,7 +71,7 @@ jobs:
         run: npm test
 
       - name: Upload coverage
-        if: always
+        if: always()
         uses: codecov/codecov-action@v3
         with:
           file: ./coverage/lcov.info
