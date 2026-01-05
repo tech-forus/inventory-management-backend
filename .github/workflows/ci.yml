@@ -33,14 +33,12 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: BACKEND/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
-        working-directory: ./BACKEND
         run: npm ci
 
       - name: Create test database
-        working-directory: ./BACKEND
         env:
           DB_HOST: localhost
           DB_PORT: 5432
@@ -52,7 +50,6 @@ jobs:
           PGPASSWORD=postgres psql -h localhost -U postgres -c "CREATE DATABASE inventory_db_test;"
 
       - name: Run migrations
-        working-directory: ./BACKEND
         env:
           DB_HOST: localhost
           DB_PORT: 5432
@@ -63,7 +60,6 @@ jobs:
         run: npm run migrate:legacy
 
       - name: Run tests
-        working-directory: ./BACKEND
         env:
           DB_HOST: localhost
           DB_PORT: 5432
@@ -78,7 +74,7 @@ jobs:
         if: always
         uses: codecov/codecov-action@v3
         with:
-          file: ./BACKEND/coverage/lcov.info
+          file: ./coverage/lcov.info
           flags: unittests
           name: codecov-umbrella
           fail_ci_if_error: false
