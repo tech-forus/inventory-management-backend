@@ -64,7 +64,7 @@ jobs:
           DB_PORT: 5432
           DB_NAME: inventory_db_test
           DB_USER: postgres
-          DB_PASSWORD: forus
+          DB_PASSWORD: postgres
           NODE_ENV: test
           JWT_SECRET: test-secret-key-for-ci
         run: npm test
