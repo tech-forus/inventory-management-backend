@@ -29,11 +29,10 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -65,7 +64,7 @@ jobs:
           DB_PORT: 5432
           DB_NAME: inventory_db_test
           DB_USER: postgres
-          DB_PASSWORD: postgres
+          DB_PASSWORD: forus
           NODE_ENV: test
           JWT_SECRET: test-secret-key-for-ci
         run: npm test
