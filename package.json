@@ -13,6 +13,7 @@
     "migrate:status": "node-pg-migrate list",
     "migrate:legacy": "node scripts/database/migrate.js",
     "migrate:railway": "node scripts/migrate-railway.js",
+    "migrate:hsn-gst": "node scripts/run-hsn-gst-migration.js",
     "seed": "node scripts/database/seed.js",
     "test": "cross-env NODE_ENV=test jest --runInBand",
     "test:watch": "cross-env NODE_ENV=test jest --watch",
