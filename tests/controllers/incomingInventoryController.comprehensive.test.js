@@ -59,19 +59,19 @@ describe('Incoming Inventory Controller - Comprehensive Tests', () => {
     );
     testSkuId = skuResult.rows[0].id;
 
-    // Create user for received_by
-    const userResult = await pool.query(
-      `INSERT INTO users (company_id, email, password, full_name, role, is_active)
-       VALUES ($1, 'user@test.com', 'hashed', 'Test User', 'admin', true) RETURNING id`,
+    // Create team for received_by (received_by now references teams table, not users)
+    const teamResult = await pool.query(
+      `INSERT INTO teams (company_id, name, email_id, department, designation, is_active)
+       VALUES ($1, 'Test Team Member', 'team@test.com', 'Warehouse', 'Receiver', true) RETURNING id`,
       [testCompanyId]
     );
-    const userId = userResult.rows[0].id;
+    const teamId = teamResult.rows[0].id;
 
     // Create incoming inventory (brand_id and reason are required, status must be 'draft', 'completed', or 'cancelled')
     const invResult = await pool.query(
       `INSERT INTO incoming_inventory (company_id, invoice_number, invoice_date, vendor_id, brand_id, receiving_date, received_by, reason, status)
        VALUES ($1, 'INV-001', CURRENT_DATE, $2, $3, CURRENT_DATE, $4, 'purchase', 'draft') RETURNING id`,
-      [testCompanyId, testVendorId, testBrandId, userId]
+      [testCompanyId, testVendorId, testBrandId, teamId]
     );
     testInventoryId = invResult.rows[0].id;
 

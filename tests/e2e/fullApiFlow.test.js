@@ -75,8 +75,8 @@ describe('E2E Tests - Full API Flow', () => {
 
   describe('Complete Flow: Create Vendor → Fetch Vendors', () => {
     beforeEach(async () => {
-      // Setup: Create company and login
-      testCompanyId = 'E2E' + Date.now().toString().slice(-4);
+      // Setup: Create company and login (company_id must be max 6 characters)
+      testCompanyId = ('E' + Date.now().toString().slice(-5)).toUpperCase();
       await pool.query(
         `INSERT INTO companies (company_id, company_name, gst_number, business_type, address, city, state, pin, phone, admin_email, admin_password)
          VALUES ($1, 'E2E Company', $2, 'Manufacturing', '123 Test St', 'Test City', 'Test State', '123456', '1234567890', 'admin@test.com', $3)`,
@@ -145,8 +145,8 @@ describe('E2E Tests - Full API Flow', () => {
 
   describe('Complete Flow: Create SKU → Fetch SKU → Update SKU', () => {
     beforeEach(async () => {
-      // Setup: Create company, vendor, brand, categories
-      testCompanyId = 'E2E' + Date.now().toString().slice(-4);
+      // Setup: Create company, vendor, brand, categories (company_id must be max 6 characters)
+      testCompanyId = ('E' + Date.now().toString().slice(-5)).toUpperCase();
       await pool.query(
         `INSERT INTO companies (company_id, company_name, gst_number, business_type, address, city, state, pin, phone, admin_email, admin_password)
          VALUES ($1, 'E2E Company', $2, 'Manufacturing', '123 Test St', 'Test City', 'Test State', '123456', '1234567890', 'admin@test.com', $3)`,
