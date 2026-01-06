@@ -51,7 +51,6 @@ describe('E2E Tests - Full API Flow', () => {
         const loginResponse = await request(app)
           .post('/api/auth/login')
           .send({
-            companyId: testCompanyId,
             email: registerData.email,
             password: registerData.password,
           });
@@ -86,7 +85,6 @@ describe('E2E Tests - Full API Flow', () => {
       const loginResponse = await request(app)
         .post('/api/auth/login')
         .send({
-          companyId: testCompanyId,
           email: 'admin@test.com',
           password: 'Test@1234',
         });
@@ -183,7 +181,6 @@ describe('E2E Tests - Full API Flow', () => {
       const loginResponse = await request(app)
         .post('/api/auth/login')
         .send({
-          companyId: testCompanyId,
           email: 'admin@test.com',
           password: 'Test@1234',
         });

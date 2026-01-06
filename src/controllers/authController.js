@@ -9,22 +9,21 @@ const { logger } = require('../utils/logger');
  */
 const login = async (req, res, next) => {
   try {
-    const { companyId, email, password } = req.body;
+    const { email, password } = req.body;
 
     // Validation is now handled by middleware
     // Additional defensive checks
-    if (!companyId || !email || !password) {
+    if (!email || !password) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: companyId, email, and password are required'
+        error: 'Missing required fields: email and password are required'
       });
     }
 
-    // Ensure companyId and email are strings before calling string methods
-    const normalizedCompanyId = String(companyId).toUpperCase().trim();
+    // Ensure email is normalized
     const normalizedEmail = String(email).toLowerCase().trim();
 
-    // Find user by company_id and email
+    // Find user by email (email is globally unique)
     // Also get phone from admins or users_data tables if not in users table
     const result = await pool.query(
       `SELECT 
@@ -36,14 +35,14 @@ const login = async (req, res, next) => {
       INNER JOIN companies c ON u.company_id = c.company_id
       LEFT JOIN admins a ON u.id = a.user_id
       LEFT JOIN users_data ud ON u.id = ud.user_id
-      WHERE u.company_id = $1 AND u.email = $2`,
-      [normalizedCompanyId, normalizedEmail]
+      WHERE u.email = $1`,
+      [normalizedEmail]
     );
 
     if (result.rows.length === 0) {
       return res.status(401).json({ 
         success: false,
-        error: 'Invalid company ID or email' 
+        error: 'Invalid email or password' 
       });
     }
 
@@ -128,7 +127,6 @@ const login = async (req, res, next) => {
       requestId: req.id,
       error: error.message,
       stack: error.stack,
-      companyId: req.body?.companyId,
       email: req.body?.email,
       code: error.code
     }, 'Login error');

@@ -43,7 +43,6 @@ describe('Auth Controller', () => {
       const response = await request(app)
         .post('/api/auth/login')
         .send({
-          companyId: testCompanyId,
           email: testUserEmail,
           password: testPassword,
         });
@@ -60,7 +59,6 @@ describe('Auth Controller', () => {
       const response = await request(app)
         .post('/api/auth/login')
         .send({
-          companyId: testCompanyId,
           email: 'invalid@test.com',
           password: testPassword,
         });
@@ -73,7 +71,6 @@ describe('Auth Controller', () => {
       const response = await request(app)
         .post('/api/auth/login')
         .send({
-          companyId: testCompanyId,
           email: testUserEmail,
           password: 'wrongpassword',
         });
@@ -86,7 +83,6 @@ describe('Auth Controller', () => {
       const response = await request(app)
         .post('/api/auth/login')
         .send({
-          companyId: testCompanyId,
           // Missing email and password
         });
 

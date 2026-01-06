@@ -7,7 +7,7 @@ const pool = require('../models/database');
 
 router.post(
   '/login',
-  validateRequired(['companyId', 'email', 'password']),
+  validateRequired(['email', 'password']),
   validateEmail('email'),
   authController.login
 );

@@ -54,7 +54,6 @@ describe('Authentication API', () => {
       const response = await request(app)
         .post('/api/auth/login')
         .send({
-          companyId: testCompanyId,
           email: 'invalid@test.com',
           password: 'wrongpassword',
         });
@@ -68,7 +67,6 @@ describe('Authentication API', () => {
       const loginResponse = await request(app)
         .post('/api/auth/login')
         .send({
-          companyId: testCompanyId,
           email: `test${Date.now()}@test.com`,
           password: 'Test@1234',
         });
