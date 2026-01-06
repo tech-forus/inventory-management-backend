@@ -418,10 +418,9 @@ router.post('/upload', upload.single('file'), skuController.uploadSKUs);
  */
 router.put(
   '/:id',
-  validateRequired(['productCategoryId', 'itemCategoryId', 'subCategoryId', 'itemName', 'vendorId', 'brandId', 'unit', 'model', 'hsnSacCode']),
+  validateRequired(['productCategoryId', 'itemCategoryId', 'subCategoryId', 'itemName', 'brandId', 'unit', 'model', 'material', 'manufactureOrImport']),
   validateNumeric('productCategoryId'),
   validateNumeric('itemCategoryId'),
-  validateNumeric('vendorId'),
   validateNumeric('brandId'),
   validateNumeric('minStockLevel', 0),
   async (req, res, next) => {
