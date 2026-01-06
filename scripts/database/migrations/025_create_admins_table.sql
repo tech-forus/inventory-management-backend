@@ -50,10 +50,17 @@ CREATE INDEX IF NOT EXISTS idx_admins_department ON admins(department);
 CREATE INDEX IF NOT EXISTS idx_admins_company_active ON admins(company_id, is_active);
 
 -- Create trigger to automatically update updated_at
-CREATE TRIGGER update_admins_updated_at
-    BEFORE UPDATE ON admins
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'update_admins_updated_at'
+  ) THEN
+    CREATE TRIGGER update_admins_updated_at
+      BEFORE UPDATE ON admins
+      FOR EACH ROW
+      EXECUTE FUNCTION update_updated_at_column();
+  END IF;
+END $$;
 
 -- Add comments
 COMMENT ON TABLE admins IS 'Stores admin-specific data and permissions';

@@ -58,10 +58,17 @@ CREATE INDEX IF NOT EXISTS idx_rejected_reports_is_active ON rejected_item_repor
 CREATE INDEX IF NOT EXISTS idx_rejected_reports_created_at ON rejected_item_reports(created_at);
 
 -- Create trigger to automatically update updated_at
-CREATE TRIGGER update_rejected_reports_updated_at
-    BEFORE UPDATE ON rejected_item_reports
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'update_rejected_reports_updated_at'
+  ) THEN
+    CREATE TRIGGER update_rejected_reports_updated_at
+      BEFORE UPDATE ON rejected_item_reports
+      FOR EACH ROW
+      EXECUTE FUNCTION update_updated_at_column();
+  END IF;
+END $$;
 
 -- Add comments
 COMMENT ON TABLE rejected_item_reports IS 'Reports for rejected items from incoming inventory inspections';

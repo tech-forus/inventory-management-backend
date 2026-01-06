@@ -52,10 +52,17 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trigger_update_customers_updated_at
-    BEFORE UPDATE ON customers
-    FOR EACH ROW
-    EXECUTE FUNCTION update_customers_updated_at();
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'trigger_update_customers_updated_at'
+  ) THEN
+    CREATE TRIGGER trigger_update_customers_updated_at
+      BEFORE UPDATE ON customers
+      FOR EACH ROW
+      EXECUTE FUNCTION update_customers_updated_at();
+  END IF;
+END $$;
 
 -- Add comments for documentation
 COMMENT ON TABLE customers IS 'Stores customer information for sales and order management';

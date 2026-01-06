@@ -73,15 +73,29 @@ CREATE INDEX IF NOT EXISTS idx_outgoing_items_inventory_id ON outgoing_inventory
 CREATE INDEX IF NOT EXISTS idx_outgoing_items_sku_id ON outgoing_inventory_items(sku_id);
 
 -- Create trigger to update updated_at timestamp
-CREATE TRIGGER update_outgoing_inventory_updated_at 
-  BEFORE UPDATE ON outgoing_inventory
-  FOR EACH ROW
-  EXECUTE FUNCTION update_updated_at_column();
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'update_outgoing_inventory_updated_at'
+  ) THEN
+    CREATE TRIGGER update_outgoing_inventory_updated_at 
+      BEFORE UPDATE ON outgoing_inventory
+      FOR EACH ROW
+      EXECUTE FUNCTION update_updated_at_column();
+  END IF;
+END $$;
 
-CREATE TRIGGER update_outgoing_items_updated_at 
-  BEFORE UPDATE ON outgoing_inventory_items
-  FOR EACH ROW
-  EXECUTE FUNCTION update_updated_at_column();
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'update_outgoing_items_updated_at'
+  ) THEN
+    CREATE TRIGGER update_outgoing_items_updated_at 
+      BEFORE UPDATE ON outgoing_inventory_items
+      FOR EACH ROW
+      EXECUTE FUNCTION update_updated_at_column();
+  END IF;
+END $$;
 
 
 

@@ -38,10 +38,17 @@ CREATE INDEX IF NOT EXISTS idx_item_categories_is_active ON item_categories(is_a
 CREATE INDEX IF NOT EXISTS idx_item_categories_created_at ON item_categories(created_at);
 
 -- Create trigger to automatically update updated_at
-CREATE TRIGGER update_item_categories_updated_at
-    BEFORE UPDATE ON item_categories
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'update_item_categories_updated_at'
+  ) THEN
+    CREATE TRIGGER update_item_categories_updated_at
+      BEFORE UPDATE ON item_categories
+      FOR EACH ROW
+      EXECUTE FUNCTION update_updated_at_column();
+  END IF;
+END $$;
 
 -- Add comments
 COMMENT ON TABLE item_categories IS 'Item categories under product categories (e.g., LED Drivers, LED Lights)';

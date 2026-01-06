@@ -87,15 +87,29 @@ CREATE INDEX IF NOT EXISTS idx_incoming_items_inventory_id ON incoming_inventory
 CREATE INDEX IF NOT EXISTS idx_incoming_items_sku_id ON incoming_inventory_items(sku_id);
 
 -- Create trigger to update updated_at timestamp
-CREATE TRIGGER update_incoming_inventory_updated_at 
-  BEFORE UPDATE ON incoming_inventory 
-  FOR EACH ROW 
-  EXECUTE FUNCTION update_updated_at_column();
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'update_incoming_inventory_updated_at'
+  ) THEN
+    CREATE TRIGGER update_incoming_inventory_updated_at 
+      BEFORE UPDATE ON incoming_inventory 
+      FOR EACH ROW 
+      EXECUTE FUNCTION update_updated_at_column();
+  END IF;
+END $$;
 
-CREATE TRIGGER update_incoming_inventory_items_updated_at 
-  BEFORE UPDATE ON incoming_inventory_items 
-  FOR EACH ROW 
-  EXECUTE FUNCTION update_updated_at_column();
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'update_incoming_inventory_items_updated_at'
+  ) THEN
+    CREATE TRIGGER update_incoming_inventory_items_updated_at 
+      BEFORE UPDATE ON incoming_inventory_items 
+      FOR EACH ROW 
+      EXECUTE FUNCTION update_updated_at_column();
+  END IF;
+END $$;
 
 -- Add comments
 COMMENT ON TABLE incoming_inventory IS 'Main table for incoming inventory transactions';

@@ -38,10 +38,17 @@ CREATE INDEX IF NOT EXISTS idx_transportors_is_active ON transportors(is_active)
 CREATE INDEX IF NOT EXISTS idx_transportors_created_at ON transportors(created_at);
 
 -- Create trigger to automatically update updated_at
-CREATE TRIGGER update_transportors_updated_at
-    BEFORE UPDATE ON transportors
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'update_transportors_updated_at'
+  ) THEN
+    CREATE TRIGGER update_transportors_updated_at
+      BEFORE UPDATE ON transportors
+      FOR EACH ROW
+      EXECUTE FUNCTION update_updated_at_column();
+  END IF;
+END $$;
 
 -- Add comments
 COMMENT ON TABLE transportors IS 'Stores transportor and logistics partner information';

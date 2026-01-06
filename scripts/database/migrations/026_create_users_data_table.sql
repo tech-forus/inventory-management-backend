@@ -48,10 +48,17 @@ CREATE INDEX IF NOT EXISTS idx_users_data_department ON users_data(department);
 CREATE INDEX IF NOT EXISTS idx_users_data_company_active ON users_data(company_id, is_active);
 
 -- Create trigger to automatically update updated_at
-CREATE TRIGGER update_users_data_updated_at
-    BEFORE UPDATE ON users_data
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'update_users_data_updated_at'
+  ) THEN
+    CREATE TRIGGER update_users_data_updated_at
+      BEFORE UPDATE ON users_data
+      FOR EACH ROW
+      EXECUTE FUNCTION update_updated_at_column();
+  END IF;
+END $$;
 
 -- Add comments
 COMMENT ON TABLE users_data IS 'Stores user-specific data and permissions';

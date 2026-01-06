@@ -52,10 +52,17 @@ CREATE INDEX IF NOT EXISTS idx_price_history_sku_type ON price_history(sku_id, t
 CREATE INDEX IF NOT EXISTS idx_price_history_active ON price_history(is_active);
 
 -- Create trigger to update updated_at timestamp
-CREATE TRIGGER update_price_history_updated_at 
-  BEFORE UPDATE ON price_history 
-  FOR EACH ROW 
-  EXECUTE FUNCTION update_updated_at_column();
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'update_price_history_updated_at'
+  ) THEN
+    CREATE TRIGGER update_price_history_updated_at 
+      BEFORE UPDATE ON price_history 
+      FOR EACH ROW 
+      EXECUTE FUNCTION update_updated_at_column();
+  END IF;
+END $$;
 
 -- Add comments
 COMMENT ON TABLE price_history IS 'Stores buying price history for SKUs including current, previous, and lowest prices';

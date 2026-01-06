@@ -69,11 +69,20 @@ BEGIN
 END $$;
 
 -- Add new foreign key constraint to teams table
-ALTER TABLE incoming_inventory
-  ADD CONSTRAINT fk_incoming_inventory_received_by_team
-  FOREIGN KEY (received_by) 
-  REFERENCES teams(id) 
-  ON DELETE SET NULL;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints 
+    WHERE constraint_name = 'fk_incoming_inventory_received_by_team'
+    AND table_name = 'incoming_inventory'
+  ) THEN
+    ALTER TABLE incoming_inventory
+      ADD CONSTRAINT fk_incoming_inventory_received_by_team
+      FOREIGN KEY (received_by) 
+      REFERENCES teams(id) 
+      ON DELETE SET NULL;
+  END IF;
+END $$;
 
 -- Update comments
 COMMENT ON COLUMN incoming_inventory.warranty IS 'Warranty period value';

@@ -31,10 +31,17 @@ CREATE INDEX IF NOT EXISTS idx_product_categories_is_active ON product_categorie
 CREATE INDEX IF NOT EXISTS idx_product_categories_created_at ON product_categories(created_at);
 
 -- Create trigger to automatically update updated_at
-CREATE TRIGGER update_product_categories_updated_at
-    BEFORE UPDATE ON product_categories
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'update_product_categories_updated_at'
+  ) THEN
+    CREATE TRIGGER update_product_categories_updated_at
+      BEFORE UPDATE ON product_categories
+      FOR EACH ROW
+      EXECUTE FUNCTION update_updated_at_column();
+  END IF;
+END $$;
 
 -- Add comments
 COMMENT ON TABLE product_categories IS 'Main product category groups (e.g., Finished Goods, Raw Materials)';

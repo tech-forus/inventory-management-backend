@@ -38,10 +38,17 @@ CREATE INDEX IF NOT EXISTS idx_teams_is_active ON teams(is_active);
 CREATE INDEX IF NOT EXISTS idx_teams_created_at ON teams(created_at);
 
 -- Create trigger to automatically update updated_at
-CREATE TRIGGER update_teams_updated_at
-    BEFORE UPDATE ON teams
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'update_teams_updated_at'
+  ) THEN
+    CREATE TRIGGER update_teams_updated_at
+      BEFORE UPDATE ON teams
+      FOR EACH ROW
+      EXECUTE FUNCTION update_updated_at_column();
+  END IF;
+END $$;
 
 -- Add comments
 COMMENT ON TABLE teams IS 'Team member information for company';

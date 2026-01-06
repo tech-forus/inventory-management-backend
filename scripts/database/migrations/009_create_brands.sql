@@ -32,10 +32,17 @@ CREATE INDEX IF NOT EXISTS idx_brands_is_active ON brands(is_active);
 CREATE INDEX IF NOT EXISTS idx_brands_created_at ON brands(created_at);
 
 -- Create trigger to automatically update updated_at
-CREATE TRIGGER update_brands_updated_at
-    BEFORE UPDATE ON brands
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'update_brands_updated_at'
+  ) THEN
+    CREATE TRIGGER update_brands_updated_at
+      BEFORE UPDATE ON brands
+      FOR EACH ROW
+      EXECUTE FUNCTION update_updated_at_column();
+  END IF;
+END $$;
 
 -- Add comments
 COMMENT ON TABLE brands IS 'Product brand information';
