@@ -183,10 +183,12 @@ class CategoryModel {
 
   static async createSubCategory(categoryData, companyId) {
     const result = await pool.query(
-      `INSERT INTO sub_categories (company_id, item_category_id, name, description, is_active)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO sub_categories (company_id, item_category_id, name, description, hsn_code, gst_rate, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        ON CONFLICT (company_id, item_category_id, name) DO UPDATE
        SET description = EXCLUDED.description,
+           hsn_code = EXCLUDED.hsn_code,
+           gst_rate = EXCLUDED.gst_rate,
            updated_at = CURRENT_TIMESTAMP
        RETURNING *`,
       [
@@ -194,6 +196,8 @@ class CategoryModel {
         categoryData.itemCategoryId,
         categoryData.name,
         categoryData.description || null,
+        categoryData.hsnCode || null,
+        categoryData.gstRate !== undefined && categoryData.gstRate !== null ? categoryData.gstRate : null,
         categoryData.isActive !== false,
       ]
     );
@@ -203,12 +207,14 @@ class CategoryModel {
   static async updateSubCategory(id, categoryData, companyId) {
     const result = await pool.query(
       `UPDATE sub_categories SET
-        name = $1, description = $2, is_active = $3, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $4 AND company_id = $5
+        name = $1, description = $2, hsn_code = $3, gst_rate = $4, is_active = $5, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $6 AND company_id = $7
       RETURNING *`,
       [
         categoryData.name,
         categoryData.description || null,
+        categoryData.hsnCode || null,
+        categoryData.gstRate !== undefined && categoryData.gstRate !== null ? categoryData.gstRate : null,
         categoryData.isActive !== false,
         id,
         companyId.toUpperCase(),

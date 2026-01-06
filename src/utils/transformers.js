@@ -53,6 +53,8 @@ const transformCategory = (category) => {
     description: category.description,
     productCategoryId: category.product_category_id,
     itemCategoryId: category.item_category_id,
+    hsnCode: category.hsn_code,
+    gstRate: category.gst_rate,
     isActive: category.is_active,
     createdAt: category.created_at,
     updatedAt: category.updated_at,
