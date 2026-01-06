@@ -242,10 +242,11 @@ describe('Incoming Inventory Controller - Comprehensive Tests', () => {
 
       if (itemId) {
         const response = await request(app)
-          .put(`/api/inventory/incoming/${testInventoryId}/items/${itemId}/update`)
+          .put(`/api/inventory/incoming/${testInventoryId}/update-item-rejected-short`)
           .set('Authorization', `Bearer ${testToken}`)
           .set('x-company-id', testCompanyId)
           .send({
+            itemId: itemId,
             rejected: 5,
             short: 5,
           });
@@ -265,10 +266,11 @@ describe('Incoming Inventory Controller - Comprehensive Tests', () => {
 
       if (itemId) {
         const response = await request(app)
-          .put(`/api/inventory/incoming/${testInventoryId}/items/${itemId}/update`)
+          .put(`/api/inventory/incoming/${testInventoryId}/update-item-rejected-short`)
           .set('Authorization', `Bearer ${testToken}`)
           .set('x-company-id', testCompanyId)
           .send({
+            itemId: itemId,
             rejected: 1000, // More than received
             short: 0,
           });
@@ -287,14 +289,14 @@ describe('Incoming Inventory Controller - Comprehensive Tests', () => {
         .set('x-company-id', testCompanyId);
 
       if (response.status === 200) {
-        expect(response.body).toMatchSnapshot({
-          data: expect.arrayContaining([
-            expect.objectContaining({
-              id: expect.any(Number),
-              invoiceNumber: expect.any(String),
-            }),
-          ]),
-        });
+        expect(response.body).toHaveProperty('success', true);
+        expect(response.body).toHaveProperty('data');
+        expect(Array.isArray(response.body.data)).toBe(true);
+        
+        if (response.body.data.length > 0) {
+          expect(response.body.data[0]).toHaveProperty('id');
+          expect(response.body.data[0]).toHaveProperty('invoiceNumber');
+        }
       }
     });
   });

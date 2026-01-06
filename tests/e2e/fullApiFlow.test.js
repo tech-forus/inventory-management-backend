@@ -44,7 +44,7 @@ describe('E2E Tests - Full API Flow', () => {
 
       expect([200, 201]).toContain(registerResponse.status);
       if (registerResponse.status === 200 || registerResponse.status === 201) {
-        testCompanyId = registerResponse.body.data?.companyId;
+        testCompanyId = registerResponse.body.data?.company?.companyId || registerResponse.body.data?.companyId;
         expect(testCompanyId).toBeDefined();
 
         // Step 2: Login

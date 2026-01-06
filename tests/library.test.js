@@ -9,9 +9,22 @@ describe('Library API', () => {
   let testBrandId;
 
   beforeAll(async () => {
-    // Get or create test token
-    // In a real test, you'd authenticate first
+    // Ensure test company exists
     testCompanyId = 'DEMO01';
+    const companyCheck = await pool.query(
+      'SELECT company_id FROM companies WHERE company_id = $1',
+      [testCompanyId]
+    );
+    
+    if (companyCheck.rows.length === 0) {
+      // Create test company if it doesn't exist
+      await pool.query(
+        `INSERT INTO companies (company_id, company_name, gst_number, business_type, address, city, state, pin, phone)
+         VALUES ($1, 'Demo Company', '29DEMO0000D1Z5', 'Manufacturing', '123 Demo St', 'Demo City', 'Demo State', '123456', '1234567890')
+         ON CONFLICT (company_id) DO NOTHING`,
+        [testCompanyId]
+      );
+    }
   });
 
   afterAll(async () => {
