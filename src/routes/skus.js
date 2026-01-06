@@ -231,10 +231,9 @@ router.get('/:id', async (req, res, next) => {
  */
 router.post(
   '/',
-  validateRequired(['productCategoryId', 'itemCategoryId', 'subCategoryId', 'itemName', 'vendorId', 'brandId', 'unit', 'model', 'hsnSacCode']),
+  validateRequired(['productCategoryId', 'itemCategoryId', 'subCategoryId', 'itemName', 'brandId', 'unit', 'model', 'material', 'manufactureOrImport']),
   validateNumeric('productCategoryId'),
   validateNumeric('itemCategoryId'),
-  validateNumeric('vendorId'),
   validateNumeric('brandId'),
   validateNumeric('minStockLevel', 0),
   validateNumeric('currentStock', 0), // Validate currentStock if provided (must be >= 0)
