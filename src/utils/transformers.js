@@ -148,6 +148,19 @@ const transformTransportor = (transportor) => {
  */
 const transformSKU = (sku) => {
   if (!sku) return null;
+  
+  // Parse custom_fields if it exists
+  let customFields = null;
+  if (sku.custom_fields) {
+    try {
+      customFields = typeof sku.custom_fields === 'string' 
+        ? JSON.parse(sku.custom_fields) 
+        : sku.custom_fields;
+    } catch (e) {
+      console.error('Error parsing custom_fields:', e);
+    }
+  }
+  
   return {
     id: sku.id,
     skuId: sku.sku_id,
@@ -165,25 +178,23 @@ const transformSKU = (sku) => {
     brandId: sku.brand_id,
     brand: sku.brand,
     hsnSacCode: sku.hsn_sac_code,
+    gstRate: sku.gst_rate,
     ratingSize: sku.rating_size,
     model: sku.model,
     series: sku.series,
     unit: sku.unit,
     material: sku.material,
-    insulation: sku.insulation,
-    inputSupply: sku.input_supply,
+    manufactureOrImport: sku.manufacture_or_import,
     color: sku.color,
-    cri: sku.cri,
-    cct: sku.cct,
-    beamAngle: sku.beam_angle,
-    ledType: sku.led_type,
-    shape: sku.shape,
     weight: sku.weight,
+    weightUnit: sku.weight_unit,
     length: sku.length,
+    lengthUnit: sku.length_unit,
     width: sku.width,
+    widthUnit: sku.width_unit,
     height: sku.height,
-    rackNumber: sku.rack_number,
-    gstRate: sku.gst_rate,
+    heightUnit: sku.height_unit,
+    customFields,
     currentStock: sku.current_stock,
     minStockLevel: sku.min_stock_level,
     reorderPoint: sku.reorder_point,

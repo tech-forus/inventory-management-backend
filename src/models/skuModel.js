@@ -198,19 +198,32 @@ class SKUModel {
    * Create a new SKU
    */
   static async create(skuData, companyId, skuId) {
+    // Parse custom_fields if it's a string
+    let customFields = null;
+    if (skuData.customFields) {
+      try {
+        customFields = typeof skuData.customFields === 'string' 
+          ? JSON.parse(skuData.customFields) 
+          : skuData.customFields;
+      } catch (e) {
+        console.error('Error parsing custom_fields:', e);
+        customFields = null;
+      }
+    }
+
     const result = await pool.query(
       `INSERT INTO skus (
         company_id, sku_id, product_category_id, item_category_id, sub_category_id,
         item_name, item_details, vendor_id, vendor_item_code, brand_id,
-        hsn_sac_code, rating_size, model, series, unit,
-        material, insulation, input_supply, color, cri, cct, beam_angle, led_type, shape,
-        weight, length, width, height, rack_number,
+        hsn_sac_code, gst_rate, rating_size, model, series, unit,
+        material, manufacture_or_import, color,
+        weight, weight_unit, length, length_unit, width, width_unit, height, height_unit,
         min_stock_level, reorder_point, default_storage_location,
-        current_stock, status, is_active
+        current_stock, custom_fields, status, is_active
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-        $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29,
-        $30, $31, $32, $33, $34, $35
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+        $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27,
+        $28, $29, $30, $31, $32, $33, $34
       ) RETURNING *`,
       [
         companyId.toUpperCase(),
@@ -220,32 +233,31 @@ class SKUModel {
         skuData.subCategoryId || null,
         skuData.itemName,
         skuData.itemDetails || null,
-        skuData.vendorId,
+        skuData.vendorId || null, // Now nullable
         skuData.vendorItemCode || null,
         skuData.brandId,
         skuData.hsnSacCode || null,
+        skuData.gstRate || null,
         skuData.ratingSize || null,
         skuData.model || null,
         skuData.series || null,
         skuData.unit,
         skuData.material || null,
-        skuData.insulation || null,
-        skuData.inputSupply || null,
+        skuData.manufactureOrImport || null,
         skuData.color || null,
-        skuData.cri || null,
-        skuData.cct || null,
-        skuData.beamAngle || null,
-        skuData.ledType || null,
-        skuData.shape || null,
         skuData.weight || null,
+        skuData.weightUnit || 'kg',
         skuData.length || null,
+        skuData.lengthUnit || 'mm',
         skuData.width || null,
+        skuData.widthUnit || 'mm',
         skuData.height || null,
-        skuData.rackNumber || null,
-        skuData.minStockLevel,
+        skuData.heightUnit || 'mm',
+        skuData.minStockLevel || 0,
         skuData.reorderPoint || null,
         skuData.defaultStorageLocation || null,
-        skuData.currentStock !== undefined && skuData.currentStock !== null ? skuData.currentStock : (skuData.minStockLevel || 0), // Use user-entered currentStock, fallback to minStockLevel
+        skuData.currentStock !== undefined && skuData.currentStock !== null ? skuData.currentStock : (skuData.minStockLevel || 0),
+        customFields ? JSON.stringify(customFields) : null,
         skuData.status || 'active',
         skuData.status === 'active',
       ]
@@ -257,22 +269,37 @@ class SKUModel {
    * Update SKU (with company ID filter for security)
    */
   static async update(id, skuData, companyId = null) {
+    // Parse custom_fields if it's a string
+    let customFields = null;
+    if (skuData.customFields) {
+      try {
+        customFields = typeof skuData.customFields === 'string' 
+          ? JSON.parse(skuData.customFields) 
+          : skuData.customFields;
+      } catch (e) {
+        console.error('Error parsing custom_fields:', e);
+        customFields = null;
+      }
+    }
+
+    let paramIndex = 33;
     let query = `
       UPDATE skus SET
         product_category_id = $1, item_category_id = $2, sub_category_id = $3,
         item_name = $4, item_details = $5, vendor_id = $6, vendor_item_code = $7, brand_id = $8,
-        hsn_sac_code = $9, rating_size = $10, model = $11, series = $12, unit = $13,
-        material = $14, insulation = $15, input_supply = $16, color = $17, cri = $18, cct = $19,
-        beam_angle = $20, led_type = $21, shape = $22,
-        weight = $23, length = $24, width = $25, height = $26, rack_number = $27,
-        min_stock_level = $28, reorder_point = $29, default_storage_location = $30,
+        hsn_sac_code = $9, gst_rate = $10, rating_size = $11, model = $12, series = $13, unit = $14,
+        material = $15, manufacture_or_import = $16, color = $17,
+        weight = $18, weight_unit = $19, length = $20, length_unit = $21, width = $22, width_unit = $23, height = $24, height_unit = $25,
+        min_stock_level = $26, reorder_point = $27, default_storage_location = $28,
+        current_stock = $29, custom_fields = $30,
         status = $31, is_active = $32, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $33
+      WHERE id = $${paramIndex}
     `;
     
     // Add company ID filter if provided
     if (companyId) {
-      query += ` AND company_id = $33`;
+      paramIndex++;
+      query += ` AND company_id = $${paramIndex}`;
     }
     
     const params = [
@@ -281,31 +308,31 @@ class SKUModel {
       skuData.subCategoryId || null,
       skuData.itemName,
       skuData.itemDetails || null,
-      skuData.vendorId,
+      skuData.vendorId || null, // Now nullable
       skuData.vendorItemCode || null,
       skuData.brandId,
       skuData.hsnSacCode || null,
+      skuData.gstRate || null,
       skuData.ratingSize || null,
       skuData.model || null,
       skuData.series || null,
       skuData.unit,
       skuData.material || null,
-      skuData.insulation || null,
-      skuData.inputSupply || null,
+      skuData.manufactureOrImport || null,
       skuData.color || null,
-      skuData.cri || null,
-      skuData.cct || null,
-      skuData.beamAngle || null,
-      skuData.ledType || null,
-      skuData.shape || null,
       skuData.weight || null,
+      skuData.weightUnit || 'kg',
       skuData.length || null,
+      skuData.lengthUnit || 'mm',
       skuData.width || null,
+      skuData.widthUnit || 'mm',
       skuData.height || null,
-      skuData.rackNumber || null,
-      skuData.minStockLevel,
+      skuData.heightUnit || 'mm',
+      skuData.minStockLevel || 0,
       skuData.reorderPoint || null,
       skuData.defaultStorageLocation || null,
+      skuData.currentStock !== undefined && skuData.currentStock !== null ? skuData.currentStock : (skuData.minStockLevel || 0),
+      customFields ? JSON.stringify(customFields) : null,
       skuData.status || 'active',
       skuData.status === 'active',
       id,
