@@ -18,7 +18,7 @@ const getAllSKUs = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
     const filters = {
-      search: req.query.search,
+      search: req.query.search ? req.query.search.trim() : undefined,
       productCategory: req.query.productCategory,
       itemCategory: req.query.itemCategory,
       subCategory: req.query.subCategory,

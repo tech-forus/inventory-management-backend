@@ -93,13 +93,14 @@ const getAllShortItemReports = async (req, res, next) => {
       paramIndex++;
     }
 
-    if (search) {
+    if (search && search.trim()) {
+      const searchTrimmed = search.trim();
       query += ` AND (
         ii.invoice_number ILIKE $${paramIndex} OR
         s.sku_id ILIKE $${paramIndex} OR
         s.item_name ILIKE $${paramIndex}
       )`;
-      params.push(`%${search}%`);
+      params.push(`%${searchTrimmed}%`);
       paramIndex++;
     }
 

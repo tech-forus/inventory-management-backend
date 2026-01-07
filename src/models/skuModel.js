@@ -44,9 +44,10 @@ class SKUModel {
     let paramIndex = 2;
 
     // Add filters
-    if (filters.search) {
+    if (filters.search && filters.search.trim()) {
+      const searchTrimmed = filters.search.trim();
       query += ` AND (s.sku_id ILIKE $${paramIndex} OR s.item_name ILIKE $${paramIndex} OR s.model ILIKE $${paramIndex} OR s.hsn_sac_code ILIKE $${paramIndex})`;
-      params.push(`%${filters.search}%`);
+      params.push(`%${searchTrimmed}%`);
       paramIndex++;
     }
     if (filters.productCategory) {
@@ -108,9 +109,10 @@ class SKUModel {
     let paramIndex = 2;
 
     // Add same filters as getAll
-    if (filters.search) {
+    if (filters.search && filters.search.trim()) {
+      const searchTrimmed = filters.search.trim();
       query += ` AND (s.sku_id ILIKE $${paramIndex} OR s.item_name ILIKE $${paramIndex} OR s.model ILIKE $${paramIndex} OR s.hsn_sac_code ILIKE $${paramIndex})`;
-      params.push(`%${filters.search}%`);
+      params.push(`%${searchTrimmed}%`);
       paramIndex++;
     }
     if (filters.productCategory) {

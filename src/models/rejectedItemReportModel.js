@@ -146,14 +146,15 @@ class RejectedItemReportModel {
       paramIndex++;
     }
 
-    if (filters.search) {
+    if (filters.search && filters.search.trim()) {
+      const searchTrimmed = filters.search.trim();
       query += ` AND (
         rir.report_number ILIKE $${paramIndex} OR
         rir.original_invoice_number ILIKE $${paramIndex} OR
         rir.item_name ILIKE $${paramIndex} OR
         s.code ILIKE $${paramIndex}
       )`;
-      const searchTerm = `%${filters.search}%`;
+      const searchTerm = `%${searchTrimmed}%`;
       params.push(searchTerm, searchTerm, searchTerm, searchTerm);
       paramIndex += 4;
     }

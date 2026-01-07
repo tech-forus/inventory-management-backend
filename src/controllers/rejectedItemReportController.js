@@ -57,7 +57,7 @@ const getAllRejectedItemReports = async (req, res, next) => {
     const filters = {};
     if (dateFrom) filters.dateFrom = dateFrom;
     if (dateTo) filters.dateTo = dateTo;
-    if (search) filters.search = search;
+    if (search) filters.search = search.trim();
     if (limit) filters.limit = parseInt(limit, 10);
     if (offset) filters.offset = parseInt(offset, 10);
 
