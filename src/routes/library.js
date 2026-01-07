@@ -172,5 +172,35 @@ router.post('/transportors/upload', upload.single('file'), libraryController.upl
 router.put('/transportors/:id', libraryController.updateTransportor);
 router.delete('/transportors/:id', libraryController.deleteTransportor);
 
+/**
+ * WAREHOUSES ROUTES
+ * All routes delegate to libraryController
+ */
+router.get('/warehouses', libraryController.getWarehouses);
+router.post('/warehouses', libraryController.createWarehouse);
+router.post('/warehouses/upload', upload.single('file'), libraryController.uploadWarehouses);
+router.put('/warehouses/:id', libraryController.updateWarehouse);
+router.delete('/warehouses/:id', libraryController.deleteWarehouse);
+
+/**
+ * MATERIALS ROUTES
+ * All routes delegate to libraryController
+ */
+router.get('/materials', libraryController.getMaterials);
+router.post('/materials', libraryController.createMaterial);
+router.post('/materials/upload', upload.single('file'), libraryController.uploadMaterials);
+router.put('/materials/:id', libraryController.updateMaterial);
+router.delete('/materials/:id', libraryController.deleteMaterial);
+
+/**
+ * COLOURS ROUTES
+ * All routes delegate to libraryController
+ */
+router.get('/colours', libraryController.getColours);
+router.post('/colours', libraryController.createColour);
+router.post('/colours/upload', upload.single('file'), libraryController.uploadColours);
+router.put('/colours/:id', libraryController.updateColour);
+router.delete('/colours/:id', libraryController.deleteColour);
+
 module.exports = router;
 

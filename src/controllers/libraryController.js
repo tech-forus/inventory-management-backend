@@ -4,9 +4,12 @@ const CategoryModel = require('../models/categoryModel');
 const TeamModel = require('../models/teamModel');
 const CustomerModel = require('../models/customerModel');
 const TransportorModel = require('../models/transportorModel');
+const WarehouseModel = require('../models/warehouseModel');
+const MaterialModel = require('../models/materialModel');
+const ColourModel = require('../models/colourModel');
 const { getCompanyId } = require('../middlewares/auth');
 const { parseExcelFile, parseExcelFileAllSheets } = require('../utils/helpers');
-const { transformVendor, transformBrand, transformCategory, transformTeam, transformCustomer, transformTransportor, transformArray } = require('../utils/transformers');
+const { transformVendor, transformBrand, transformCategory, transformTeam, transformCustomer, transformTransportor, transformWarehouse, transformMaterial, transformColour, transformArray } = require('../utils/transformers');
 const { NotFoundError, ValidationError } = require('../middlewares/errorHandler');
 const xlsx = require('xlsx');
 
@@ -1403,6 +1406,366 @@ const deleteTeam = async (req, res, next) => {
   }
 };
 
+// ==================== WAREHOUSES ====================
+
+const getWarehouses = async (req, res, next) => {
+  try {
+    const companyId = getCompanyId(req);
+    const warehouses = await WarehouseModel.getAll(companyId);
+    const transformedData = transformArray(warehouses, transformWarehouse);
+    res.json({ success: true, data: transformedData });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const createWarehouse = async (req, res, next) => {
+  const pool = require('../models/database');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const companyId = getCompanyId(req);
+    const warehouse = await WarehouseModel.create(req.body, companyId);
+    await client.query('COMMIT');
+    res.json({ success: true, data: transformWarehouse(warehouse) });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    next(error);
+  } finally {
+    client.release();
+  }
+};
+
+const updateWarehouse = async (req, res, next) => {
+  const pool = require('../models/database');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const companyId = getCompanyId(req);
+    const warehouse = await WarehouseModel.update(req.params.id, req.body, companyId);
+    
+    if (!warehouse) {
+      await client.query('ROLLBACK');
+      throw new NotFoundError('Warehouse not found');
+    }
+
+    await client.query('COMMIT');
+    res.json({ success: true, data: transformWarehouse(warehouse) });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    next(error);
+  } finally {
+    client.release();
+  }
+};
+
+const deleteWarehouse = async (req, res, next) => {
+  try {
+    const companyId = getCompanyId(req);
+    const result = await WarehouseModel.delete(req.params.id, companyId);
+    
+    if (!result) {
+      throw new NotFoundError('Warehouse not found');
+    }
+    
+    res.json({ success: true, message: 'Warehouse deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const uploadWarehouses = async (req, res, next) => {
+  const pool = require('../models/database');
+  const client = await pool.connect();
+  try {
+    if (!req.file) {
+      throw new ValidationError('No file uploaded');
+    }
+
+    await client.query('BEGIN');
+    const companyId = getCompanyId(req);
+    const data = parseExcelFile(req.file.buffer);
+
+    const inserted = [];
+    const errors = [];
+
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i];
+      try {
+        if (!row.warehouse_name && !row.name) {
+          errors.push({ row: i + 2, error: 'Warehouse Name is required' });
+          continue;
+        }
+
+        const warehouse = await WarehouseModel.create({
+          warehouseName: row.warehouse_name || row.name,
+          warehouseCode: row.warehouse_code || row.code,
+          address: row.address,
+          city: row.city,
+          state: row.state,
+          pincode: row.pincode || row.pin,
+          isDefault: row.is_default === true || row.is_default === 'true' || row.isDefault === true,
+          status: row.status || 'active',
+        }, companyId);
+        inserted.push({ id: warehouse.id, name: warehouse.warehouse_name });
+      } catch (error) {
+        errors.push({ row: i + 2, error: error.message });
+      }
+    }
+
+    await client.query('COMMIT');
+    res.json({
+      success: true,
+      message: `Uploaded ${inserted.length} warehouses successfully`,
+      inserted: inserted.length,
+      errors: errors.length,
+      errorDetails: errors,
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    next(error);
+  } finally {
+    client.release();
+  }
+};
+
+// ==================== MATERIALS ====================
+
+const getMaterials = async (req, res, next) => {
+  try {
+    const companyId = getCompanyId(req);
+    const materials = await MaterialModel.getAll(companyId);
+    const transformedData = transformArray(materials, transformMaterial);
+    res.json({ success: true, data: transformedData });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const createMaterial = async (req, res, next) => {
+  const pool = require('../models/database');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const companyId = getCompanyId(req);
+    const material = await MaterialModel.create(req.body, companyId);
+    await client.query('COMMIT');
+    res.json({ success: true, data: transformMaterial(material) });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    next(error);
+  } finally {
+    client.release();
+  }
+};
+
+const updateMaterial = async (req, res, next) => {
+  const pool = require('../models/database');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const companyId = getCompanyId(req);
+    const material = await MaterialModel.update(req.params.id, req.body, companyId);
+    
+    if (!material) {
+      await client.query('ROLLBACK');
+      throw new NotFoundError('Material not found');
+    }
+
+    await client.query('COMMIT');
+    res.json({ success: true, data: transformMaterial(material) });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    next(error);
+  } finally {
+    client.release();
+  }
+};
+
+const deleteMaterial = async (req, res, next) => {
+  try {
+    const companyId = getCompanyId(req);
+    const result = await MaterialModel.delete(req.params.id, companyId);
+    
+    if (!result) {
+      throw new NotFoundError('Material not found');
+    }
+    
+    res.json({ success: true, message: 'Material deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const uploadMaterials = async (req, res, next) => {
+  const pool = require('../models/database');
+  const client = await pool.connect();
+  try {
+    if (!req.file) {
+      throw new ValidationError('No file uploaded');
+    }
+
+    await client.query('BEGIN');
+    const companyId = getCompanyId(req);
+    const data = parseExcelFile(req.file.buffer);
+
+    const inserted = [];
+    const errors = [];
+
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i];
+      try {
+        if (!row.name || !row.name.toString().trim()) {
+          errors.push({ row: i + 2, error: 'Material Name is required' });
+          continue;
+        }
+
+        const material = await MaterialModel.create({
+          name: row.name.toString().trim(),
+          description: row.description || null,
+          isActive: row.is_active !== false && row.status !== 'inactive',
+        }, companyId);
+        inserted.push({ id: material.id, name: material.name });
+      } catch (error) {
+        errors.push({ row: i + 2, error: error.message });
+      }
+    }
+
+    await client.query('COMMIT');
+    res.json({
+      success: true,
+      message: `Uploaded ${inserted.length} materials successfully`,
+      inserted: inserted.length,
+      errors: errors.length,
+      errorDetails: errors,
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    next(error);
+  } finally {
+    client.release();
+  }
+};
+
+// ==================== COLOURS ====================
+
+const getColours = async (req, res, next) => {
+  try {
+    const companyId = getCompanyId(req);
+    const colours = await ColourModel.getAll(companyId);
+    const transformedData = transformArray(colours, transformColour);
+    res.json({ success: true, data: transformedData });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const createColour = async (req, res, next) => {
+  const pool = require('../models/database');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const companyId = getCompanyId(req);
+    const colour = await ColourModel.create(req.body, companyId);
+    await client.query('COMMIT');
+    res.json({ success: true, data: transformColour(colour) });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    next(error);
+  } finally {
+    client.release();
+  }
+};
+
+const updateColour = async (req, res, next) => {
+  const pool = require('../models/database');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const companyId = getCompanyId(req);
+    const colour = await ColourModel.update(req.params.id, req.body, companyId);
+    
+    if (!colour) {
+      await client.query('ROLLBACK');
+      throw new NotFoundError('Colour not found');
+    }
+
+    await client.query('COMMIT');
+    res.json({ success: true, data: transformColour(colour) });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    next(error);
+  } finally {
+    client.release();
+  }
+};
+
+const deleteColour = async (req, res, next) => {
+  try {
+    const companyId = getCompanyId(req);
+    const result = await ColourModel.delete(req.params.id, companyId);
+    
+    if (!result) {
+      throw new NotFoundError('Colour not found');
+    }
+    
+    res.json({ success: true, message: 'Colour deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const uploadColours = async (req, res, next) => {
+  const pool = require('../models/database');
+  const client = await pool.connect();
+  try {
+    if (!req.file) {
+      throw new ValidationError('No file uploaded');
+    }
+
+    await client.query('BEGIN');
+    const companyId = getCompanyId(req);
+    const data = parseExcelFile(req.file.buffer);
+
+    const inserted = [];
+    const errors = [];
+
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i];
+      try {
+        if (!row.name || !row.name.toString().trim()) {
+          errors.push({ row: i + 2, error: 'Colour Name is required' });
+          continue;
+        }
+
+        const colour = await ColourModel.create({
+          name: row.name.toString().trim(),
+          hexCode: row.hex_code || row.hexCode,
+          description: row.description || null,
+          isActive: row.is_active !== false && row.status !== 'inactive',
+        }, companyId);
+        inserted.push({ id: colour.id, name: colour.name });
+      } catch (error) {
+        errors.push({ row: i + 2, error: error.message });
+      }
+    }
+
+    await client.query('COMMIT');
+    res.json({
+      success: true,
+      message: `Uploaded ${inserted.length} colours successfully`,
+      inserted: inserted.length,
+      errors: errors.length,
+      errorDetails: errors,
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    next(error);
+  } finally {
+    client.release();
+  }
+};
+
 module.exports = {
   // Vendors
   getVendors,
@@ -1461,6 +1824,24 @@ module.exports = {
   updateTransportor,
   deleteTransportor,
   uploadTransportors,
+  // Warehouses
+  getWarehouses,
+  createWarehouse,
+  uploadWarehouses,
+  updateWarehouse,
+  deleteWarehouse,
+  // Materials
+  getMaterials,
+  createMaterial,
+  uploadMaterials,
+  updateMaterial,
+  deleteMaterial,
+  // Colours
+  getColours,
+  createColour,
+  uploadColours,
+  updateColour,
+  deleteColour,
 };
 
 

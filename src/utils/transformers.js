@@ -206,6 +206,57 @@ const transformSKU = (sku) => {
 };
 
 /**
+ * Transform warehouse from snake_case to camelCase
+ */
+const transformWarehouse = (warehouse) => {
+  if (!warehouse) return null;
+  return {
+    id: warehouse.id,
+    warehouseName: warehouse.warehouse_name,
+    warehouseCode: warehouse.warehouse_code,
+    address: warehouse.address,
+    city: warehouse.city,
+    state: warehouse.state,
+    pincode: warehouse.pincode,
+    isDefault: warehouse.is_default,
+    status: warehouse.status,
+    createdAt: warehouse.created_at,
+    updatedAt: warehouse.updated_at,
+  };
+};
+
+/**
+ * Transform material from snake_case to camelCase
+ */
+const transformMaterial = (material) => {
+  if (!material) return null;
+  return {
+    id: material.id,
+    name: material.name,
+    description: material.description,
+    isActive: material.is_active,
+    createdAt: material.created_at,
+    updatedAt: material.updated_at,
+  };
+};
+
+/**
+ * Transform colour from snake_case to camelCase
+ */
+const transformColour = (colour) => {
+  if (!colour) return null;
+  return {
+    id: colour.id,
+    name: colour.name,
+    hexCode: colour.hex_code,
+    description: colour.description,
+    isActive: colour.is_active,
+    createdAt: colour.created_at,
+    updatedAt: colour.updated_at,
+  };
+};
+
+/**
  * Transform array of items
  */
 const transformArray = (items, transformer) => {
@@ -221,6 +272,9 @@ module.exports = {
   transformCustomer,
   transformTransportor,
   transformSKU,
+  transformWarehouse,
+  transformMaterial,
+  transformColour,
   transformArray,
 };
 
