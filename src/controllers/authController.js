@@ -44,8 +44,12 @@ const login = async (req, res, next) => {
 
     // Find user by email OR phone
     // Also get phone from admins or users_data tables if not in users table
-    const result = await pool.query(
-      `SELECT 
+    let query;
+    let params;
+    
+    if (isEmail) {
+      // Query by email only
+      query = `SELECT 
         u.id, u.company_id, u.email, u.password, u.full_name, 
         COALESCE(u.phone, a.phone, ud.phone) as phone,
         u.role, u.is_active,
@@ -54,9 +58,24 @@ const login = async (req, res, next) => {
       INNER JOIN companies c ON u.company_id = c.company_id
       LEFT JOIN admins a ON u.id = a.user_id
       LEFT JOIN users_data ud ON u.id = ud.user_id
-      WHERE (u.email = $1 OR u.phone = $2)`,
-      [normalizedEmail || '', normalizedPhone || '']
-    );
+      WHERE u.email = $1`;
+      params = [normalizedEmail];
+    } else {
+      // Query by phone only
+      query = `SELECT 
+        u.id, u.company_id, u.email, u.password, u.full_name, 
+        COALESCE(u.phone, a.phone, ud.phone) as phone,
+        u.role, u.is_active,
+        c.company_name
+      FROM users u
+      INNER JOIN companies c ON u.company_id = c.company_id
+      LEFT JOIN admins a ON u.id = a.user_id
+      LEFT JOIN users_data ud ON u.id = ud.user_id
+      WHERE u.phone = $1`;
+      params = [normalizedPhone];
+    }
+    
+    const result = await pool.query(query, params);
 
     if (result.rows.length === 0) {
       return res.status(401).json({ 
