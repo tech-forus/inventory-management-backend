@@ -233,7 +233,6 @@ const transformMaterial = (material) => {
   return {
     id: material.id,
     name: material.name,
-    description: material.description,
     isActive: material.is_active,
     createdAt: material.created_at,
     updatedAt: material.updated_at,
@@ -249,7 +248,6 @@ const transformColour = (colour) => {
     id: colour.id,
     name: colour.name,
     hexCode: colour.hex_code,
-    description: colour.description,
     isActive: colour.is_active,
     createdAt: colour.created_at,
     updatedAt: colour.updated_at,

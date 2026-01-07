@@ -32,11 +32,10 @@ class ColourModel {
    */
   static async create(colourData, companyId) {
     const result = await pool.query(
-      `INSERT INTO colours (company_id, name, hex_code, description, is_active)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO colours (company_id, name, hex_code, is_active)
+       VALUES ($1, $2, $3, $4)
        ON CONFLICT (company_id, name) DO UPDATE
        SET hex_code = EXCLUDED.hex_code,
-           description = EXCLUDED.description,
            is_active = true,
            updated_at = CURRENT_TIMESTAMP
        RETURNING *`,
@@ -44,7 +43,6 @@ class ColourModel {
         companyId.toUpperCase(),
         colourData.name,
         colourData.hexCode || null,
-        colourData.description || null,
         colourData.isActive !== false,
       ]
     );
@@ -59,15 +57,13 @@ class ColourModel {
       `UPDATE colours SET
         name = $1,
         hex_code = $2,
-        description = $3,
-        is_active = $4,
+        is_active = $3,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $5 AND company_id = $6
+      WHERE id = $4 AND company_id = $5
       RETURNING *`,
       [
         colourData.name,
         colourData.hexCode || null,
-        colourData.description || null,
         colourData.isActive !== false,
         id,
         companyId.toUpperCase(),

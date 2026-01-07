@@ -32,17 +32,15 @@ class MaterialModel {
    */
   static async create(materialData, companyId) {
     const result = await pool.query(
-      `INSERT INTO materials (company_id, name, description, is_active)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO materials (company_id, name, is_active)
+       VALUES ($1, $2, $3)
        ON CONFLICT (company_id, name) DO UPDATE
-       SET description = EXCLUDED.description,
-           is_active = true,
+       SET is_active = true,
            updated_at = CURRENT_TIMESTAMP
        RETURNING *`,
       [
         companyId.toUpperCase(),
         materialData.name,
-        materialData.description || null,
         materialData.isActive !== false,
       ]
     );
@@ -56,14 +54,12 @@ class MaterialModel {
     const result = await pool.query(
       `UPDATE materials SET
         name = $1,
-        description = $2,
-        is_active = $3,
+        is_active = $2,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $4 AND company_id = $5
+      WHERE id = $3 AND company_id = $4
       RETURNING *`,
       [
         materialData.name,
-        materialData.description || null,
         materialData.isActive !== false,
         id,
         companyId.toUpperCase(),

@@ -1622,7 +1622,6 @@ const uploadMaterials = async (req, res, next) => {
 
         const material = await MaterialModel.create({
           name: row.name.toString().trim(),
-          description: row.description || null,
           isActive: row.is_active !== false && row.status !== 'inactive',
         }, companyId);
         inserted.push({ id: material.id, name: material.name });
@@ -1741,7 +1740,6 @@ const uploadColours = async (req, res, next) => {
         const colour = await ColourModel.create({
           name: row.name.toString().trim(),
           hexCode: row.hex_code || row.hexCode,
-          description: row.description || null,
           isActive: row.is_active !== false && row.status !== 'inactive',
         }, companyId);
         inserted.push({ id: colour.id, name: colour.name });
