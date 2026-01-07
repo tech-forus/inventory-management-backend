@@ -20,10 +20,29 @@ const login = async (req, res, next) => {
       });
     }
 
-    // Ensure email is normalized
-    const normalizedEmail = String(email).toLowerCase().trim();
+    // Determine if input is email or phone number
+    const input = String(email).trim();
+    const isEmail = input.includes('@');
+    
+    let normalizedEmail = null;
+    let normalizedPhone = null;
+    
+    if (isEmail) {
+      // Normalize email: lowercase
+      normalizedEmail = input.toLowerCase();
+    } else {
+      // Normalize phone: remove spaces, dashes, parentheses, plus signs, keep only digits
+      normalizedPhone = input.replace(/[\s\-\(\)\+]/g, '');
+      // Ensure it's exactly 10 digits
+      if (normalizedPhone.length !== 10) {
+        return res.status(400).json({
+          success: false,
+          error: 'Phone number must be 10 digits'
+        });
+      }
+    }
 
-    // Find user by email (email is globally unique)
+    // Find user by email OR phone
     // Also get phone from admins or users_data tables if not in users table
     const result = await pool.query(
       `SELECT 
@@ -35,14 +54,14 @@ const login = async (req, res, next) => {
       INNER JOIN companies c ON u.company_id = c.company_id
       LEFT JOIN admins a ON u.id = a.user_id
       LEFT JOIN users_data ud ON u.id = ud.user_id
-      WHERE u.email = $1`,
-      [normalizedEmail]
+      WHERE (u.email = $1 OR u.phone = $2)`,
+      [normalizedEmail || '', normalizedPhone || '']
     );
 
     if (result.rows.length === 0) {
       return res.status(401).json({ 
         success: false,
-        error: 'Invalid email or password' 
+        error: 'Invalid email/phone number or password' 
       });
     }
 

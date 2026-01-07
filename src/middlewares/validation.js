@@ -48,6 +48,31 @@ const validateEmail = (field = 'email') => {
 };
 
 /**
+ * Validate email or phone number format (for login)
+ */
+const validateEmailOrPhone = (field = 'email') => {
+  return (req, res, next) => {
+    if (req.body[field]) {
+      const value = String(req.body[field]).trim();
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      // Normalize phone: remove spaces, dashes, parentheses, plus signs
+      const normalizedPhone = value.replace(/[\s\-\(\)\+]/g, '');
+      const phoneRegex = /^[0-9]{10}$/;
+      
+      // Check if it's a valid email or phone
+      if (!emailRegex.test(value) && !phoneRegex.test(normalizedPhone)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid email address or phone number format',
+          field,
+        });
+      }
+    }
+    next();
+  };
+};
+
+/**
  * Validate phone number format
  */
 const validatePhone = (field = 'phone') => {
@@ -227,6 +252,7 @@ const validateIncomingItems = () => {
 module.exports = {
   validateRequired,
   validateEmail,
+  validateEmailOrPhone,
   validatePhone,
   validateNumeric,
   validateArray,

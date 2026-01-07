@@ -1,14 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
-const { validateRequired, validateEmail } = require('../middlewares/validation');
+const { validateRequired, validateEmailOrPhone } = require('../middlewares/validation');
 const { authenticate } = require('../middlewares/auth');
 const pool = require('../models/database');
 
 router.post(
   '/login',
   validateRequired(['email', 'password']),
-  validateEmail('email'),
+  validateEmailOrPhone('email'),
   authController.login
 );
 
