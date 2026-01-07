@@ -61,7 +61,7 @@ const login = async (req, res, next) => {
       WHERE u.email = $1`;
       params = [normalizedEmail];
     } else {
-      // Query by phone only
+      // Query by phone - check users, admins, and users_data tables
       query = `SELECT 
         u.id, u.company_id, u.email, u.password, u.full_name, 
         COALESCE(u.phone, a.phone, ud.phone) as phone,
@@ -71,7 +71,7 @@ const login = async (req, res, next) => {
       INNER JOIN companies c ON u.company_id = c.company_id
       LEFT JOIN admins a ON u.id = a.user_id
       LEFT JOIN users_data ud ON u.id = ud.user_id
-      WHERE u.phone = $1`;
+      WHERE u.phone = $1 OR a.phone = $1 OR ud.phone = $1`;
       params = [normalizedPhone];
     }
     
