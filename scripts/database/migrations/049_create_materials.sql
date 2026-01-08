@@ -50,3 +50,5 @@ COMMENT ON COLUMN materials.name IS 'Material name (unique per company)';
 
 COMMIT;
 
+
+

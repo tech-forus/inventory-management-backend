@@ -62,3 +62,5 @@ COMMENT ON COLUMN skus.custom_fields IS 'Additional custom fields stored as JSON
 
 COMMIT;
 
+
+

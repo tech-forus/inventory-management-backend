@@ -64,3 +64,5 @@ COMMENT ON COLUMN warehouses.status IS 'Warehouse status: active or inactive';
 
 COMMIT;
 
+
+
