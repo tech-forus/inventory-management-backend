@@ -18,6 +18,7 @@ const transformIncomingInventory = (record) => {
     transportorName: record.transportor_name,
     vendorId: record.vendor_id,
     vendorName: record.vendor_name,
+    supplierName: record.supplier_name || record.vendor_name || record.customer_name || null,
     brandId: record.brand_id,
     brandName: record.brand_name,
     receivingDate: record.receiving_date,

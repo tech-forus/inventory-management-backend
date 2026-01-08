@@ -158,6 +158,8 @@ class IncomingInventoryModel {
       SELECT 
         ii.*,
         v.name as vendor_name,
+        c.customer_name,
+        COALESCE(v.name, c.customer_name) as supplier_name,
         b.name as brand_name,
         t.name as received_by_name,
         COALESCE(SUM(iii.total_quantity), 0)::INTEGER as total_quantity_sum,
@@ -166,6 +168,7 @@ class IncomingInventoryModel {
         COALESCE(SUM(iii.rejected), 0)::INTEGER as rejected_sum
       FROM incoming_inventory ii
       LEFT JOIN vendors v ON ii.vendor_id = v.id
+      LEFT JOIN customers c ON ii.destination_id = c.id AND ii.destination_type = 'customer'
       LEFT JOIN brands b ON ii.brand_id = b.id
       LEFT JOIN teams t ON ii.received_by = t.id
       LEFT JOIN incoming_inventory_items iii ON ii.id = iii.incoming_inventory_id
@@ -204,7 +207,7 @@ class IncomingInventoryModel {
       ii.receiving_date, ii.received_by, ii.remarks, ii.status, ii.total_value, 
       ii.document_type, ii.document_sub_type, ii.vendor_sub_type, ii.delivery_challan_sub_type,
       ii.destination_type, ii.destination_id, ii.is_active, ii.created_at, ii.updated_at, 
-      v.name, b.name, t.name 
+      v.name, c.customer_name, b.name, t.name 
       ORDER BY ii.created_at DESC`;
 
     if (filters.limit) {
@@ -246,6 +249,8 @@ class IncomingInventoryModel {
         ii.invoice_number,
         ii.receiving_date,
         v.name as vendor_name,
+        c.customer_name,
+        COALESCE(v.name, c.customer_name) as supplier_name,
         t.name as received_by_name,
         ii.total_value,
         COALESCE(SUM(iii.total_quantity), 0)::INTEGER as total_quantity,
@@ -262,6 +267,7 @@ class IncomingInventoryModel {
       FROM incoming_inventory ii
       LEFT JOIN incoming_inventory_items iii ON ii.id = iii.incoming_inventory_id
       LEFT JOIN vendors v ON ii.vendor_id = v.id
+      LEFT JOIN customers c ON ii.destination_id = c.id AND ii.destination_type = 'customer'
       LEFT JOIN teams t ON ii.received_by = t.id
       WHERE ii.company_id = $1 AND ii.is_active = true AND ii.status = 'completed'
     `;
@@ -286,7 +292,7 @@ class IncomingInventoryModel {
       paramIndex++;
     }
 
-    query += ` GROUP BY ii.id, ii.invoice_date, ii.invoice_number, ii.receiving_date, v.name, t.name, ii.total_value`;
+    query += ` GROUP BY ii.id, ii.invoice_date, ii.invoice_number, ii.receiving_date, v.name, c.customer_name, t.name, ii.total_value`;
 
     if (filters.sku) {
       // Filter by SKU - need to add HAVING clause or subquery
@@ -297,6 +303,8 @@ class IncomingInventoryModel {
           ii.invoice_number,
           ii.receiving_date,
           v.name as vendor_name,
+          c.customer_name,
+          COALESCE(v.name, c.customer_name) as supplier_name,
           t.name as received_by_name,
           ii.total_value,
           COALESCE(SUM(iii.total_quantity), 0)::INTEGER as total_quantity,
@@ -313,6 +321,7 @@ class IncomingInventoryModel {
         FROM incoming_inventory ii
         LEFT JOIN incoming_inventory_items iii ON ii.id = iii.incoming_inventory_id
         LEFT JOIN vendors v ON ii.vendor_id = v.id
+        LEFT JOIN customers c ON ii.destination_id = c.id AND ii.destination_type = 'customer'
         LEFT JOIN teams t ON ii.received_by = t.id
         LEFT JOIN skus s ON iii.sku_id = s.id
         WHERE ii.company_id = $1 AND ii.is_active = true AND ii.status = 'completed'
@@ -321,7 +330,7 @@ class IncomingInventoryModel {
       const skuSearch = `%${filters.sku}%`;
       params.push(skuSearch);
       paramIndex++;
-      query += ` GROUP BY ii.id, ii.invoice_date, ii.invoice_number, ii.receiving_date, v.name, t.name, ii.total_value`;
+      query += ` GROUP BY ii.id, ii.invoice_date, ii.invoice_number, ii.receiving_date, v.name, c.customer_name, t.name, ii.total_value`;
     }
 
     query += ` ORDER BY ii.receiving_date DESC, ii.id DESC`;
@@ -372,10 +381,13 @@ class IncomingInventoryModel {
       `SELECT 
         ii.*,
         v.name as vendor_name,
+        c.customer_name,
+        COALESCE(v.name, c.customer_name) as supplier_name,
         b.name as brand_name,
         t.name as received_by_name
       FROM incoming_inventory ii
       LEFT JOIN vendors v ON ii.vendor_id = v.id
+      LEFT JOIN customers c ON ii.destination_id = c.id AND ii.destination_type = 'customer'
       LEFT JOIN brands b ON ii.brand_id = b.id
       LEFT JOIN teams t ON ii.received_by = t.id
       WHERE ii.id = $1 AND ii.company_id = $2 AND ii.is_active = true`,
