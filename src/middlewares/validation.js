@@ -249,6 +249,79 @@ const validateIncomingItems = () => {
   };
 };
 
+/**
+ * Validate incoming inventory supplier (vendor or customer)
+ * - Either vendorId OR destinationId must be present (unless documentType is 'transfer_note')
+ * - If vendorId is present, brandId is required and must be numeric
+ * - If destinationId is present, it must be numeric
+ */
+const validateIncomingInventorySupplier = () => {
+  return (req, res, next) => {
+    const { vendorId, destinationId, brandId, documentType } = req.body;
+    
+    // Skip validation for transfer_note (has different requirements)
+    if (documentType === 'transfer_note') {
+      return next();
+    }
+    
+    // Check if at least one supplier identifier is provided
+    const hasVendor = vendorId !== null && vendorId !== undefined && vendorId !== '';
+    const hasCustomer = destinationId !== null && destinationId !== undefined && destinationId !== '';
+    
+    if (!hasVendor && !hasCustomer) {
+      return res.status(400).json({
+        success: false,
+        error: 'Either vendorId or destinationId must be provided',
+        field: 'supplier',
+      });
+    }
+    
+    // If vendor is selected, validate vendorId and brandId
+    if (hasVendor) {
+      const vendorIdNum = parseFloat(vendorId);
+      if (isNaN(vendorIdNum) || vendorIdNum <= 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'vendorId must be a positive number',
+          field: 'vendorId',
+        });
+      }
+      
+      // Brand is required when vendor is selected
+      if (!brandId || brandId === null || brandId === '') {
+        return res.status(400).json({
+          success: false,
+          error: 'brandId is required when vendorId is provided',
+          field: 'brandId',
+        });
+      }
+      
+      const brandIdNum = parseFloat(brandId);
+      if (isNaN(brandIdNum) || brandIdNum <= 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'brandId must be a positive number',
+          field: 'brandId',
+        });
+      }
+    }
+    
+    // If customer is selected, validate destinationId
+    if (hasCustomer) {
+      const destinationIdNum = parseFloat(destinationId);
+      if (isNaN(destinationIdNum) || destinationIdNum <= 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'destinationId must be a positive number',
+          field: 'destinationId',
+        });
+      }
+    }
+    
+    next();
+  };
+};
+
 module.exports = {
   validateRequired,
   validateEmail,
@@ -259,6 +332,7 @@ module.exports = {
   validateDate,
   validateArrayItems,
   validateIncomingItems,
+  validateIncomingInventorySupplier,
 };
 
 

@@ -4,7 +4,7 @@ const { authenticate, getCompanyId } = require('../middlewares/auth');
 const incomingInventoryController = require('../controllers/incomingInventoryController');
 const outgoingInventoryController = require('../controllers/outgoingInventoryController');
 const rejectedItemReportController = require('../controllers/rejectedItemReportController');
-const { validateRequired, validateArray, validateDate, validateNumeric, validateIncomingItems } = require('../middlewares/validation');
+const { validateRequired, validateArray, validateDate, validateNumeric, validateIncomingItems, validateIncomingInventorySupplier } = require('../middlewares/validation');
 const pool = require('../models/database');
 
 // All routes require authentication
@@ -122,11 +122,10 @@ router.get('/', async (req, res, next) => {
 // Incoming Inventory Routes
 router.post(
   '/incoming',
-  validateRequired(['invoiceNumber', 'invoiceDate', 'vendorId', 'brandId', 'items']),
+  validateRequired(['invoiceNumber', 'invoiceDate', 'items']),
   validateDate('invoiceDate', true), // Required field
   validateArray('items', 1),
-  validateNumeric('vendorId'),
-  validateNumeric('brandId'),
+  validateIncomingInventorySupplier(), // Validates vendorId/brandId OR destinationId conditionally
   validateIncomingItems(),
   incomingInventoryController.createIncomingInventory
 );
