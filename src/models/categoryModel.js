@@ -7,10 +7,16 @@ const pool = require('./database');
 class CategoryModel {
   /**
    * Product Categories
+   * Only return product categories that have at least one item category with at least one sub category (complete hierarchy)
    */
   static async getProductCategories(companyId) {
     const result = await pool.query(
-      'SELECT * FROM product_categories WHERE company_id = $1 AND is_active = true ORDER BY name',
+      `SELECT DISTINCT pc.* 
+       FROM product_categories pc
+       INNER JOIN item_categories ic ON pc.id = ic.product_category_id AND ic.is_active = true
+       INNER JOIN sub_categories sc ON ic.id = sc.item_category_id AND sc.is_active = true
+       WHERE pc.company_id = $1 AND pc.is_active = true 
+       ORDER BY pc.name`,
       [companyId.toUpperCase()]
     );
     return result.rows;
@@ -79,17 +85,21 @@ class CategoryModel {
 
   /**
    * Item Categories
+   * Only return item categories that have at least one sub category (complete hierarchy)
    */
   static async getItemCategories(companyId, productCategoryId = null) {
-    let query = 'SELECT * FROM item_categories WHERE company_id = $1 AND is_active = true';
+    let query = `SELECT DISTINCT ic.* 
+                 FROM item_categories ic
+                 INNER JOIN sub_categories sc ON ic.id = sc.item_category_id AND sc.is_active = true
+                 WHERE ic.company_id = $1 AND ic.is_active = true`;
     const params = [companyId.toUpperCase()];
 
     if (productCategoryId) {
-      query += ' AND product_category_id = $2';
+      query += ' AND ic.product_category_id = $2';
       params.push(productCategoryId);
     }
 
-    query += ' ORDER BY name';
+    query += ' ORDER BY ic.name';
     const result = await pool.query(query, params);
     return result.rows;
   }
