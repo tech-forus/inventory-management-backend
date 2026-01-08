@@ -663,8 +663,9 @@ class IncomingInventoryModel {
    * Stock behavior: Short changes directly affect stock
    * - When short decreases (items arrive): stock increases
    * - When short increases (items become short): stock decreases
+   * @param {boolean} skipStockUpdate - If true, skip stock update (used when items are received via separate incoming inventory record)
    */
-  static async updateShortItem(inventoryId, itemId, updates, companyId) {
+  static async updateShortItem(inventoryId, itemId, updates, companyId, skipStockUpdate = false) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -757,8 +758,9 @@ class IncomingInventoryModel {
       // Stock behavior: Short changes directly affect stock
       // When short decreases (items arrive): stock increases
       // When short increases (items become short): stock decreases
+      // Skip stock update if items are being received via separate incoming inventory record (to avoid double-counting)
       const shortDiff = newShort - oldShort;
-      if (shortDiff !== 0) {
+      if (shortDiff !== 0 && !skipStockUpdate) {
         // shortDiff is negative when short decreases (items arrived), so we subtract (which adds to stock)
         // shortDiff is positive when short increases (items become short), so we subtract (which removes from stock)
         await client.query(
@@ -766,6 +768,8 @@ class IncomingInventoryModel {
           [-shortDiff, currentItem.sku_id]
         );
         logger.debug({ skuId: currentItem.sku_id, stockChange: -shortDiff }, `Updated SKU ${currentItem.sku_id} stock: ${-shortDiff > 0 ? '+' : ''}${-shortDiff} (from short update - short directly affects available stock)`);
+      } else if (skipStockUpdate && shortDiff !== 0) {
+        logger.debug({ skuId: currentItem.sku_id, shortDiff }, `Skipped stock update for SKU ${currentItem.sku_id} (items received via separate incoming inventory record)`);
       }
 
       await client.query('COMMIT');

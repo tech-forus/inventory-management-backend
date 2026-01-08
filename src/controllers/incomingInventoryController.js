@@ -382,7 +382,7 @@ const updateShortItem = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
     const { id } = req.params; // incoming inventory id
-    const { itemId, short, challanNumber, challanDate } = req.body;
+    const { itemId, short, challanNumber, challanDate, skipStockUpdate } = req.body;
 
     if (!itemId) {
       throw new ValidationError('itemId is required');
@@ -402,7 +402,9 @@ const updateShortItem = async (req, res, next) => {
       throw new ValidationError('At least one of short, challanNumber, or challanDate must be provided');
     }
 
-    const result = await IncomingInventoryModel.updateShortItem(id, itemId, updates, companyId);
+    // skipStockUpdate is used when items are received via separate incoming inventory record (to avoid double-counting)
+    const shouldSkipStockUpdate = skipStockUpdate === true || skipStockUpdate === 'true';
+    const result = await IncomingInventoryModel.updateShortItem(id, itemId, updates, companyId, shouldSkipStockUpdate);
     res.json({ success: true, data: result });
   } catch (error) {
     next(error);
