@@ -19,15 +19,63 @@ const xlsx = require('xlsx');
  */
 
 /**
+ * Helper function to get categoryAccess from user (JWT or database)
+ * @param {Object} user - User object from req.user
+ * @param {String} companyId - Company ID
+ * @returns {Promise<Array>} categoryAccess array
+ */
+const getUserCategoryAccess = async (user, companyId) => {
+  // If categoryAccess is already in user object (from JWT), use it
+  // Check if it exists as a property (even if empty array - that's valid data)
+  if (user.hasOwnProperty('categoryAccess') && Array.isArray(user.categoryAccess)) {
+    return user.categoryAccess;
+  }
+  
+  // Otherwise, fetch from database (for old JWT tokens that don't have categoryAccess)
+  try {
+    const pool = require('../models/database');
+    const userId = user.id || user.userId;
+    const role = user.role;
+    
+    if (!userId || !role) {
+      return [];
+    }
+    
+    const table = role === 'admin' || role === 'super_admin' ? 'admins' : 'users_data';
+    const result = await pool.query(
+      `SELECT category_access FROM ${table} WHERE user_id = $1 AND company_id = $2`,
+      [userId, companyId]
+    );
+    
+    if (result.rows.length > 0 && result.rows[0].category_access) {
+      const categoryAccess = result.rows[0].category_access;
+      // Parse if it's a string
+      return typeof categoryAccess === 'string' ? JSON.parse(categoryAccess) : categoryAccess;
+    }
+    
+    return [];
+  } catch (error) {
+    console.error('[CATEGORY ACCESS LOG] Error fetching categoryAccess from database:', error);
+    return [];
+  }
+};
+
+/**
  * Helper function to filter categories based on user access
  * @param {Array} categories - Array of category objects
  * @param {Object} user - User object with role and categoryAccess
  * @param {String} categoryType - 'productCategoryIds', 'itemCategoryIds', or 'subCategoryIds'
- * @returns {Array} Filtered categories
+ * @param {String} companyId - Company ID (for database fallback)
+ * @returns {Promise<Array>} Filtered categories
  */
-const filterCategoriesByUserAccess = (categories, user, categoryType) => {
+const filterCategoriesByUserAccess = async (categories, user, categoryType, companyId) => {
   const userRole = user.role;
-  const categoryAccess = user.categoryAccess || [];
+  let categoryAccess = user.categoryAccess || [];
+  
+  // If categoryAccess is empty or not in JWT, fetch from database
+  if (!categoryAccess || categoryAccess.length === 0) {
+    categoryAccess = await getUserCategoryAccess(user, companyId);
+  }
   
   // Admin and super_admin get all categories
   if (userRole === 'admin' || userRole === 'super_admin') {
@@ -75,11 +123,17 @@ const filterCategoriesByUserAccess = (categories, user, categoryType) => {
  * @param {String|Number} categoryId - Category ID to check
  * @param {Object} user - User object with role and categoryAccess
  * @param {String} categoryType - 'productCategoryIds', 'itemCategoryIds', or 'subCategoryIds'
- * @returns {Boolean} True if user has access
+ * @param {String} companyId - Company ID (for database fallback)
+ * @returns {Promise<Boolean>} True if user has access
  */
-const hasCategoryAccess = (categoryId, user, categoryType) => {
+const hasCategoryAccess = async (categoryId, user, categoryType, companyId) => {
   const userRole = user.role;
-  const categoryAccess = user.categoryAccess || [];
+  let categoryAccess = user.categoryAccess || [];
+  
+  // If categoryAccess is empty or not in JWT, fetch from database
+  if (!categoryAccess || categoryAccess.length === 0) {
+    categoryAccess = await getUserCategoryAccess(user, companyId);
+  }
   
   // Admin and super_admin have access to all
   if (userRole === 'admin' || userRole === 'super_admin') {
@@ -401,7 +455,8 @@ const getProductCategories = async (req, res, next) => {
       }
       
       // Check if user has access to this specific category
-      if (!hasCategoryAccess(req.params.id, user, 'productCategoryIds')) {
+      const hasAccess = await hasCategoryAccess(req.params.id, user, 'productCategoryIds', companyId);
+      if (!hasAccess) {
         console.log('[CATEGORY ACCESS LOG] Access Denied: User does not have access to product category', req.params.id);
         throw new UnauthorizedError('You do not have access to this product category');
       }
@@ -426,7 +481,7 @@ const getProductCategories = async (req, res, next) => {
     const transformedData = transformArray(categories, transformCategory);
     
     // Filter categories based on user access
-    const filteredData = filterCategoriesByUserAccess(transformedData, user, 'productCategoryIds');
+    const filteredData = await filterCategoriesByUserAccess(transformedData, user, 'productCategoryIds', companyId);
     
     console.log('[CATEGORY ACCESS LOG] ===== OUTGOING RESPONSE: All Product Categories =====');
     console.log('[CATEGORY ACCESS LOG] User:', { userId: user.id || user.userId, email: user.email, role: user.role });
@@ -624,7 +679,8 @@ const getItemCategories = async (req, res, next) => {
       }
       
       // Check if user has access to this specific category
-      if (!hasCategoryAccess(req.params.id, user, 'itemCategoryIds')) {
+      const hasAccess = await hasCategoryAccess(req.params.id, user, 'itemCategoryIds', companyId);
+      if (!hasAccess) {
         console.log('[CATEGORY ACCESS LOG] Access Denied: User does not have access to item category', req.params.id);
         throw new UnauthorizedError('You do not have access to this item category');
       }
@@ -651,7 +707,7 @@ const getItemCategories = async (req, res, next) => {
     const transformedData = transformArray(categories, transformCategory);
     
     // Filter categories based on user access
-    const filteredData = filterCategoriesByUserAccess(transformedData, user, 'itemCategoryIds');
+    const filteredData = await filterCategoriesByUserAccess(transformedData, user, 'itemCategoryIds', companyId);
     
     console.log('[CATEGORY ACCESS LOG] ===== OUTGOING RESPONSE: Item Categories =====');
     console.log('[CATEGORY ACCESS LOG] User:', { userId: user.id || user.userId, email: user.email, role: user.role });
@@ -852,7 +908,8 @@ const getSubCategories = async (req, res, next) => {
       }
       
       // Check if user has access to this specific category
-      if (!hasCategoryAccess(req.params.id, user, 'subCategoryIds')) {
+      const hasAccess = await hasCategoryAccess(req.params.id, user, 'subCategoryIds', companyId);
+      if (!hasAccess) {
         console.log('[CATEGORY ACCESS LOG] Access Denied: User does not have access to sub category', req.params.id);
         throw new UnauthorizedError('You do not have access to this sub category');
       }
@@ -879,7 +936,7 @@ const getSubCategories = async (req, res, next) => {
     const transformedData = transformArray(categories, transformCategory);
     
     // Filter categories based on user access
-    const filteredData = filterCategoriesByUserAccess(transformedData, user, 'subCategoryIds');
+    const filteredData = await filterCategoriesByUserAccess(transformedData, user, 'subCategoryIds', companyId);
     
     console.log('[CATEGORY ACCESS LOG] ===== OUTGOING RESPONSE: Sub Categories =====');
     console.log('[CATEGORY ACCESS LOG] User:', { userId: user.id || user.userId, email: user.email, role: user.role });
