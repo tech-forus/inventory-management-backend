@@ -203,25 +203,47 @@ const uploadVendors = async (req, res, next) => {
     const inserted = [];
     const errors = [];
 
+    // Helper function to get value from row by matching header (case-insensitive, handles spaces)
+    const getValue = (row, ...possibleKeys) => {
+      for (const key of possibleKeys) {
+        // Try exact match
+        if (row[key] !== undefined && row[key] !== null && row[key] !== '') {
+          return row[key];
+        }
+        // Try case-insensitive match (normalize spaces and case)
+        for (const rowKey in row) {
+          const normalizedRowKey = rowKey.replace(/\s+/g, ' ').trim().toLowerCase();
+          const normalizedKey = key.replace(/_/g, ' ').trim().toLowerCase();
+          if (normalizedRowKey === normalizedKey) {
+            if (row[rowKey] !== undefined && row[rowKey] !== null && row[rowKey] !== '') {
+              return row[rowKey];
+            }
+          }
+        }
+      }
+      return null;
+    };
+
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
       try {
-        if (!row.name || !row.name.toString().trim()) {
+        const name = getValue(row, 'name', 'Name');
+        if (!name || !String(name).trim()) {
           errors.push({ row: i + 2, error: 'Name is required' });
           continue;
         }
 
         const vendor = await VendorModel.create({
-          name: row.name?.toString().trim(),
-          contactPerson: row.contact_person || row.contactPerson,
-          designation: row.designation,
-          email: row.email,
-          phone: row.phone,
-          gstNumber: row.gst_number || row.gstNumber,
-          address: row.address,
-          city: row.city,
-          state: row.state,
-          pin: row.pin,
+          name: String(name).trim(),
+          contactPerson: getValue(row, 'contact_person', 'contactPerson', 'Contact Person') || null,
+          designation: getValue(row, 'designation', 'Designation') || null,
+          email: getValue(row, 'email', 'Email') || null,
+          phone: getValue(row, 'phone', 'Phone') || null,
+          gstNumber: getValue(row, 'gst_number', 'gstNumber', 'GST Number') || null,
+          address: getValue(row, 'address', 'Address') || null,
+          city: getValue(row, 'city', 'City') || null,
+          state: getValue(row, 'state', 'State') || null,
+          pin: getValue(row, 'pin', 'PIN', 'Pin') || null,
           isActive: true, // Always true for Excel uploads
         }, companyId);
         inserted.push({ id: vendor.id, name: vendor.name });
