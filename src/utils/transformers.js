@@ -12,6 +12,7 @@ const transformVendor = (vendor) => {
     id: vendor.id,
     name: vendor.name,
     contactPerson: vendor.contact_person,
+    department: vendor.department,
     designation: vendor.designation,
     phone: vendor.phone,
     whatsappNumber: vendor.whatsapp_number,

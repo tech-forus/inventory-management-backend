@@ -236,6 +236,7 @@ const uploadVendors = async (req, res, next) => {
         const vendor = await VendorModel.create({
           name: String(name).trim(),
           contactPerson: getValue(row, 'contact_person', 'contactPerson', 'Contact Person') || null,
+          department: getValue(row, 'department', 'Department') || null,
           designation: getValue(row, 'designation', 'Designation') || null,
           email: getValue(row, 'email', 'Email') || null,
           phone: getValue(row, 'phone', 'Phone') || null,

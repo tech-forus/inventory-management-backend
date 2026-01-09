@@ -33,14 +33,15 @@ class VendorModel {
   static async create(vendorData, companyId) {
     const result = await pool.query(
       `INSERT INTO vendors (
-        company_id, name, contact_person, designation, email, phone, whatsapp_number, gst_number,
+        company_id, name, contact_person, department, designation, email, phone, whatsapp_number, gst_number,
         address, city, state, pin, is_active
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       RETURNING *`,
       [
         companyId.toUpperCase(),
         vendorData.name,
         vendorData.contactPerson || null,
+        vendorData.department || null,
         vendorData.designation || null,
         vendorData.email || null,
         vendorData.phone || null,
@@ -62,14 +63,15 @@ class VendorModel {
   static async update(id, vendorData, companyId) {
     const result = await pool.query(
       `UPDATE vendors SET
-        name = $1, contact_person = $2, designation = $3, email = $4,
-        phone = $5, whatsapp_number = $6, gst_number = $7, address = $8, city = $9,
-        state = $10, pin = $11, is_active = $12, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $13 AND company_id = $14
+        name = $1, contact_person = $2, department = $3, designation = $4, email = $5,
+        phone = $6, whatsapp_number = $7, gst_number = $8, address = $9, city = $10,
+        state = $11, pin = $12, is_active = $13, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $14 AND company_id = $15
       RETURNING *`,
       [
         vendorData.name,
         vendorData.contactPerson || null,
+        vendorData.department || null,
         vendorData.designation || null,
         vendorData.email || null,
         vendorData.phone || null,
@@ -110,11 +112,12 @@ class VendorModel {
       for (const vendor of vendors) {
         const result = await client.query(
           `INSERT INTO vendors (
-            company_id, name, contact_person, designation, email, phone, whatsapp_number, gst_number,
+            company_id, name, contact_person, department, designation, email, phone, whatsapp_number, gst_number,
             address, city, state, pin
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
           ON CONFLICT (company_id, name) DO UPDATE
           SET contact_person = EXCLUDED.contact_person,
+              department = EXCLUDED.department,
               designation = EXCLUDED.designation,
               email = EXCLUDED.email,
               phone = EXCLUDED.phone,
@@ -130,6 +133,7 @@ class VendorModel {
             companyId.toUpperCase(),
             vendor.name,
             vendor.contactPerson || vendor.contact_person || null,
+            vendor.department || null,
             vendor.designation || null,
             vendor.email || null,
             vendor.phone || null,
