@@ -51,9 +51,19 @@ class SKUModel {
       paramIndex++;
     }
     if (filters.productCategory) {
-      query += ` AND s.product_category_id = $${paramIndex}`;
-      params.push(filters.productCategory);
-      paramIndex++;
+      // Support comma-separated list of category IDs for "All" selection
+      if (typeof filters.productCategory === 'string' && filters.productCategory.includes(',')) {
+        const categoryIds = filters.productCategory.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+        if (categoryIds.length > 0) {
+          query += ` AND s.product_category_id = ANY($${paramIndex}::int[])`;
+          params.push(categoryIds);
+          paramIndex++;
+        }
+      } else {
+        query += ` AND s.product_category_id = $${paramIndex}`;
+        params.push(filters.productCategory);
+        paramIndex++;
+      }
     }
     if (filters.itemCategory) {
       query += ` AND s.item_category_id = $${paramIndex}`;
@@ -116,9 +126,19 @@ class SKUModel {
       paramIndex++;
     }
     if (filters.productCategory) {
-      query += ` AND s.product_category_id = $${paramIndex}`;
-      params.push(filters.productCategory);
-      paramIndex++;
+      // Support comma-separated list of category IDs for "All" selection
+      if (typeof filters.productCategory === 'string' && filters.productCategory.includes(',')) {
+        const categoryIds = filters.productCategory.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+        if (categoryIds.length > 0) {
+          query += ` AND s.product_category_id = ANY($${paramIndex}::int[])`;
+          params.push(categoryIds);
+          paramIndex++;
+        }
+      } else {
+        query += ` AND s.product_category_id = $${paramIndex}`;
+        params.push(filters.productCategory);
+        paramIndex++;
+      }
     }
     if (filters.itemCategory) {
       query += ` AND s.item_category_id = $${paramIndex}`;
