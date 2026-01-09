@@ -264,7 +264,7 @@ const uploadSKUs = async (req, res, next) => {
       const row = data[i];
       try {
         // Required fields validation
-        const itemName = getValue(row, 'item_name', 'itemName', 'Item Name');
+        const itemName = getValue(row, 'item_name', 'itemName', 'Item Name', 'Item Name*');
         if (!itemName || !String(itemName).trim()) {
           errors.push({ row: i + 2, error: 'Item Name is required' });
           continue;
