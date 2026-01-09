@@ -17,6 +17,16 @@ const { NotFoundError, ValidationError } = require('../middlewares/errorHandler'
 const getAllSKUs = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
+    const user = req.user || {};
+    
+    console.log('[CATEGORY ACCESS LOG] ===== INCOMING REQUEST: GET SKUs (Controller) =====');
+    console.log('[CATEGORY ACCESS LOG] User Info:', {
+      userId: user.id || user.userId,
+      email: user.email,
+      role: user.role,
+      companyId: companyId
+    });
+    
     const filters = {
       search: req.query.search ? req.query.search.trim() : undefined,
       productCategory: req.query.productCategory,
@@ -30,11 +40,39 @@ const getAllSKUs = async (req, res, next) => {
       limit: req.query.limit || 20,
     };
 
-    console.log('[DEBUG-BACKEND] getAllSKUs filters:', JSON.stringify(filters));
+    console.log('[CATEGORY ACCESS LOG] Request Filters:', {
+      productCategory: filters.productCategory || 'NONE',
+      productCategories: filters.productCategories || 'NONE',
+      itemCategory: filters.itemCategory || 'NONE',
+      subCategory: filters.subCategory || 'NONE',
+      brand: filters.brand || 'NONE',
+      stockStatus: filters.stockStatus || 'NONE',
+      search: filters.search || 'NONE',
+      pagination: { page: filters.page, limit: filters.limit }
+    });
 
     const skus = await SKUModel.getAll(filters, companyId);
     const total = await SKUModel.getCount(filters, companyId);
     const transformedData = skus.map(transformSKU);
+    
+    console.log('[CATEGORY ACCESS LOG] ===== OUTGOING RESPONSE: SKUs Data (Controller) =====');
+    console.log('[CATEGORY ACCESS LOG] User:', { userId: user.id || user.userId, email: user.email, role: user.role });
+    console.log('[CATEGORY ACCESS LOG] Data Sent:', {
+      totalSKUs: total,
+      returnedSKUs: transformedData.length,
+      categoryBreakdown: transformedData.reduce((acc, sku) => {
+        const cat = sku.productCategory || 'Uncategorized';
+        acc[cat] = (acc[cat] || 0) + 1;
+        return acc;
+      }, {}),
+      itemCategoryBreakdown: transformedData.reduce((acc, sku) => {
+        const cat = sku.itemCategory || 'Uncategorized';
+        acc[cat] = (acc[cat] || 0) + 1;
+        return acc;
+      }, {}),
+      dataSize: JSON.stringify(transformedData).length
+    });
+    console.log('[CATEGORY ACCESS LOG] Access Control: User accessing SKUs - verify category access restrictions are applied in model layer');
 
     res.json({
       success: true,

@@ -289,6 +289,22 @@ const deleteBrand = async (req, res, next) => {
 const getProductCategories = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
+    const user = req.user || {};
+    
+    console.log('[CATEGORY ACCESS LOG] ===== INCOMING REQUEST: GET Product Categories =====');
+    console.log('[CATEGORY ACCESS LOG] User Info:', {
+      userId: user.id || user.userId,
+      email: user.email,
+      role: user.role,
+      companyId: companyId
+    });
+    console.log('[CATEGORY ACCESS LOG] Request Details:', {
+      method: req.method,
+      path: req.path,
+      params: req.params,
+      query: req.query,
+      categoryId: req.params.id || 'ALL'
+    });
 
     // If ID is provided, get single category
     if (req.params.id) {
@@ -296,12 +312,37 @@ const getProductCategories = async (req, res, next) => {
       if (!category) {
         throw new NotFoundError('Product category not found');
       }
-      return res.json({ success: true, data: transformCategory(category) });
+      const transformedData = transformCategory(category);
+      
+      console.log('[CATEGORY ACCESS LOG] ===== OUTGOING RESPONSE: Single Product Category =====');
+      console.log('[CATEGORY ACCESS LOG] User:', { userId: user.id || user.userId, email: user.email, role: user.role });
+      console.log('[CATEGORY ACCESS LOG] Data Sent:', {
+        categoryId: transformedData.id,
+        categoryName: transformedData.name,
+        dataSize: JSON.stringify(transformedData).length,
+        fullData: transformedData
+      });
+      console.log('[CATEGORY ACCESS LOG] Access Control: User has access to this category');
+      
+      return res.json({ success: true, data: transformedData });
     }
 
     // Otherwise get all categories
     const categories = await CategoryModel.getProductCategories(companyId);
     const transformedData = transformArray(categories, transformCategory);
+    
+    console.log('[CATEGORY ACCESS LOG] ===== OUTGOING RESPONSE: All Product Categories =====');
+    console.log('[CATEGORY ACCESS LOG] User:', { userId: user.id || user.userId, email: user.email, role: user.role });
+    console.log('[CATEGORY ACCESS LOG] Data Sent:', {
+      totalCategories: transformedData.length,
+      categoryIds: transformedData.map(c => c.id),
+      categoryNames: transformedData.map(c => c.name),
+      dataSize: JSON.stringify(transformedData).length,
+      fullData: transformedData
+    });
+    console.log('[CATEGORY ACCESS LOG] Access Control: User has access to ALL categories (no filtering applied)');
+    console.log('[CATEGORY ACCESS LOG] WARNING: All categories returned - verify user should have access to all');
+    
     res.json({ success: true, data: transformedData });
   } catch (error) {
     next(error);
@@ -312,11 +353,38 @@ const createProductCategory = async (req, res, next) => {
   const pool = require('../models/database');
   const client = await pool.connect();
   try {
-    await client.query('BEGIN');
     const companyId = getCompanyId(req);
+    const user = req.user || {};
+    
+    console.log('[CATEGORY ACCESS LOG] ===== INCOMING REQUEST: CREATE Product Category =====');
+    console.log('[CATEGORY ACCESS LOG] User Info:', {
+      userId: user.id || user.userId,
+      email: user.email,
+      role: user.role,
+      companyId: companyId
+    });
+    console.log('[CATEGORY ACCESS LOG] Request Details:', {
+      method: req.method,
+      path: req.path,
+      body: req.body,
+      categoryName: req.body.name
+    });
+    
+    await client.query('BEGIN');
     const category = await CategoryModel.createProductCategory(req.body, companyId);
     await client.query('COMMIT');
-    res.json({ success: true, data: transformCategory(category) });
+    const transformedData = transformCategory(category);
+    
+    console.log('[CATEGORY ACCESS LOG] ===== OUTGOING RESPONSE: Product Category Created =====');
+    console.log('[CATEGORY ACCESS LOG] User:', { userId: user.id || user.userId, email: user.email, role: user.role });
+    console.log('[CATEGORY ACCESS LOG] Data Sent:', {
+      categoryId: transformedData.id,
+      categoryName: transformedData.name,
+      fullData: transformedData
+    });
+    console.log('[CATEGORY ACCESS LOG] Access Control: User created category - verify role has CREATE permission');
+    
+    res.json({ success: true, data: transformedData });
   } catch (error) {
     await client.query('ROLLBACK');
     next(error);
@@ -329,8 +397,25 @@ const updateProductCategory = async (req, res, next) => {
   const pool = require('../models/database');
   const client = await pool.connect();
   try {
-    await client.query('BEGIN');
     const companyId = getCompanyId(req);
+    const user = req.user || {};
+    
+    console.log('[CATEGORY ACCESS LOG] ===== INCOMING REQUEST: UPDATE Product Category =====');
+    console.log('[CATEGORY ACCESS LOG] User Info:', {
+      userId: user.id || user.userId,
+      email: user.email,
+      role: user.role,
+      companyId: companyId
+    });
+    console.log('[CATEGORY ACCESS LOG] Request Details:', {
+      method: req.method,
+      path: req.path,
+      categoryId: req.params.id,
+      body: req.body,
+      updates: Object.keys(req.body)
+    });
+    
+    await client.query('BEGIN');
     const category = await CategoryModel.updateProductCategory(req.params.id, req.body, companyId);
     
     if (!category) {
@@ -339,7 +424,18 @@ const updateProductCategory = async (req, res, next) => {
     }
 
     await client.query('COMMIT');
-    res.json({ success: true, data: transformCategory(category) });
+    const transformedData = transformCategory(category);
+    
+    console.log('[CATEGORY ACCESS LOG] ===== OUTGOING RESPONSE: Product Category Updated =====');
+    console.log('[CATEGORY ACCESS LOG] User:', { userId: user.id || user.userId, email: user.email, role: user.role });
+    console.log('[CATEGORY ACCESS LOG] Data Sent:', {
+      categoryId: transformedData.id,
+      categoryName: transformedData.name,
+      fullData: transformedData
+    });
+    console.log('[CATEGORY ACCESS LOG] Access Control: User updated category - verify role has UPDATE permission');
+    
+    res.json({ success: true, data: transformedData });
   } catch (error) {
     await client.query('ROLLBACK');
     next(error);
@@ -351,7 +447,23 @@ const updateProductCategory = async (req, res, next) => {
 const deleteProductCategory = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
+    const user = req.user || {};
     const hardDelete = req.query.force === 'true' || req.query.force === true;
+    
+    console.log('[CATEGORY ACCESS LOG] ===== INCOMING REQUEST: DELETE Product Category =====');
+    console.log('[CATEGORY ACCESS LOG] User Info:', {
+      userId: user.id || user.userId,
+      email: user.email,
+      role: user.role,
+      companyId: companyId
+    });
+    console.log('[CATEGORY ACCESS LOG] Request Details:', {
+      method: req.method,
+      path: req.path,
+      categoryId: req.params.id,
+      hardDelete: hardDelete
+    });
+    
     const result = await CategoryModel.deleteProductCategory(req.params.id, companyId, hardDelete);
     
     if (!result) {
@@ -361,6 +473,16 @@ const deleteProductCategory = async (req, res, next) => {
     const message = hardDelete 
       ? 'Product category permanently deleted from database' 
       : 'Product category deleted successfully';
+    
+    console.log('[CATEGORY ACCESS LOG] ===== OUTGOING RESPONSE: Product Category Deleted =====');
+    console.log('[CATEGORY ACCESS LOG] User:', { userId: user.id || user.userId, email: user.email, role: user.role });
+    console.log('[CATEGORY ACCESS LOG] Data Sent:', {
+      categoryId: req.params.id,
+      message: message,
+      hardDelete: hardDelete
+    });
+    console.log('[CATEGORY ACCESS LOG] Access Control: User deleted category - verify role has DELETE permission');
+    
     res.json({ success: true, message });
   } catch (error) {
     next(error);
@@ -372,6 +494,23 @@ const deleteProductCategory = async (req, res, next) => {
 const getItemCategories = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
+    const user = req.user || {};
+    
+    console.log('[CATEGORY ACCESS LOG] ===== INCOMING REQUEST: GET Item Categories =====');
+    console.log('[CATEGORY ACCESS LOG] User Info:', {
+      userId: user.id || user.userId,
+      email: user.email,
+      role: user.role,
+      companyId: companyId
+    });
+    console.log('[CATEGORY ACCESS LOG] Request Details:', {
+      method: req.method,
+      path: req.path,
+      params: req.params,
+      query: req.query,
+      categoryId: req.params.id || 'ALL',
+      productCategoryId: req.query.productCategoryId || 'NONE'
+    });
 
     // If ID is provided, get single category
     if (req.params.id) {
@@ -379,13 +518,40 @@ const getItemCategories = async (req, res, next) => {
       if (!category) {
         throw new NotFoundError('Item category not found');
       }
-      return res.json({ success: true, data: transformCategory(category) });
+      const transformedData = transformCategory(category);
+      
+      console.log('[CATEGORY ACCESS LOG] ===== OUTGOING RESPONSE: Single Item Category =====');
+      console.log('[CATEGORY ACCESS LOG] User:', { userId: user.id || user.userId, email: user.email, role: user.role });
+      console.log('[CATEGORY ACCESS LOG] Data Sent:', {
+        categoryId: transformedData.id,
+        categoryName: transformedData.name,
+        productCategoryId: transformedData.productCategoryId,
+        dataSize: JSON.stringify(transformedData).length,
+        fullData: transformedData
+      });
+      console.log('[CATEGORY ACCESS LOG] Access Control: User has access to this item category');
+      
+      return res.json({ success: true, data: transformedData });
     }
 
     // Otherwise get all categories (with optional productCategoryId filter)
     const productCategoryId = req.query.productCategoryId || null;
     const categories = await CategoryModel.getItemCategories(companyId, productCategoryId);
     const transformedData = transformArray(categories, transformCategory);
+    
+    console.log('[CATEGORY ACCESS LOG] ===== OUTGOING RESPONSE: Item Categories =====');
+    console.log('[CATEGORY ACCESS LOG] User:', { userId: user.id || user.userId, email: user.email, role: user.role });
+    console.log('[CATEGORY ACCESS LOG] Data Sent:', {
+      totalCategories: transformedData.length,
+      filteredByProductCategory: productCategoryId || 'ALL',
+      categoryIds: transformedData.map(c => c.id),
+      categoryNames: transformedData.map(c => c.name),
+      dataSize: JSON.stringify(transformedData).length,
+      fullData: transformedData
+    });
+    console.log('[CATEGORY ACCESS LOG] Access Control: User has access to ALL item categories (no user-level filtering applied)');
+    console.log('[CATEGORY ACCESS LOG] WARNING: All item categories returned - verify user should have access to all');
+    
     res.json({ success: true, data: transformedData });
   } catch (error) {
     next(error);
@@ -396,11 +562,40 @@ const createItemCategory = async (req, res, next) => {
   const pool = require('../models/database');
   const client = await pool.connect();
   try {
-    await client.query('BEGIN');
     const companyId = getCompanyId(req);
+    const user = req.user || {};
+    
+    console.log('[CATEGORY ACCESS LOG] ===== INCOMING REQUEST: CREATE Item Category =====');
+    console.log('[CATEGORY ACCESS LOG] User Info:', {
+      userId: user.id || user.userId,
+      email: user.email,
+      role: user.role,
+      companyId: companyId
+    });
+    console.log('[CATEGORY ACCESS LOG] Request Details:', {
+      method: req.method,
+      path: req.path,
+      body: req.body,
+      categoryName: req.body.name,
+      productCategoryId: req.body.productCategoryId
+    });
+    
+    await client.query('BEGIN');
     const category = await CategoryModel.createItemCategory(req.body, companyId);
     await client.query('COMMIT');
-    res.json({ success: true, data: transformCategory(category) });
+    const transformedData = transformCategory(category);
+    
+    console.log('[CATEGORY ACCESS LOG] ===== OUTGOING RESPONSE: Item Category Created =====');
+    console.log('[CATEGORY ACCESS LOG] User:', { userId: user.id || user.userId, email: user.email, role: user.role });
+    console.log('[CATEGORY ACCESS LOG] Data Sent:', {
+      categoryId: transformedData.id,
+      categoryName: transformedData.name,
+      productCategoryId: transformedData.productCategoryId,
+      fullData: transformedData
+    });
+    console.log('[CATEGORY ACCESS LOG] Access Control: User created item category - verify role has CREATE permission');
+    
+    res.json({ success: true, data: transformedData });
   } catch (error) {
     await client.query('ROLLBACK');
     next(error);
@@ -413,8 +608,25 @@ const updateItemCategory = async (req, res, next) => {
   const pool = require('../models/database');
   const client = await pool.connect();
   try {
-    await client.query('BEGIN');
     const companyId = getCompanyId(req);
+    const user = req.user || {};
+    
+    console.log('[CATEGORY ACCESS LOG] ===== INCOMING REQUEST: UPDATE Item Category =====');
+    console.log('[CATEGORY ACCESS LOG] User Info:', {
+      userId: user.id || user.userId,
+      email: user.email,
+      role: user.role,
+      companyId: companyId
+    });
+    console.log('[CATEGORY ACCESS LOG] Request Details:', {
+      method: req.method,
+      path: req.path,
+      categoryId: req.params.id,
+      body: req.body,
+      updates: Object.keys(req.body)
+    });
+    
+    await client.query('BEGIN');
     const category = await CategoryModel.updateItemCategory(req.params.id, req.body, companyId);
     
     if (!category) {
@@ -423,7 +635,18 @@ const updateItemCategory = async (req, res, next) => {
     }
 
     await client.query('COMMIT');
-    res.json({ success: true, data: transformCategory(category) });
+    const transformedData = transformCategory(category);
+    
+    console.log('[CATEGORY ACCESS LOG] ===== OUTGOING RESPONSE: Item Category Updated =====');
+    console.log('[CATEGORY ACCESS LOG] User:', { userId: user.id || user.userId, email: user.email, role: user.role });
+    console.log('[CATEGORY ACCESS LOG] Data Sent:', {
+      categoryId: transformedData.id,
+      categoryName: transformedData.name,
+      fullData: transformedData
+    });
+    console.log('[CATEGORY ACCESS LOG] Access Control: User updated item category - verify role has UPDATE permission');
+    
+    res.json({ success: true, data: transformedData });
   } catch (error) {
     await client.query('ROLLBACK');
     next(error);
@@ -435,7 +658,23 @@ const updateItemCategory = async (req, res, next) => {
 const deleteItemCategory = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
+    const user = req.user || {};
     const hardDelete = req.query.force === 'true' || req.query.force === true;
+    
+    console.log('[CATEGORY ACCESS LOG] ===== INCOMING REQUEST: DELETE Item Category =====');
+    console.log('[CATEGORY ACCESS LOG] User Info:', {
+      userId: user.id || user.userId,
+      email: user.email,
+      role: user.role,
+      companyId: companyId
+    });
+    console.log('[CATEGORY ACCESS LOG] Request Details:', {
+      method: req.method,
+      path: req.path,
+      categoryId: req.params.id,
+      hardDelete: hardDelete
+    });
+    
     const result = await CategoryModel.deleteItemCategory(req.params.id, companyId, hardDelete);
     
     if (!result) {
@@ -445,6 +684,16 @@ const deleteItemCategory = async (req, res, next) => {
     const message = hardDelete 
       ? 'Item category permanently deleted from database' 
       : 'Item category deleted successfully';
+    
+    console.log('[CATEGORY ACCESS LOG] ===== OUTGOING RESPONSE: Item Category Deleted =====');
+    console.log('[CATEGORY ACCESS LOG] User:', { userId: user.id || user.userId, email: user.email, role: user.role });
+    console.log('[CATEGORY ACCESS LOG] Data Sent:', {
+      categoryId: req.params.id,
+      message: message,
+      hardDelete: hardDelete
+    });
+    console.log('[CATEGORY ACCESS LOG] Access Control: User deleted item category - verify role has DELETE permission');
+    
     res.json({ success: true, message });
   } catch (error) {
     next(error);
@@ -456,6 +705,23 @@ const deleteItemCategory = async (req, res, next) => {
 const getSubCategories = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
+    const user = req.user || {};
+    
+    console.log('[CATEGORY ACCESS LOG] ===== INCOMING REQUEST: GET Sub Categories =====');
+    console.log('[CATEGORY ACCESS LOG] User Info:', {
+      userId: user.id || user.userId,
+      email: user.email,
+      role: user.role,
+      companyId: companyId
+    });
+    console.log('[CATEGORY ACCESS LOG] Request Details:', {
+      method: req.method,
+      path: req.path,
+      params: req.params,
+      query: req.query,
+      categoryId: req.params.id || 'ALL',
+      itemCategoryId: req.query.itemCategoryId || 'NONE'
+    });
 
     // If ID is provided, get single category
     if (req.params.id) {
@@ -463,13 +729,40 @@ const getSubCategories = async (req, res, next) => {
       if (!category) {
         throw new NotFoundError('Sub category not found');
       }
-      return res.json({ success: true, data: transformCategory(category) });
+      const transformedData = transformCategory(category);
+      
+      console.log('[CATEGORY ACCESS LOG] ===== OUTGOING RESPONSE: Single Sub Category =====');
+      console.log('[CATEGORY ACCESS LOG] User:', { userId: user.id || user.userId, email: user.email, role: user.role });
+      console.log('[CATEGORY ACCESS LOG] Data Sent:', {
+        categoryId: transformedData.id,
+        categoryName: transformedData.name,
+        itemCategoryId: transformedData.itemCategoryId,
+        dataSize: JSON.stringify(transformedData).length,
+        fullData: transformedData
+      });
+      console.log('[CATEGORY ACCESS LOG] Access Control: User has access to this sub category');
+      
+      return res.json({ success: true, data: transformedData });
     }
 
     // Otherwise get all categories (with optional itemCategoryId filter)
     const itemCategoryId = req.query.itemCategoryId || null;
     const categories = await CategoryModel.getSubCategories(companyId, itemCategoryId);
     const transformedData = transformArray(categories, transformCategory);
+    
+    console.log('[CATEGORY ACCESS LOG] ===== OUTGOING RESPONSE: Sub Categories =====');
+    console.log('[CATEGORY ACCESS LOG] User:', { userId: user.id || user.userId, email: user.email, role: user.role });
+    console.log('[CATEGORY ACCESS LOG] Data Sent:', {
+      totalCategories: transformedData.length,
+      filteredByItemCategory: itemCategoryId || 'ALL',
+      categoryIds: transformedData.map(c => c.id),
+      categoryNames: transformedData.map(c => c.name),
+      dataSize: JSON.stringify(transformedData).length,
+      fullData: transformedData
+    });
+    console.log('[CATEGORY ACCESS LOG] Access Control: User has access to ALL sub categories (no user-level filtering applied)');
+    console.log('[CATEGORY ACCESS LOG] WARNING: All sub categories returned - verify user should have access to all');
+    
     res.json({ success: true, data: transformedData });
   } catch (error) {
     next(error);
@@ -480,11 +773,40 @@ const createSubCategory = async (req, res, next) => {
   const pool = require('../models/database');
   const client = await pool.connect();
   try {
-    await client.query('BEGIN');
     const companyId = getCompanyId(req);
+    const user = req.user || {};
+    
+    console.log('[CATEGORY ACCESS LOG] ===== INCOMING REQUEST: CREATE Sub Category =====');
+    console.log('[CATEGORY ACCESS LOG] User Info:', {
+      userId: user.id || user.userId,
+      email: user.email,
+      role: user.role,
+      companyId: companyId
+    });
+    console.log('[CATEGORY ACCESS LOG] Request Details:', {
+      method: req.method,
+      path: req.path,
+      body: req.body,
+      categoryName: req.body.name,
+      itemCategoryId: req.body.itemCategoryId
+    });
+    
+    await client.query('BEGIN');
     const category = await CategoryModel.createSubCategory(req.body, companyId);
     await client.query('COMMIT');
-    res.json({ success: true, data: transformCategory(category) });
+    const transformedData = transformCategory(category);
+    
+    console.log('[CATEGORY ACCESS LOG] ===== OUTGOING RESPONSE: Sub Category Created =====');
+    console.log('[CATEGORY ACCESS LOG] User:', { userId: user.id || user.userId, email: user.email, role: user.role });
+    console.log('[CATEGORY ACCESS LOG] Data Sent:', {
+      categoryId: transformedData.id,
+      categoryName: transformedData.name,
+      itemCategoryId: transformedData.itemCategoryId,
+      fullData: transformedData
+    });
+    console.log('[CATEGORY ACCESS LOG] Access Control: User created sub category - verify role has CREATE permission');
+    
+    res.json({ success: true, data: transformedData });
   } catch (error) {
     await client.query('ROLLBACK');
     next(error);
@@ -497,8 +819,25 @@ const updateSubCategory = async (req, res, next) => {
   const pool = require('../models/database');
   const client = await pool.connect();
   try {
-    await client.query('BEGIN');
     const companyId = getCompanyId(req);
+    const user = req.user || {};
+    
+    console.log('[CATEGORY ACCESS LOG] ===== INCOMING REQUEST: UPDATE Sub Category =====');
+    console.log('[CATEGORY ACCESS LOG] User Info:', {
+      userId: user.id || user.userId,
+      email: user.email,
+      role: user.role,
+      companyId: companyId
+    });
+    console.log('[CATEGORY ACCESS LOG] Request Details:', {
+      method: req.method,
+      path: req.path,
+      categoryId: req.params.id,
+      body: req.body,
+      updates: Object.keys(req.body)
+    });
+    
+    await client.query('BEGIN');
     const category = await CategoryModel.updateSubCategory(req.params.id, req.body, companyId);
     
     if (!category) {
@@ -507,7 +846,18 @@ const updateSubCategory = async (req, res, next) => {
     }
 
     await client.query('COMMIT');
-    res.json({ success: true, data: transformCategory(category) });
+    const transformedData = transformCategory(category);
+    
+    console.log('[CATEGORY ACCESS LOG] ===== OUTGOING RESPONSE: Sub Category Updated =====');
+    console.log('[CATEGORY ACCESS LOG] User:', { userId: user.id || user.userId, email: user.email, role: user.role });
+    console.log('[CATEGORY ACCESS LOG] Data Sent:', {
+      categoryId: transformedData.id,
+      categoryName: transformedData.name,
+      fullData: transformedData
+    });
+    console.log('[CATEGORY ACCESS LOG] Access Control: User updated sub category - verify role has UPDATE permission');
+    
+    res.json({ success: true, data: transformedData });
   } catch (error) {
     await client.query('ROLLBACK');
     next(error);
@@ -519,7 +869,23 @@ const updateSubCategory = async (req, res, next) => {
 const deleteSubCategory = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
+    const user = req.user || {};
     const hardDelete = req.query.force === 'true' || req.query.force === true;
+    
+    console.log('[CATEGORY ACCESS LOG] ===== INCOMING REQUEST: DELETE Sub Category =====');
+    console.log('[CATEGORY ACCESS LOG] User Info:', {
+      userId: user.id || user.userId,
+      email: user.email,
+      role: user.role,
+      companyId: companyId
+    });
+    console.log('[CATEGORY ACCESS LOG] Request Details:', {
+      method: req.method,
+      path: req.path,
+      categoryId: req.params.id,
+      hardDelete: hardDelete
+    });
+    
     const result = await CategoryModel.deleteSubCategory(req.params.id, companyId, hardDelete);
     
     if (!result) {
@@ -529,6 +895,16 @@ const deleteSubCategory = async (req, res, next) => {
     const message = hardDelete 
       ? 'Sub category permanently deleted from database' 
       : 'Sub category deleted successfully';
+    
+    console.log('[CATEGORY ACCESS LOG] ===== OUTGOING RESPONSE: Sub Category Deleted =====');
+    console.log('[CATEGORY ACCESS LOG] User:', { userId: user.id || user.userId, email: user.email, role: user.role });
+    console.log('[CATEGORY ACCESS LOG] Data Sent:', {
+      categoryId: req.params.id,
+      message: message,
+      hardDelete: hardDelete
+    });
+    console.log('[CATEGORY ACCESS LOG] Access Control: User deleted sub category - verify role has DELETE permission');
+    
     res.json({ success: true, message });
   } catch (error) {
     next(error);
