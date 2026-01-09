@@ -1197,7 +1197,9 @@ const uploadCategories = async (req, res, next) => {
         header: [
           'Product Category',
           'Item Category',
-          'Sub Category'
+          'Sub Category',
+          'HSN Code',
+          'GST Rate (%)'
         ],
         range: dataStartRow, // Start from row after headers (0-based index)
         defval: null,
@@ -1215,13 +1217,27 @@ const uploadCategories = async (req, res, next) => {
       // Use Maps to preserve original case while using lowercase for deduplication
       const productCategoryMap = new Map(); // lowercase -> original case
       const itemCategoryMap = new Map(); // productCategory (lowercase) -> Map(itemCategory lowercase -> original case)
-      const subCategoryMap = new Map(); // itemCategoryKey -> Map(subCategory lowercase -> original case)
+      const subCategoryMap = new Map(); // itemCategoryKey -> Map(subCategory lowercase -> {name, hsnCode, gstRate})
       
       for (let i = 0; i < dataRows.length; i++) {
         const row = dataRows[i];
         const productCat = (row['Product Category'] || '').toString().trim();
         const itemCat = (row['Item Category'] || '').toString().trim();
         const subCat = (row['Sub Category'] || '').toString().trim();
+        const hsnCode = (row['HSN Code'] || '').toString().trim() || null;
+        const gstRateStr = (row['GST Rate (%)'] || '').toString().trim();
+        let gstRate = null;
+        
+        // Parse GST Rate - can be number or string like "18", "18%", "5", etc.
+        if (gstRateStr) {
+          const parsed = parseFloat(gstRateStr.replace('%', '').trim());
+          if (!isNaN(parsed)) {
+            // Validate GST Rate (should be 0, 5, or 18)
+            if (parsed === 0 || parsed === 5 || parsed === 18) {
+              gstRate = parsed;
+            }
+          }
+        }
         
         if (productCat) {
           const key = productCat.toLowerCase();
@@ -1249,9 +1265,13 @@ const uploadCategories = async (req, res, next) => {
             subCategoryMap.set(key, new Map());
           }
           const subKey = subCat.toLowerCase().trim();
-          // Preserve original case - use first occurrence
+          // Preserve original case - use first occurrence, but also store HSN and GST
           if (!subCategoryMap.get(key).has(subKey)) {
-            subCategoryMap.get(key).set(subKey, subCat.trim());
+            subCategoryMap.get(key).set(subKey, {
+              name: subCat.trim(),
+              hsnCode: hsnCode,
+              gstRate: gstRate
+            });
           }
         }
       }
@@ -1355,16 +1375,23 @@ const uploadCategories = async (req, res, next) => {
           continue;
         }
         
-        for (const [subCatLowercase, subCatOriginal] of subCatsMap) {
+        for (const [subCatLowercase, subCatData] of subCatsMap) {
           try {
             const subKey = `${itemCategoryId}-${subCatLowercase}`;
             if (processedSubKeys.has(subKey)) continue;
             processedSubKeys.add(subKey);
             
-            // Store with original case (trimmed)
+            // subCatData can be either a string (old format) or an object (new format with HSN/GST)
+            const subCatName = typeof subCatData === 'string' ? subCatData.trim() : subCatData.name.trim();
+            const hsnCode = typeof subCatData === 'object' ? subCatData.hsnCode : null;
+            const gstRate = typeof subCatData === 'object' ? subCatData.gstRate : null;
+            
+            // Store with original case (trimmed) and HSN/GST data
             await CategoryModel.createSubCategory({
-              name: subCatOriginal.trim(),
+              name: subCatName,
               itemCategoryId: itemCategoryId,
+              hsnCode: hsnCode,
+              gstRate: gstRate,
             }, companyId);
             subCategoriesResult.inserted++;
           } catch (error) {
