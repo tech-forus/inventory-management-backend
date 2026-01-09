@@ -222,6 +222,7 @@ const uploadVendors = async (req, res, next) => {
           city: row.city,
           state: row.state,
           pin: row.pin,
+          isActive: true, // Always true for Excel uploads
         }, companyId);
         inserted.push({ id: vendor.id, name: vendor.name });
       } catch (error) {
@@ -347,22 +348,11 @@ const uploadBrands = async (req, res, next) => {
         // Handle description with different column name formats
         const description = row.description || row.Description || '';
         
-        // Handle isActive with different column name formats
-        const isActiveValue = row.is_active !== undefined ? row.is_active :
-                             row.isActive !== undefined ? row.isActive :
-                             row['Is Active'] !== undefined ? row['Is Active'] :
-                             row['is active'] !== undefined ? row['is active'] :
-                             true; // Default to true if not specified
-        
-        // Convert string "true"/"false" to boolean
-        const isActive = typeof isActiveValue === 'string' 
-          ? (isActiveValue.toLowerCase().trim() === 'true' || isActiveValue.toLowerCase().trim() === '1')
-          : (isActiveValue !== false && isActiveValue !== 0);
-
+        // Always set isActive to true for Excel uploads
         const brand = await BrandModel.create({
           name: name.toString().trim(),
           description: description ? description.toString().trim() : null,
-          isActive: isActive,
+          isActive: true,
         }, companyId);
         inserted.push({ id: brand.id, name: brand.name });
       } catch (error) {
@@ -896,7 +886,7 @@ const uploadCustomers = async (req, res, next) => {
           city: row.city,
           state: row.state,
           pin: row.pin,
-          isActive: row.is_active !== undefined ? (row.is_active === 'true' || row.is_active === true) : true,
+          isActive: true, // Always true for Excel uploads
         }, companyId);
         inserted.push({ id: customer.id, name: customer.name });
       } catch (error) {
@@ -1031,7 +1021,7 @@ const uploadTransportors = async (req, res, next) => {
           capacity: row.capacity,
           pricingType: row.pricing_type || row.pricingType,
           rate: parseFloat(row.rate || 0),
-          isActive: row.status === 'Active' || row.is_active === 'true' || row.is_active === true || row.status !== 'Inactive',
+          isActive: true, // Always true for Excel uploads
           remarks: row.remarks || null,
         }, companyId);
         inserted.push({ id: transportor.id, name: transportor.transporter_name });
@@ -1101,7 +1091,7 @@ const uploadTeams = async (req, res, next) => {
           emailId: row.email_id || row.emailId,
           department: row.department?.toString().trim(),
           designation: row.designation?.toString().trim(),
-          isActive: row.is_active !== undefined ? (row.is_active === 'true' || row.is_active === true) : true,
+          isActive: true, // Always true for Excel uploads
         }, companyId);
         inserted.push({ id: team.id, name: team.name });
       } catch (error) {
@@ -1855,7 +1845,7 @@ const uploadMaterials = async (req, res, next) => {
 
         const material = await MaterialModel.create({
           name: row.name.toString().trim(),
-          isActive: row.is_active !== false && row.status !== 'inactive',
+          isActive: true, // Always true for Excel uploads
         }, companyId);
         inserted.push({ id: material.id, name: material.name });
       } catch (error) {
