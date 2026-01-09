@@ -270,11 +270,11 @@ const uploadSKUs = async (req, res, next) => {
           continue;
         }
 
-        const productCategoryName = getValue(row, 'product_category', 'productCategory', 'Product Category', 'product_category_name');
-        const itemCategoryName = getValue(row, 'item_category', 'itemCategory', 'Item Category', 'item_category_name');
+        const productCategoryName = getValue(row, 'product_category', 'productCategory', 'Product Category', 'Product Category*', 'product_category_name');
+        const itemCategoryName = getValue(row, 'item_category', 'itemCategory', 'Item Category', 'Item Category*', 'item_category_name');
         const vendorName = getValue(row, 'vendor', 'vendorName', 'Vendor', 'vendor_name');
-        const brandName = getValue(row, 'brand', 'brandName', 'Brand', 'brand_name');
-        const unit = getValue(row, 'unit', 'Unit');
+        const brandName = getValue(row, 'brand', 'brandName', 'Brand', 'Brand*', 'brand_name');
+        const unit = getValue(row, 'unit', 'Unit', 'Unit*');
 
         if (!productCategoryName) {
           errors.push({ row: i + 2, error: 'Product Category is required' });
@@ -282,10 +282,6 @@ const uploadSKUs = async (req, res, next) => {
         }
         if (!itemCategoryName) {
           errors.push({ row: i + 2, error: 'Item Category is required' });
-          continue;
-        }
-        if (!vendorName) {
-          errors.push({ row: i + 2, error: 'Vendor is required' });
           continue;
         }
         if (!brandName) {
@@ -297,15 +293,57 @@ const uploadSKUs = async (req, res, next) => {
           continue;
         }
 
+        // Validate HSN Code (required field from template)
+        const hsnCode = getValue(row, 'hsn_sac_code', 'hsnSacCode', 'HSN Code', 'HSN Code*', 'HSN/SAC Code', 'HSN', 'hsn');
+        if (!hsnCode || !String(hsnCode).trim()) {
+          errors.push({ row: i + 2, error: 'HSN Code is required' });
+          continue;
+        }
+
+        // Validate GST Percentage (required field from template)
+        const gstPercentage = getValue(row, 'gst_percentage', 'gstPercentage', 'GST Percentage', 'GST Percentage*', 'GST Rate', 'gst_rate', 'GST Rate (%)');
+        if (!gstPercentage || String(gstPercentage).trim() === '') {
+          errors.push({ row: i + 2, error: 'GST Percentage is required' });
+          continue;
+        }
+
+        // Validate Sub Category (required field from template)
+        const subCategoryName = getValue(row, 'sub_category', 'subCategory', 'Sub Category', 'Sub Category*', 'sub_category_name');
+        if (!subCategoryName || !String(subCategoryName).trim()) {
+          errors.push({ row: i + 2, error: 'Sub Category is required' });
+          continue;
+        }
+
+        // Validate Material (required field from template)
+        const material = getValue(row, 'material', 'Material', 'Material*');
+        if (!material || !String(material).trim()) {
+          errors.push({ row: i + 2, error: 'Material is required' });
+          continue;
+        }
+
+        // Validate Manufacture or Import (required field from template)
+        const manufactureOrImport = getValue(row, 'manufacture_or_import', 'manufactureOrImport', 'Manufacture or Import', 'Manufacture or Import*');
+        if (!manufactureOrImport || !String(manufactureOrImport).trim()) {
+          errors.push({ row: i + 2, error: 'Manufacture or Import is required' });
+          continue;
+        }
+
+        // Validate Default Storage Location (required field from template)
+        const defaultStorageLocation = getValue(row, 'default_storage_location', 'defaultStorageLocation', 'Storage Location', 'Default Storage Location', 'Default Storage Location *');
+        if (!defaultStorageLocation || !String(defaultStorageLocation).trim()) {
+          errors.push({ row: i + 2, error: 'Default Storage Location is required' });
+          continue;
+        }
+
         // Validate Current Stock (required field from template)
-        const currentStockValue = getValue(row, 'current_stock', 'currentStock', 'Current Stock');
+        const currentStockValue = getValue(row, 'current_stock', 'currentStock', 'Current Stock', 'Current/Opening Stocks', 'Current/Opening Stocks *', 'Current/Opening Stocks*');
         if (currentStockValue === null || currentStockValue === undefined || currentStockValue === '') {
-          errors.push({ row: i + 2, error: 'Current Stock is required' });
+          errors.push({ row: i + 2, error: 'Current/Opening Stocks is required' });
           continue;
         }
         const parsedStock = parseInt(String(currentStockValue).trim());
         if (isNaN(parsedStock) || parsedStock < 0) {
-          errors.push({ row: i + 2, error: 'Current Stock must be a valid non-negative number' });
+          errors.push({ row: i + 2, error: 'Current/Opening Stocks must be a valid non-negative number' });
           continue;
         }
         const currentStock = parsedStock;
@@ -313,14 +351,34 @@ const uploadSKUs = async (req, res, next) => {
         // Lookup IDs
         const productCategoryId = lookupId(productCategoryName, productCategoryMap, 'Product Category');
         const itemCategoryId = lookupId(itemCategoryName, itemCategoryMap, 'Item Category');
-        const vendorId = lookupId(vendorName, vendorMap, 'Vendor');
+        const vendorId = vendorName ? lookupId(vendorName, vendorMap, 'Vendor') : null;
         const brandId = lookupId(brandName, brandMap, 'Brand');
-
-        const subCategoryName = getValue(row, 'sub_category', 'subCategory', 'Sub Category', 'sub_category_name');
-        const subCategoryId = subCategoryName ? lookupId(subCategoryName, subCategoryMap, 'Sub Category') : null;
+        const subCategoryId = lookupId(subCategoryName, subCategoryMap, 'Sub Category');
 
         // Get the generated SKU ID for this row
         const skuId = skuIds[i];
+
+        // Parse custom fields from Field Name and Field Value columns
+        let customFields = null;
+        const fieldName = getValue(row, 'field_name', 'Field Name');
+        const fieldValue = getValue(row, 'field_value', 'Field Value');
+        if (fieldName && fieldValue) {
+          try {
+            customFields = JSON.stringify([{ key: String(fieldName).trim(), value: String(fieldValue).trim() }]);
+          } catch (e) {
+            console.error('Error creating custom fields:', e);
+          }
+        }
+
+        // Parse GST Percentage (already validated above)
+        let gstRate = null;
+        const parsedGst = parseFloat(String(gstPercentage).replace('%', '').trim());
+        if (!isNaN(parsedGst)) {
+          gstRate = parsedGst;
+        } else {
+          errors.push({ row: i + 2, error: 'GST Percentage must be a valid number' });
+          continue;
+        }
 
         // Prepare SKU data
         const skuData = {
@@ -330,31 +388,25 @@ const uploadSKUs = async (req, res, next) => {
           itemName: String(itemName).trim(),
           itemDetails: getValue(row, 'item_details', 'itemDetails', 'Item Details', 'Item Details as per Vendor', 'description', 'Description') || null,
           vendorId,
-          vendorItemCode: getValue(row, 'vendor_item_code', 'vendorItemCode', 'Vendor Item Code') ? String(getValue(row, 'vendor_item_code', 'vendorItemCode', 'Vendor Item Code')).trim() : null,
+          vendorItemCode: getValue(row, 'vendor_item_code', 'vendorItemCode', 'Vendor Item Code', 'Item Code as per Vendor') ? String(getValue(row, 'vendor_item_code', 'vendorItemCode', 'Vendor Item Code', 'Item Code as per Vendor')).trim() : null,
           brandId,
-          hsnSacCode: getValue(row, 'hsn_sac_code', 'hsnSacCode', 'HSN Code', 'HSN/SAC Code', 'HSN', 'hsn') ? String(getValue(row, 'hsn_sac_code', 'hsnSacCode', 'HSN Code', 'HSN/SAC Code', 'HSN', 'hsn')).trim() : null,
-          ratingSize: getValue(row, 'rating_size', 'ratingSize', 'Rating Size', 'Rating/Size', 'rating') || null,
-          model: getValue(row, 'model', 'Model') || null,
+          hsnSacCode: String(hsnCode).trim(),
+          gstRate: gstRate,
+          ratingSize: getValue(row, 'rating_size', 'ratingSize', 'Rating Size', 'Rating', 'Rating/Size', 'rating') || null,
+          model: getValue(row, 'model', 'Model', 'Model No.', 'Model No.*', 'Model No') || null,
           series: getValue(row, 'series', 'Series') || null,
           unit: String(unit).trim(),
-          material: getValue(row, 'material', 'Material') || null,
-          insulation: getValue(row, 'insulation', 'Insulation') || null,
-          inputSupply: getValue(row, 'input_supply', 'inputSupply', 'Input Supply') || null,
+          material: String(material).trim(),
+          manufactureOrImport: String(manufactureOrImport).trim(),
           color: getValue(row, 'color', 'Color') || null,
-          cri: getValue(row, 'cri', 'CRI') ? parseFloat(getValue(row, 'cri', 'CRI')) : null,
-          cct: getValue(row, 'cct', 'CCT') ? parseFloat(getValue(row, 'cct', 'CCT')) : null,
-          beamAngle: getValue(row, 'beam_angle', 'beamAngle', 'Beam Angle') || null,
-          ledType: getValue(row, 'led_type', 'ledType', 'LED Type') || null,
-          shape: getValue(row, 'shape', 'Shape') || null,
-          weight: getValue(row, 'weight', 'Weight', 'Weight (Kg)', 'Weight (kg)') ? parseFloat(getValue(row, 'weight', 'Weight', 'Weight (Kg)', 'Weight (kg)')) : null,
-          length: getValue(row, 'length', 'Length', 'Length (cm)', 'Length (Cm)', 'Length (CM)') ? parseFloat(getValue(row, 'length', 'Length', 'Length (cm)', 'Length (Cm)', 'Length (CM)')) : null,
-          width: getValue(row, 'width', 'Width', 'Width (cm)', 'Width (Cm)', 'Width (CM)') ? parseFloat(getValue(row, 'width', 'Width', 'Width (cm)', 'Width (Cm)', 'Width (CM)')) : null,
-          height: getValue(row, 'height', 'Height', 'Height (cm)', 'Height (Cm)', 'Height (CM)') ? parseFloat(getValue(row, 'height', 'Height', 'Height (cm)', 'Height (Cm)', 'Height (CM)')) : null,
-          rackNumber: getValue(row, 'rack_number', 'rackNumber', 'Rack Number') || null,
+          weight: getValue(row, 'weight', 'Weight') ? parseFloat(getValue(row, 'weight', 'Weight')) : null,
+          length: getValue(row, 'length', 'Length') ? parseFloat(getValue(row, 'length', 'Length')) : null,
+          width: getValue(row, 'width', 'Width') ? parseFloat(getValue(row, 'width', 'Width')) : null,
+          height: getValue(row, 'height', 'Height') ? parseFloat(getValue(row, 'height', 'Height')) : null,
           currentStock: currentStock, // Use parsed current stock value
-          minStockLevel: getValue(row, 'min_stock_level', 'minStockLevel', 'Min Stock', 'min_stock', 'Minimum Stock Level') ? parseInt(getValue(row, 'min_stock_level', 'minStockLevel', 'Min Stock', 'min_stock', 'Minimum Stock Level')) : 0,
-          reorderPoint: getValue(row, 'reorder_point', 'reorderPoint', 'Reorder Point') ? parseInt(getValue(row, 'reorder_point', 'reorderPoint', 'Reorder Point')) : null,
-          defaultStorageLocation: getValue(row, 'default_storage_location', 'defaultStorageLocation', 'Storage Location', 'Default Storage Location') || null,
+          minStockLevel: getValue(row, 'min_stock_level', 'minStockLevel', 'Min Stock', 'min_stock', 'Minimum Stock Level', 'Minimum Stock Level (MSQ)', 'MSQ') ? parseInt(getValue(row, 'min_stock_level', 'minStockLevel', 'Min Stock', 'min_stock', 'Minimum Stock Level', 'Minimum Stock Level (MSQ)', 'MSQ')) : 0,
+          defaultStorageLocation: String(defaultStorageLocation).trim(),
+          customFields: customFields,
           status: getValue(row, 'status', 'Status') || 'active',
         };
 
