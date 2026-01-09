@@ -15,6 +15,9 @@ router.post(
   userController.setPassword
 );
 
+// Get current user details details
+router.get('/me', authenticate, userController.getMe);
+
 // Get users list (requires authentication)
 router.get('/', authenticate, userController.getUsers);
 
@@ -37,4 +40,3 @@ router.post(
 );
 
 module.exports = router;
-

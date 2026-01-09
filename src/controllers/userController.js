@@ -9,11 +9,48 @@ const { NotFoundError, BadRequestError, ConflictError } = require('../middleware
 const { getCompanyId } = require('../middlewares/auth');
 
 /**
+ * Get current user details
+ */
+const getMe = async (req, res, next) => {
+  try {
+    const userId = req.user.userId;
+
+    // Get full user details including permissions
+    const query = `
+      SELECT 
+        u.id, u.company_id, u.company_name, u.email, u.full_name, u.phone, u.role, u.is_active,
+        COALESCE(ud.permissions, u.permissions) as permissions,
+        ud.module_access as "moduleAccess",
+        ud.category_access as "categoryAccess"
+      FROM users u
+      LEFT JOIN users_data ud ON u.id = ud.user_id
+      WHERE u.id = $1
+    `;
+
+    const result = await pool.query(query, [userId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: result.rows[0]
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * Invite a new user (admin or regular user)
  */
 const inviteUser = async (req, res, next) => {
   const client = await pool.connect();
-  
+
   try {
     await client.query('BEGIN');
 
@@ -65,10 +102,10 @@ const inviteUser = async (req, res, next) => {
 
     // Insert user into users table
     // Combine firstName and lastName (lastName is optional)
-    const fullName = lastName && lastName.trim() 
+    const fullName = lastName && lastName.trim()
       ? `${firstName} ${lastName}`.trim()
       : firstName.trim();
-    
+
     const userResult = await client.query(
       `INSERT INTO users (
         company_id, email, password, full_name, phone, role,
@@ -97,7 +134,7 @@ const inviteUser = async (req, res, next) => {
     // Insert into admins or users_data table
     // lastName is optional, so use null if not provided or empty
     const lastNameValue = lastName && lastName.trim() ? lastName.trim() : null;
-    
+
     await client.query(
       `INSERT INTO ${dataTable} (
         user_id, company_id, first_name, last_name, employee_id,
@@ -212,7 +249,7 @@ const verifyToken = async (req, res, next) => {
  */
 const setPassword = async (req, res, next) => {
   const client = await pool.connect();
-  
+
   try {
     await client.query('BEGIN');
 
@@ -306,14 +343,14 @@ const setPassword = async (req, res, next) => {
     await client.query('COMMIT');
 
     const userData = userDetails.rows[0];
-    
+
     // Parse permissions and module_access from JSON
     let permissions = [];
     let moduleAccess = {};
     try {
       if (userData.permissions) {
-        const parsedPermissions = typeof userData.permissions === 'string' 
-          ? JSON.parse(userData.permissions) 
+        const parsedPermissions = typeof userData.permissions === 'string'
+          ? JSON.parse(userData.permissions)
           : userData.permissions;
         // Convert permissions object to array format expected by frontend
         if (typeof parsedPermissions === 'object' && !Array.isArray(parsedPermissions)) {
@@ -327,7 +364,7 @@ const setPassword = async (req, res, next) => {
         moduleAccess = typeof userData.module_access === 'string'
           ? JSON.parse(userData.module_access)
           : userData.module_access;
-        
+
         // Convert moduleAccess object to permissions array format (e.g., "sku.view", "inventory.create")
         if (moduleAccess && typeof moduleAccess === 'object') {
           permissions = [];
@@ -508,7 +545,7 @@ const getInvitations = async (req, res, next) => {
  */
 const deleteUser = async (req, res, next) => {
   const client = await pool.connect();
-  
+
   try {
     await client.query('BEGIN');
 
@@ -624,5 +661,6 @@ module.exports = {
   getInvitations,
   deleteUser,
   suspendUser,
+  getMe,
 };
 

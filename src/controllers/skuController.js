@@ -30,6 +30,8 @@ const getAllSKUs = async (req, res, next) => {
       limit: req.query.limit || 20,
     };
 
+    console.log('[DEBUG-BACKEND] getAllSKUs filters:', JSON.stringify(filters));
+
     const skus = await SKUModel.getAll(filters, companyId);
     const total = await SKUModel.getCount(filters, companyId);
     const transformedData = skus.map(transformSKU);

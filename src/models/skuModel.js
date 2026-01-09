@@ -56,7 +56,11 @@ class SKUModel {
       paramIndex++;
     } else if (filters.productCategories) {
       // Handle multiple category IDs (comma-separated string)
-      const categoryIds = filters.productCategories.split(',').map(id => id.trim()).filter(id => id);
+      const rawCats = String(filters.productCategories);
+      const categoryIds = rawCats.split(',')
+        .map(id => parseInt(id.trim(), 10))
+        .filter(id => !isNaN(id));
+
       if (categoryIds.length > 0) {
         query += ` AND s.product_category_id = ANY($${paramIndex}::integer[])`;
         params.push(categoryIds);
