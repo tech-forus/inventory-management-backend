@@ -23,10 +23,10 @@ const login = async (req, res, next) => {
     // Determine if input is email or phone number
     const input = String(email).trim();
     const isEmail = input.includes('@');
-    
+
     let normalizedEmail = null;
     let normalizedPhone = null;
-    
+
     if (isEmail) {
       // Normalize email: lowercase
       normalizedEmail = input.toLowerCase();
@@ -46,7 +46,7 @@ const login = async (req, res, next) => {
     // Also get phone from admins or users_data tables if not in users table
     let query;
     let params;
-    
+
     if (isEmail) {
       // Query by email only
       query = `SELECT 
@@ -74,13 +74,13 @@ const login = async (req, res, next) => {
       WHERE u.phone = $1 OR a.phone = $1 OR ud.phone = $1`;
       params = [normalizedPhone];
     }
-    
+
     const result = await pool.query(query, params);
 
     if (result.rows.length === 0) {
-      return res.status(401).json({ 
+      return res.status(401).json({
         success: false,
-        error: 'Invalid email/phone number or password' 
+        error: 'Invalid email/phone number or password'
       });
     }
 
@@ -88,9 +88,9 @@ const login = async (req, res, next) => {
 
     // Check if user is active
     if (!user.is_active) {
-      return res.status(403).json({ 
+      return res.status(403).json({
         success: false,
-        error: 'Account is deactivated. Please contact administrator.' 
+        error: 'Account is deactivated. Please contact administrator.'
       });
     }
 
@@ -98,9 +98,9 @@ const login = async (req, res, next) => {
     const isPasswordValid = await bcrypt.compare(password, user.password);
 
     if (!isPasswordValid) {
-      return res.status(401).json({ 
+      return res.status(401).json({
         success: false,
-        error: 'Invalid password' 
+        error: 'Invalid password'
       });
     }
 
@@ -129,6 +129,63 @@ const login = async (req, res, next) => {
       }, 'Failed to update last_login timestamp');
     }
 
+    // Fetch module_access and category_access from database
+    let moduleAccess = {};
+    let categoryAccess = [];
+    let permissions = [];
+
+    try {
+      let accessQuery;
+      if (user.role === 'admin' || user.role === 'super_admin') {
+        accessQuery = await pool.query(
+          'SELECT module_access, category_access, permissions FROM admins WHERE user_id = $1',
+          [user.id]
+        );
+      } else {
+        accessQuery = await pool.query(
+          'SELECT module_access, category_access, permissions FROM users_data WHERE user_id = $1',
+          [user.id]
+        );
+      }
+
+      if (accessQuery.rows.length > 0) {
+        const accessData = accessQuery.rows[0];
+
+        // Parse module_access
+        if (accessData.module_access) {
+          moduleAccess = typeof accessData.module_access === 'string'
+            ? JSON.parse(accessData.module_access)
+            : accessData.module_access;
+        }
+
+        // Parse category_access
+        if (accessData.category_access) {
+          categoryAccess = typeof accessData.category_access === 'string'
+            ? JSON.parse(accessData.category_access)
+            : accessData.category_access;
+        }
+
+        // Parse permissions and convert moduleAccess to flat permissions array
+        if (moduleAccess && typeof moduleAccess === 'object') {
+          permissions = [];
+          for (const [module, actions] of Object.entries(moduleAccess)) {
+            if (actions && typeof actions === 'object') {
+              for (const [action, allowed] of Object.entries(actions)) {
+                if (allowed) {
+                  permissions.push(`${module}.${action}`);
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (accessError) {
+      logger.warn({
+        userId: user.id,
+        error: accessError.message
+      }, 'Failed to fetch user access permissions');
+    }
+
     // Generate JWT token
     const token = jwt.sign(
       {
@@ -141,7 +198,7 @@ const login = async (req, res, next) => {
       { expiresIn: jwtConfig.expiresIn }
     );
 
-    // Return success response (exclude password)
+    // Return success response (exclude password, include permissions)
     res.json({
       success: true,
       message: 'Login successful',
@@ -154,7 +211,10 @@ const login = async (req, res, next) => {
           email: user.email,
           fullName: user.full_name,
           phone: user.phone,
-          role: user.role
+          role: user.role,
+          permissions: Array.isArray(permissions) ? permissions : [],
+          moduleAccess: moduleAccess || {},
+          categoryAccess: Array.isArray(categoryAccess) ? categoryAccess : []
         }
       }
     });
@@ -168,7 +228,7 @@ const login = async (req, res, next) => {
       email: req.body?.email,
       code: error.code
     }, 'Login error');
-    
+
     // Pass error to error handler
     next(error);
   }
