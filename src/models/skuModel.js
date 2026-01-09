@@ -166,8 +166,17 @@ class SKUModel {
 
   /**
    * Get SKU by ID (with company ID filter for security)
+   * Supports both integer ID and SKU ID string
    */
   static async getById(id, companyId = null) {
+    // Convert id to string to check if it's numeric
+    const idStr = String(id);
+    const isNumeric = /^\d+$/.test(idStr);
+    
+    // Use appropriate column based on whether ID is numeric or alphanumeric
+    const whereClause = isNumeric ? 's.id = $1' : 's.sku_id = $1';
+    const idValue = isNumeric ? parseInt(idStr, 10) : idStr;
+    
     let query = `
       SELECT 
         s.*,
@@ -182,15 +191,18 @@ class SKUModel {
       LEFT JOIN sub_categories sc ON s.sub_category_id = sc.id
       LEFT JOIN brands b ON s.brand_id = b.id
       LEFT JOIN vendors v ON s.vendor_id = v.id
-      WHERE s.id = $1
+      WHERE ${whereClause}
     `;
-    const params = [id];
+    const params = [idValue];
     
     // Add company ID filter if provided
     if (companyId) {
-      query += ` AND s.company_id = $2`;
+      query += ` AND s.company_id = $${params.length + 1}`;
       params.push(companyId.toUpperCase());
     }
+    
+    // Add is_active filter
+    query += ` AND s.is_active = true`;
     
     const result = await pool.query(query, params);
     return result.rows[0];

@@ -192,10 +192,17 @@ router.get('/', async (req, res, next) => {
 
 /**
  * GET /api/skus/:id
- * Get SKU by ID
+ * Get SKU by ID (supports both integer ID and SKU ID string)
  */
 router.get('/:id', async (req, res, next) => {
   try {
+    const idParam = req.params.id;
+    const companyId = getCompanyId(req).toUpperCase();
+    
+    // Check if ID is numeric (integer) or alphanumeric (SKU ID string)
+    const isNumeric = /^\d+$/.test(idParam);
+    const whereClause = isNumeric ? 's.id = $1' : 's.sku_id = $1';
+    
     const result = await pool.query(
       `SELECT 
         s.*,
@@ -210,8 +217,8 @@ router.get('/:id', async (req, res, next) => {
       LEFT JOIN sub_categories sc ON s.sub_category_id = sc.id
       LEFT JOIN brands b ON s.brand_id = b.id
       LEFT JOIN vendors v ON s.vendor_id = v.id
-      WHERE s.id = $1`,
-      [req.params.id]
+      WHERE ${whereClause} AND s.company_id = $2 AND s.is_active = true`,
+      [isNumeric ? parseInt(idParam, 10) : idParam, companyId]
     );
 
     if (result.rows.length === 0) {
@@ -414,7 +421,7 @@ router.post('/upload', upload.single('file'), skuController.uploadSKUs);
 
 /**
  * PUT /api/skus/:id
- * Update SKU
+ * Update SKU (supports both integer ID and SKU ID string)
  */
 router.put(
   '/:id',
@@ -443,6 +450,13 @@ router.put(
         });
       }
     }
+    
+    // Determine if ID is numeric or alphanumeric
+    const idParam = req.params.id;
+    const isNumeric = /^\d+$/.test(idParam);
+    const whereClause = isNumeric ? 'id = $34' : 'sku_id = $34';
+    const idValue = isNumeric ? parseInt(idParam, 10) : idParam;
+    const companyId = getCompanyId(req).toUpperCase();
     
   const client = await pool.connect();
   try {
@@ -493,7 +507,7 @@ router.put(
         weight = $24, length = $25, width = $26, height = $27, rack_number = $28,
         min_stock_level = $29, reorder_point = $30, default_storage_location = $31,
         status = $32, is_active = $33, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $34 RETURNING *`,
+      WHERE ${whereClause} AND company_id = $35 RETURNING *`,
       [
         productCategoryId,
         itemCategoryId,
@@ -528,7 +542,8 @@ router.put(
         defaultStorageLocation || null,
         status || 'active',
         status === 'active',
-        req.params.id,
+        idValue,
+        companyId,
       ]
     );
 
@@ -540,6 +555,7 @@ router.put(
     await client.query('COMMIT');
     
     // Fetch the updated SKU with joins to get category names
+    const selectWhereClause = isNumeric ? 's.id = $1' : 's.sku_id = $1';
     const updatedSKU = await client.query(
       `SELECT 
         s.*,
@@ -554,8 +570,8 @@ router.put(
       LEFT JOIN sub_categories sc ON s.sub_category_id = sc.id
       LEFT JOIN brands b ON s.brand_id = b.id
       LEFT JOIN vendors v ON s.vendor_id = v.id
-      WHERE s.id = $1`,
-      [req.params.id]
+      WHERE ${selectWhereClause} AND s.company_id = $2 AND s.is_active = true`,
+      [idValue, companyId]
     );
     
     if (updatedSKU.rows.length === 0) {
@@ -575,13 +591,20 @@ router.put(
 
 /**
  * DELETE /api/skus/:id
- * Soft delete SKU
+ * Soft delete SKU (supports both integer ID and SKU ID string)
  */
 router.delete('/:id', async (req, res, next) => {
   try {
+    const idParam = req.params.id;
+    const isNumeric = /^\d+$/.test(idParam);
+    const whereClause = isNumeric ? 'id = $1' : 'sku_id = $1';
+    const idValue = isNumeric ? parseInt(idParam, 10) : idParam;
+    const companyId = getCompanyId(req).toUpperCase();
+    
     const result = await pool.query(
-      'UPDATE skus SET is_active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING id',
-      [req.params.id]
+      `UPDATE skus SET is_active = false, updated_at = CURRENT_TIMESTAMP 
+       WHERE ${whereClause} AND company_id = $2 RETURNING id`,
+      [idValue, companyId]
     );
 
     if (result.rows.length === 0) {
