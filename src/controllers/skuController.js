@@ -20,6 +20,7 @@ const getAllSKUs = async (req, res, next) => {
     const filters = {
       search: req.query.search ? req.query.search.trim() : undefined,
       productCategory: req.query.productCategory,
+      productCategories: req.query.productCategories, // Multiple category IDs (comma-separated)
       itemCategory: req.query.itemCategory,
       subCategory: req.query.subCategory,
       brand: req.query.brand,
@@ -56,7 +57,7 @@ const getSKUById = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
     const sku = await SKUModel.getById(req.params.id, companyId);
-    
+
     if (!sku) {
       throw new NotFoundError('SKU not found');
     }
@@ -97,12 +98,12 @@ const createSKU = async (req, res, next) => {
     }
 
     const sku = await SKUModel.create(req.body, companyId, skuId);
-    
+
     // Fetch the created SKU with joins
     const createdSKU = await SKUModel.getById(sku.id, companyId);
-    
+
     await client.query('COMMIT');
-    
+
     const transformedData = transformSKU(createdSKU);
     res.json({ success: true, data: transformedData });
   } catch (error) {
@@ -123,7 +124,7 @@ const updateSKU = async (req, res, next) => {
     const companyId = getCompanyId(req);
 
     const sku = await SKUModel.update(req.params.id, req.body, companyId);
-    
+
     if (!sku) {
       await client.query('ROLLBACK');
       throw new NotFoundError('SKU not found');
@@ -131,13 +132,13 @@ const updateSKU = async (req, res, next) => {
 
     // Fetch the updated SKU with joins
     const updatedSKU = await SKUModel.getById(req.params.id, companyId);
-    
+
     await client.query('COMMIT');
-    
+
     if (!updatedSKU) {
       throw new NotFoundError('SKU not found');
     }
-    
+
     const transformedData = transformSKU(updatedSKU);
     res.json({ success: true, data: transformedData });
   } catch (error) {
@@ -215,25 +216,25 @@ const uploadSKUs = async (req, res, next) => {
         if (row[key] !== undefined && row[key] !== null && row[key] !== '') {
           return row[key];
         }
-        
+
         // Try with asterisk and spaces (e.g., "Product Category *")
         const withAsterisk = `${key} *`;
         if (row[withAsterisk] !== undefined && row[withAsterisk] !== null && row[withAsterisk] !== '') {
           return row[withAsterisk];
         }
-        
+
         // Try camelCase version
         const camelKey = key.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
         if (row[camelKey] !== undefined && row[camelKey] !== null && row[camelKey] !== '') {
           return row[camelKey];
         }
-        
+
         // Try camelCase with asterisk
         const camelKeyWithAsterisk = `${camelKey} *`;
         if (row[camelKeyWithAsterisk] !== undefined && row[camelKeyWithAsterisk] !== null && row[camelKeyWithAsterisk] !== '') {
           return row[camelKeyWithAsterisk];
         }
-        
+
         // Try case-insensitive match (strip asterisks and compare)
         for (const rowKey in row) {
           const normalizedRowKey = rowKey.replace(/\s*\*\s*$/, '').trim();
@@ -315,7 +316,7 @@ const uploadSKUs = async (req, res, next) => {
         const itemCategoryId = lookupId(itemCategoryName, itemCategoryMap, 'Item Category');
         const vendorId = lookupId(vendorName, vendorMap, 'Vendor');
         const brandId = lookupId(brandName, brandMap, 'Brand');
-        
+
         const subCategoryName = getValue(row, 'sub_category', 'subCategory', 'Sub Category', 'sub_category_name');
         const subCategoryId = subCategoryName ? lookupId(subCategoryName, subCategoryMap, 'Sub Category') : null;
 

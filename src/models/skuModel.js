@@ -54,6 +54,14 @@ class SKUModel {
       query += ` AND s.product_category_id = $${paramIndex}`;
       params.push(filters.productCategory);
       paramIndex++;
+    } else if (filters.productCategories) {
+      // Handle multiple category IDs (comma-separated string)
+      const categoryIds = filters.productCategories.split(',').map(id => id.trim()).filter(id => id);
+      if (categoryIds.length > 0) {
+        query += ` AND s.product_category_id = ANY($${paramIndex}::integer[])`;
+        params.push(categoryIds);
+        paramIndex++;
+      }
     }
     if (filters.itemCategory) {
       query += ` AND s.item_category_id = $${paramIndex}`;
@@ -119,6 +127,14 @@ class SKUModel {
       query += ` AND s.product_category_id = $${paramIndex}`;
       params.push(filters.productCategory);
       paramIndex++;
+    } else if (filters.productCategories) {
+      // Handle multiple category IDs (comma-separated string)
+      const categoryIds = filters.productCategories.split(',').map(id => id.trim()).filter(id => id);
+      if (categoryIds.length > 0) {
+        query += ` AND s.product_category_id = ANY($${paramIndex}::integer[])`;
+        params.push(categoryIds);
+        paramIndex++;
+      }
     }
     if (filters.itemCategory) {
       query += ` AND s.item_category_id = $${paramIndex}`;
@@ -172,11 +188,11 @@ class SKUModel {
     // Convert id to string to check if it's numeric
     const idStr = String(id);
     const isNumeric = /^\d+$/.test(idStr);
-    
+
     // Use appropriate column based on whether ID is numeric or alphanumeric
     const whereClause = isNumeric ? 's.id = $1' : 's.sku_id = $1';
     const idValue = isNumeric ? parseInt(idStr, 10) : idStr;
-    
+
     let query = `
       SELECT 
         s.*,
@@ -194,16 +210,16 @@ class SKUModel {
       WHERE ${whereClause}
     `;
     const params = [idValue];
-    
+
     // Add company ID filter if provided
     if (companyId) {
       query += ` AND s.company_id = $${params.length + 1}`;
       params.push(companyId.toUpperCase());
     }
-    
+
     // Add is_active filter
     query += ` AND s.is_active = true`;
-    
+
     const result = await pool.query(query, params);
     return result.rows[0];
   }
@@ -216,8 +232,8 @@ class SKUModel {
     let customFields = null;
     if (skuData.customFields) {
       try {
-        customFields = typeof skuData.customFields === 'string' 
-          ? JSON.parse(skuData.customFields) 
+        customFields = typeof skuData.customFields === 'string'
+          ? JSON.parse(skuData.customFields)
           : skuData.customFields;
       } catch (e) {
         console.error('Error parsing custom_fields:', e);
@@ -287,8 +303,8 @@ class SKUModel {
     let customFields = null;
     if (skuData.customFields) {
       try {
-        customFields = typeof skuData.customFields === 'string' 
-          ? JSON.parse(skuData.customFields) 
+        customFields = typeof skuData.customFields === 'string'
+          ? JSON.parse(skuData.customFields)
           : skuData.customFields;
       } catch (e) {
         console.error('Error parsing custom_fields:', e);
@@ -309,13 +325,13 @@ class SKUModel {
         status = $31, is_active = $32, updated_at = CURRENT_TIMESTAMP
       WHERE id = $${paramIndex}
     `;
-    
+
     // Add company ID filter if provided
     if (companyId) {
       paramIndex++;
       query += ` AND company_id = $${paramIndex}`;
     }
-    
+
     const params = [
       skuData.productCategoryId,
       skuData.itemCategoryId,
@@ -351,15 +367,15 @@ class SKUModel {
       skuData.status === 'active',
       id,
     ];
-    
+
     // Add company ID filter if provided
     if (companyId) {
       query = query.replace('WHERE id = $33', `WHERE id = $33 AND company_id = $34`);
       params.push(companyId.toUpperCase());
     }
-    
+
     query += ` RETURNING *`;
-    
+
     const result = await pool.query(query, params);
     return result.rows[0];
   }
@@ -370,15 +386,15 @@ class SKUModel {
   static async delete(id, companyId = null) {
     let query = 'UPDATE skus SET is_active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1';
     const params = [id];
-    
+
     // Add company ID filter if provided
     if (companyId) {
       query += ` AND company_id = $2`;
       params.push(companyId.toUpperCase());
     }
-    
+
     query += ` RETURNING id`;
-    
+
     const result = await pool.query(query, params);
     return result.rows[0];
   }
