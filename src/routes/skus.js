@@ -88,15 +88,6 @@ router.get('/', async (req, res, next) => {
   try {
     const companyId = getCompanyId(req).toUpperCase();
     const user = req.user || {};
-    
-    console.log('[CATEGORY ACCESS LOG] ===== INCOMING REQUEST: GET SKUs (with category filters) =====');
-    console.log('[CATEGORY ACCESS LOG] User Info:', {
-      userId: user.id || user.userId,
-      email: user.email,
-      role: user.role,
-      companyId: companyId
-    });
-    
     const {
       search,
       productCategory,
@@ -108,21 +99,6 @@ router.get('/', async (req, res, next) => {
       page = 1,
       limit = 20,
     } = req.query;
-    
-    console.log('[CATEGORY ACCESS LOG] Request Details:', {
-      method: req.method,
-      path: req.path,
-      filters: {
-        productCategory: productCategory || 'NONE',
-        itemCategory: itemCategory || 'NONE',
-        subCategory: subCategory || 'NONE',
-        brand: brand || 'NONE',
-        stockStatus: stockStatus || 'NONE',
-        search: search || 'NONE'
-      },
-      pagination: { page, limit }
-    });
-
     let query = `
       SELECT 
         s.*,
@@ -208,29 +184,8 @@ router.get('/', async (req, res, next) => {
     // Transform snake_case to camelCase
     const transformedData = result.rows.map(transformSKU);
     const totalCount = parseInt(countResult.rows[0].count);
-    
-    console.log('[CATEGORY ACCESS LOG] ===== OUTGOING RESPONSE: SKUs with Category Filters =====');
-    console.log('[CATEGORY ACCESS LOG] User:', { userId: user.id || user.userId, email: user.email, role: user.role });
-    console.log('[CATEGORY ACCESS LOG] Data Sent:', {
-      totalSKUs: totalCount,
-      returnedSKUs: transformedData.length,
-      filtersApplied: {
-        productCategory: productCategory || 'NONE',
-        itemCategory: itemCategory || 'NONE',
-        subCategory: subCategory || 'NONE'
-      },
-      categoryBreakdown: transformedData.reduce((acc, sku) => {
-        const cat = sku.productCategory || 'Uncategorized';
-        acc[cat] = (acc[cat] || 0) + 1;
-        return acc;
-      }, {}),
-      skuIds: transformedData.map(s => s.skuId).slice(0, 10), // First 10 SKU IDs
-      fullDataSize: JSON.stringify(transformedData).length
-    });
-    console.log('[CATEGORY ACCESS LOG] Access Control: User accessing SKUs - verify category access restrictions are applied');
     if (productCategory && productCategory.includes(',')) {
       const categoryIds = productCategory.split(',').map(id => id.trim());
-      console.log('[CATEGORY ACCESS LOG] WARNING: Multiple categories requested:', categoryIds, '- verify user has access to all');
     }
 
     res.json({
