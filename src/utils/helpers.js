@@ -10,28 +10,31 @@ const parseExcelFile = (buffer) => {
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
     
-    // Check if first row contains section headers (like "Basic Information*", "Vendor & Brand Information*", etc.)
-    const firstRowCell = worksheet[xlsx.utils.encode_cell({ r: 0, c: 0 })];
-    const hasSectionHeaders = firstRowCell && (
-      firstRowCell.v && (
-        firstRowCell.v.toString().includes('Basic Information') ||
-        firstRowCell.v.toString().includes('Vendor & Brand') ||
-        firstRowCell.v.toString().includes('Product Specifications') ||
-        firstRowCell.v.toString().includes('Inventory Settings')
-      )
-    );
+    // Find the header row by looking for "Product Category" in the first few rows
+    let headerRow = 0; // Default: first row
+    const maxSearchRows = 5;
     
-    // If section headers detected, skip first row and use second row as headers
-    if (hasSectionHeaders) {
-      return xlsx.utils.sheet_to_json(worksheet, {
-        range: 1, // Start from row 2 (0-based index 1)
-        defval: null,
-        blankrows: false,
-      });
+    for (let i = 0; i < maxSearchRows; i++) {
+      const cellA = worksheet[xlsx.utils.encode_cell({ r: i, c: 0 })];
+      if (cellA && cellA.v) {
+        const cellValue = cellA.v.toString().toLowerCase().trim();
+        // Check if this row contains "Product Category" (likely the header row)
+        if (cellValue.includes('product category')) {
+          headerRow = i;
+          break;
+        }
+      }
     }
     
-    // Otherwise, use default parsing (first row as headers)
-    return xlsx.utils.sheet_to_json(worksheet);
+    // Data starts from the row after headers
+    const dataStartRow = headerRow + 1;
+    
+    // Parse using the detected header row
+    return xlsx.utils.sheet_to_json(worksheet, {
+      range: headerRow, // Use detected header row
+      defval: null,
+      blankrows: false,
+    });
   } catch (error) {
     throw new Error('Failed to parse Excel file: ' + error.message);
   }
