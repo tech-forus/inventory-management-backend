@@ -186,13 +186,14 @@ const login = async (req, res, next) => {
       }, 'Failed to fetch user access permissions');
     }
 
-    // Generate JWT token
+    // Generate JWT token (include categoryAccess for access control)
     const token = jwt.sign(
       {
         userId: user.id,
         companyId: user.company_id,
         email: user.email,
-        role: user.role
+        role: user.role,
+        categoryAccess: Array.isArray(categoryAccess) ? categoryAccess : []
       },
       jwtConfig.secret,
       { expiresIn: jwtConfig.expiresIn }

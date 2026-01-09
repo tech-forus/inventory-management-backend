@@ -34,6 +34,7 @@ const authenticate = (req, res, next) => {
       companyId: decoded.companyId,
       email: decoded.email,
       role: decoded.role,
+      categoryAccess: decoded.categoryAccess || [],
       exp: decoded.exp,
       iat: decoded.iat,
     };

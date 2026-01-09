@@ -10,13 +10,100 @@ const ColourModel = require('../models/colourModel');
 const { getCompanyId } = require('../middlewares/auth');
 const { parseExcelFile, parseExcelFileAllSheets } = require('../utils/helpers');
 const { transformVendor, transformBrand, transformCategory, transformTeam, transformCustomer, transformTransportor, transformWarehouse, transformMaterial, transformColour, transformArray } = require('../utils/transformers');
-const { NotFoundError, ValidationError } = require('../middlewares/errorHandler');
+const { NotFoundError, ValidationError, UnauthorizedError } = require('../middlewares/errorHandler');
 const xlsx = require('xlsx');
 
 /**
  * Library Controller
  * Handles all library-related operations (vendors, brands, categories, teams)
  */
+
+/**
+ * Helper function to filter categories based on user access
+ * @param {Array} categories - Array of category objects
+ * @param {Object} user - User object with role and categoryAccess
+ * @param {String} categoryType - 'productCategoryIds', 'itemCategoryIds', or 'subCategoryIds'
+ * @returns {Array} Filtered categories
+ */
+const filterCategoriesByUserAccess = (categories, user, categoryType) => {
+  const userRole = user.role;
+  const categoryAccess = user.categoryAccess || [];
+  
+  // Admin and super_admin get all categories
+  if (userRole === 'admin' || userRole === 'super_admin') {
+    return categories;
+  }
+  
+  // For sales/user roles, filter by categoryAccess
+  if (userRole === 'sales' || userRole === 'user') {
+    if (!categoryAccess || categoryAccess.length === 0) {
+      // No access granted - return empty array
+      return [];
+    }
+    
+    // Collect all allowed category IDs from all access entries
+    const allowedIds = new Set();
+    categoryAccess.forEach(access => {
+      if (access[categoryType] && Array.isArray(access[categoryType])) {
+        access[categoryType].forEach(id => {
+          // Convert to string for consistent comparison
+          allowedIds.add(String(id));
+        });
+      }
+    });
+    
+    if (allowedIds.size === 0) {
+      // No allowed IDs found - return empty array
+      return [];
+    }
+    
+    // Filter categories to only include those with IDs in allowedIds
+    const filtered = categories.filter(cat => {
+      const catId = String(cat.id);
+      return allowedIds.has(catId);
+    });
+    
+    return filtered;
+  }
+  
+  // Unknown role - return empty array for safety
+  return [];
+};
+
+/**
+ * Helper function to check if user has access to a specific category
+ * @param {String|Number} categoryId - Category ID to check
+ * @param {Object} user - User object with role and categoryAccess
+ * @param {String} categoryType - 'productCategoryIds', 'itemCategoryIds', or 'subCategoryIds'
+ * @returns {Boolean} True if user has access
+ */
+const hasCategoryAccess = (categoryId, user, categoryType) => {
+  const userRole = user.role;
+  const categoryAccess = user.categoryAccess || [];
+  
+  // Admin and super_admin have access to all
+  if (userRole === 'admin' || userRole === 'super_admin') {
+    return true;
+  }
+  
+  // For sales/user roles, check categoryAccess
+  if (userRole === 'sales' || userRole === 'user') {
+    if (!categoryAccess || categoryAccess.length === 0) {
+      return false;
+    }
+    
+    const categoryIdStr = String(categoryId);
+    return categoryAccess.some(access => {
+      if (access[categoryType] && Array.isArray(access[categoryType])) {
+        return access[categoryType].some(id => String(id) === categoryIdStr);
+      }
+      return false;
+    });
+  }
+  
+  // Unknown role - no access
+  return false;
+};
 
 // ==================== VENDORS ====================
 
@@ -312,6 +399,13 @@ const getProductCategories = async (req, res, next) => {
       if (!category) {
         throw new NotFoundError('Product category not found');
       }
+      
+      // Check if user has access to this specific category
+      if (!hasCategoryAccess(req.params.id, user, 'productCategoryIds')) {
+        console.log('[CATEGORY ACCESS LOG] Access Denied: User does not have access to product category', req.params.id);
+        throw new UnauthorizedError('You do not have access to this product category');
+      }
+      
       const transformedData = transformCategory(category);
       
       console.log('[CATEGORY ACCESS LOG] ===== OUTGOING RESPONSE: Single Product Category =====');
@@ -322,7 +416,7 @@ const getProductCategories = async (req, res, next) => {
         dataSize: JSON.stringify(transformedData).length,
         fullData: transformedData
       });
-      console.log('[CATEGORY ACCESS LOG] Access Control: User has access to this category');
+      console.log('[CATEGORY ACCESS LOG] Access Control: User has access to this category - verified');
       
       return res.json({ success: true, data: transformedData });
     }
@@ -331,19 +425,29 @@ const getProductCategories = async (req, res, next) => {
     const categories = await CategoryModel.getProductCategories(companyId);
     const transformedData = transformArray(categories, transformCategory);
     
+    // Filter categories based on user access
+    const filteredData = filterCategoriesByUserAccess(transformedData, user, 'productCategoryIds');
+    
     console.log('[CATEGORY ACCESS LOG] ===== OUTGOING RESPONSE: All Product Categories =====');
     console.log('[CATEGORY ACCESS LOG] User:', { userId: user.id || user.userId, email: user.email, role: user.role });
+    console.log('[CATEGORY ACCESS LOG] User categoryAccess:', user.categoryAccess);
     console.log('[CATEGORY ACCESS LOG] Data Sent:', {
-      totalCategories: transformedData.length,
-      categoryIds: transformedData.map(c => c.id),
-      categoryNames: transformedData.map(c => c.name),
-      dataSize: JSON.stringify(transformedData).length,
-      fullData: transformedData
+      totalCategoriesBeforeFilter: transformedData.length,
+      totalCategoriesAfterFilter: filteredData.length,
+      categoryIds: filteredData.map(c => c.id),
+      categoryNames: filteredData.map(c => c.name),
+      dataSize: JSON.stringify(filteredData).length,
+      fullData: filteredData
     });
-    console.log('[CATEGORY ACCESS LOG] Access Control: User has access to ALL categories (no filtering applied)');
-    console.log('[CATEGORY ACCESS LOG] WARNING: All categories returned - verify user should have access to all');
     
-    res.json({ success: true, data: transformedData });
+    if (user.role === 'admin' || user.role === 'super_admin') {
+      console.log('[CATEGORY ACCESS LOG] Access Control: Admin/Super Admin - all categories returned');
+    } else {
+      console.log('[CATEGORY ACCESS LOG] Access Control: User-level filtering applied - only allowed categories returned');
+      console.log('[CATEGORY ACCESS LOG] Filtered from', transformedData.length, 'to', filteredData.length, 'categories');
+    }
+    
+    res.json({ success: true, data: filteredData });
   } catch (error) {
     next(error);
   }
@@ -518,6 +622,13 @@ const getItemCategories = async (req, res, next) => {
       if (!category) {
         throw new NotFoundError('Item category not found');
       }
+      
+      // Check if user has access to this specific category
+      if (!hasCategoryAccess(req.params.id, user, 'itemCategoryIds')) {
+        console.log('[CATEGORY ACCESS LOG] Access Denied: User does not have access to item category', req.params.id);
+        throw new UnauthorizedError('You do not have access to this item category');
+      }
+      
       const transformedData = transformCategory(category);
       
       console.log('[CATEGORY ACCESS LOG] ===== OUTGOING RESPONSE: Single Item Category =====');
@@ -529,7 +640,7 @@ const getItemCategories = async (req, res, next) => {
         dataSize: JSON.stringify(transformedData).length,
         fullData: transformedData
       });
-      console.log('[CATEGORY ACCESS LOG] Access Control: User has access to this item category');
+      console.log('[CATEGORY ACCESS LOG] Access Control: User has access to this item category - verified');
       
       return res.json({ success: true, data: transformedData });
     }
@@ -539,20 +650,30 @@ const getItemCategories = async (req, res, next) => {
     const categories = await CategoryModel.getItemCategories(companyId, productCategoryId);
     const transformedData = transformArray(categories, transformCategory);
     
+    // Filter categories based on user access
+    const filteredData = filterCategoriesByUserAccess(transformedData, user, 'itemCategoryIds');
+    
     console.log('[CATEGORY ACCESS LOG] ===== OUTGOING RESPONSE: Item Categories =====');
     console.log('[CATEGORY ACCESS LOG] User:', { userId: user.id || user.userId, email: user.email, role: user.role });
+    console.log('[CATEGORY ACCESS LOG] User categoryAccess:', user.categoryAccess);
     console.log('[CATEGORY ACCESS LOG] Data Sent:', {
-      totalCategories: transformedData.length,
+      totalCategoriesBeforeFilter: transformedData.length,
+      totalCategoriesAfterFilter: filteredData.length,
       filteredByProductCategory: productCategoryId || 'ALL',
-      categoryIds: transformedData.map(c => c.id),
-      categoryNames: transformedData.map(c => c.name),
-      dataSize: JSON.stringify(transformedData).length,
-      fullData: transformedData
+      categoryIds: filteredData.map(c => c.id),
+      categoryNames: filteredData.map(c => c.name),
+      dataSize: JSON.stringify(filteredData).length,
+      fullData: filteredData
     });
-    console.log('[CATEGORY ACCESS LOG] Access Control: User has access to ALL item categories (no user-level filtering applied)');
-    console.log('[CATEGORY ACCESS LOG] WARNING: All item categories returned - verify user should have access to all');
     
-    res.json({ success: true, data: transformedData });
+    if (user.role === 'admin' || user.role === 'super_admin') {
+      console.log('[CATEGORY ACCESS LOG] Access Control: Admin/Super Admin - all item categories returned');
+    } else {
+      console.log('[CATEGORY ACCESS LOG] Access Control: User-level filtering applied - only allowed item categories returned');
+      console.log('[CATEGORY ACCESS LOG] Filtered from', transformedData.length, 'to', filteredData.length, 'item categories');
+    }
+    
+    res.json({ success: true, data: filteredData });
   } catch (error) {
     next(error);
   }
@@ -729,6 +850,13 @@ const getSubCategories = async (req, res, next) => {
       if (!category) {
         throw new NotFoundError('Sub category not found');
       }
+      
+      // Check if user has access to this specific category
+      if (!hasCategoryAccess(req.params.id, user, 'subCategoryIds')) {
+        console.log('[CATEGORY ACCESS LOG] Access Denied: User does not have access to sub category', req.params.id);
+        throw new UnauthorizedError('You do not have access to this sub category');
+      }
+      
       const transformedData = transformCategory(category);
       
       console.log('[CATEGORY ACCESS LOG] ===== OUTGOING RESPONSE: Single Sub Category =====');
@@ -740,7 +868,7 @@ const getSubCategories = async (req, res, next) => {
         dataSize: JSON.stringify(transformedData).length,
         fullData: transformedData
       });
-      console.log('[CATEGORY ACCESS LOG] Access Control: User has access to this sub category');
+      console.log('[CATEGORY ACCESS LOG] Access Control: User has access to this sub category - verified');
       
       return res.json({ success: true, data: transformedData });
     }
@@ -750,20 +878,30 @@ const getSubCategories = async (req, res, next) => {
     const categories = await CategoryModel.getSubCategories(companyId, itemCategoryId);
     const transformedData = transformArray(categories, transformCategory);
     
+    // Filter categories based on user access
+    const filteredData = filterCategoriesByUserAccess(transformedData, user, 'subCategoryIds');
+    
     console.log('[CATEGORY ACCESS LOG] ===== OUTGOING RESPONSE: Sub Categories =====');
     console.log('[CATEGORY ACCESS LOG] User:', { userId: user.id || user.userId, email: user.email, role: user.role });
+    console.log('[CATEGORY ACCESS LOG] User categoryAccess:', user.categoryAccess);
     console.log('[CATEGORY ACCESS LOG] Data Sent:', {
-      totalCategories: transformedData.length,
+      totalCategoriesBeforeFilter: transformedData.length,
+      totalCategoriesAfterFilter: filteredData.length,
       filteredByItemCategory: itemCategoryId || 'ALL',
-      categoryIds: transformedData.map(c => c.id),
-      categoryNames: transformedData.map(c => c.name),
-      dataSize: JSON.stringify(transformedData).length,
-      fullData: transformedData
+      categoryIds: filteredData.map(c => c.id),
+      categoryNames: filteredData.map(c => c.name),
+      dataSize: JSON.stringify(filteredData).length,
+      fullData: filteredData
     });
-    console.log('[CATEGORY ACCESS LOG] Access Control: User has access to ALL sub categories (no user-level filtering applied)');
-    console.log('[CATEGORY ACCESS LOG] WARNING: All sub categories returned - verify user should have access to all');
     
-    res.json({ success: true, data: transformedData });
+    if (user.role === 'admin' || user.role === 'super_admin') {
+      console.log('[CATEGORY ACCESS LOG] Access Control: Admin/Super Admin - all sub categories returned');
+    } else {
+      console.log('[CATEGORY ACCESS LOG] Access Control: User-level filtering applied - only allowed sub categories returned');
+      console.log('[CATEGORY ACCESS LOG] Filtered from', transformedData.length, 'to', filteredData.length, 'sub categories');
+    }
+    
+    res.json({ success: true, data: filteredData });
   } catch (error) {
     next(error);
   }
