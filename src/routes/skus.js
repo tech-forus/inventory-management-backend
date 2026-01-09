@@ -602,19 +602,83 @@ router.get('/analytics/top-selling', async (req, res, next) => {
   try {
     const companyId = getCompanyId(req).toUpperCase();
     const period = parseInt(req.query.period || 30, 10); // Default 30 days
-    const sortBy = req.query.sortBy || 'units'; // 'units' or 'value'
+    const sortBy = req.query.sortBy || 'units'; // 'units', 'revenue', or 'frequency'
 
     // Calculate date range
     const dateFrom = new Date();
     dateFrom.setDate(dateFrom.getDate() - period);
+    dateFrom.setHours(0, 0, 0, 0); // Start of day
+    const dateTo = new Date();
+    dateTo.setHours(23, 59, 59, 999); // End of day
 
-    // Query to get top selling SKUs from outgoing inventory
-    // For now, return empty array as outgoing inventory is not fully implemented
-    // TODO: Implement when outgoing inventory is ready
+    // Build the query to get top selling SKUs from outgoing inventory
+    let query = `
+      SELECT 
+        s.id,
+        s.sku_id,
+        s.item_name,
+        s.current_stock,
+        s.min_stock_level as min_stock,
+        COALESCE(pc.name, ic.name, sc.name, 'Uncategorized') as category,
+        COALESCE(SUM(oii.outgoing_quantity), 0)::INTEGER as units_sold,
+        COALESCE(SUM(oii.total_value), 0)::DECIMAL as revenue,
+        MAX(oi.invoice_challan_date) as last_sale_date,
+        COUNT(DISTINCT oi.id) as sale_frequency
+      FROM skus s
+      INNER JOIN outgoing_inventory_items oii ON s.id = oii.sku_id
+      INNER JOIN outgoing_inventory oi ON oii.outgoing_inventory_id = oi.id
+      LEFT JOIN product_categories pc ON s.product_category_id = pc.id
+      LEFT JOIN item_categories ic ON s.item_category_id = ic.id
+      LEFT JOIN sub_categories sc ON s.sub_category_id = sc.id
+      WHERE s.company_id = $1 
+        AND oi.company_id = $1
+        AND oi.is_active = true 
+        AND oi.status = 'completed'
+        AND oi.invoice_challan_date >= $2::DATE
+        AND oi.invoice_challan_date <= $3::DATE
+      GROUP BY s.id, s.sku_id, s.item_name, s.current_stock, s.min_stock_level, 
+               s.product_category_id, s.item_category_id, s.sub_category_id,
+               pc.name, ic.name, sc.name
+      HAVING SUM(oii.outgoing_quantity) > 0
+    `;
+
+    // Add sorting based on sortBy parameter
+    if (sortBy === 'revenue') {
+      query += ` ORDER BY revenue DESC, units_sold DESC`;
+    } else if (sortBy === 'frequency') {
+      query += ` ORDER BY sale_frequency DESC, units_sold DESC`;
+    } else {
+      // Default: sort by units
+      query += ` ORDER BY units_sold DESC, revenue DESC`;
+    }
+
+    // Limit to top 100 results
+    query += ` LIMIT 100`;
+
+    const result = await pool.query(query, [
+      companyId,
+      dateFrom.toISOString().split('T')[0], // Format as YYYY-MM-DD
+      dateTo.toISOString().split('T')[0]
+    ]);
+
+    // Format the response to match frontend expectations
+    const formattedData = result.rows.map((row) => ({
+      skuId: row.sku_id,
+      id: row.id,
+      itemName: row.item_name,
+      name: row.item_name,
+      category: row.category,
+      unitsSold: parseInt(row.units_sold) || 0,
+      revenue: parseFloat(row.revenue) || 0,
+      currentStock: parseInt(row.current_stock) || 0,
+      minStock: parseInt(row.min_stock) || 0,
+      lastSaleDate: row.last_sale_date ? new Date(row.last_sale_date).toISOString() : null,
+      saleFrequency: parseInt(row.sale_frequency) || 0
+    }));
+
     res.json({ 
       success: true, 
-      data: [],
-      message: 'Outgoing inventory analytics not yet implemented'
+      data: formattedData
     });
   } catch (error) {
     next(error);
