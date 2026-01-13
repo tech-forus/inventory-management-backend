@@ -150,15 +150,29 @@ const transformTransportor = (transportor) => {
 const transformSKU = (sku) => {
   if (!sku) return null;
   
-  // Parse custom_fields if it exists
+  // Parse custom_fields if it exists - return empty array instead of null for consistency
   let customFields = null;
   if (sku.custom_fields) {
     try {
-      customFields = typeof sku.custom_fields === 'string' 
+      const parsed = typeof sku.custom_fields === 'string' 
         ? JSON.parse(sku.custom_fields) 
         : sku.custom_fields;
+      
+      // Ensure it's an array format
+      if (Array.isArray(parsed)) {
+        customFields = parsed;
+      } else if (parsed && typeof parsed === 'object') {
+        // Convert object format to array format
+        customFields = Object.entries(parsed).map(([key, value]) => ({
+          key: String(key || ''),
+          value: String(value || '')
+        }));
+      } else {
+        customFields = null;
+      }
     } catch (e) {
       console.error('Error parsing custom_fields:', e);
+      customFields = null;
     }
   }
   

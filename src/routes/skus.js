@@ -34,6 +34,32 @@ router.use(authenticate);
 
 // Helper function to transform SKU object from snake_case to camelCase
 const transformSKU = (sku) => {
+  // Parse custom_fields if it exists - return null or parsed value
+  let customFields = null;
+  if (sku.custom_fields) {
+    try {
+      const parsed = typeof sku.custom_fields === 'string' 
+        ? JSON.parse(sku.custom_fields) 
+        : sku.custom_fields;
+      
+      // Ensure it's an array format
+      if (Array.isArray(parsed)) {
+        customFields = parsed;
+      } else if (parsed && typeof parsed === 'object') {
+        // Convert object format to array format
+        customFields = Object.entries(parsed).map(([key, value]) => ({
+          key: String(key || ''),
+          value: String(value || '')
+        }));
+      } else {
+        customFields = null;
+      }
+    } catch (e) {
+      console.error('Error parsing custom_fields:', e);
+      customFields = null;
+    }
+  }
+
   return {
     id: sku.id,
     skuId: sku.sku_id,
@@ -56,6 +82,7 @@ const transformSKU = (sku) => {
     series: sku.series,
     unit: sku.unit,
     material: sku.material,
+    manufactureOrImport: sku.manufacture_or_import,
     insulation: sku.insulation,
     inputSupply: sku.input_supply,
     color: sku.color,
@@ -65,11 +92,16 @@ const transformSKU = (sku) => {
     ledType: sku.led_type,
     shape: sku.shape,
     weight: sku.weight,
+    weightUnit: sku.weight_unit,
     length: sku.length,
+    lengthUnit: sku.length_unit,
     width: sku.width,
+    widthUnit: sku.width_unit,
     height: sku.height,
+    heightUnit: sku.height_unit,
     rackNumber: sku.rack_number,
     gstRate: sku.gst_rate,
+    customFields,
     currentStock: sku.current_stock,
     minStockLevel: sku.min_stock_level,
     reorderPoint: sku.reorder_point,
@@ -320,6 +352,7 @@ router.post(
       series,
       unit,
       material,
+      manufactureOrImport,
       insulation,
       inputSupply,
       color,
@@ -329,30 +362,54 @@ router.post(
       ledType,
       shape,
       weight,
+      weightUnit,
       length,
+      lengthUnit,
       width,
+      widthUnit,
       height,
+      heightUnit,
       rackNumber,
       currentStock,
       minStockLevel,
       reorderPoint,
       defaultStorageLocation,
+      customFields,
       status = 'active',
     } = req.body;
+
+    // Parse custom_fields if it's a string
+    let customFieldsParsed = null;
+    if (customFields) {
+      try {
+        customFieldsParsed = typeof customFields === 'string'
+          ? JSON.parse(customFields)
+          : customFields;
+        // Ensure it's valid JSON
+        if (customFieldsParsed && typeof customFieldsParsed === 'object') {
+          customFieldsParsed = JSON.stringify(customFieldsParsed);
+        } else {
+          customFieldsParsed = null;
+        }
+      } catch (e) {
+        console.error('Error parsing customFields:', e);
+        customFieldsParsed = null;
+      }
+    }
 
     const result = await client.query(
       `INSERT INTO skus (
         company_id, sku_id, product_category_id, item_category_id, sub_category_id,
         item_name, item_details, vendor_id, vendor_item_code, brand_id,
         hsn_sac_code, gst_rate, rating_size, model, series, unit,
-        material, insulation, input_supply, color, cri, cct, beam_angle, led_type, shape,
-        weight, length, width, height, rack_number,
+        material, manufacture_or_import, insulation, input_supply, color, cri, cct, beam_angle, led_type, shape,
+        weight, weight_unit, length, length_unit, width, width_unit, height, height_unit, rack_number,
         min_stock_level, reorder_point, default_storage_location,
-        current_stock, status, is_active
+        current_stock, custom_fields, status, is_active
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-        $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
-        $31, $32, $33, $34, $35, $36
+        $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35,
+        $36, $37, $38, $39, $40, $41
       ) RETURNING *`,
       [
         companyId,
@@ -362,7 +419,7 @@ router.post(
         subCategoryId,
         itemName,
         itemDetails || null,
-        vendorId,
+        vendorId || null,
         vendorItemCode || null,
         brandId,
         hsnSacCode || null,
@@ -372,6 +429,7 @@ router.post(
         series || null,
         unit,
         material || null,
+        manufactureOrImport || null,
         insulation || null,
         inputSupply || null,
         color || null,
@@ -380,15 +438,20 @@ router.post(
         beamAngle || null,
         ledType || null,
         shape || null,
-        weight || null,
-        length || null,
-        width || null,
-        height || null,
+        weight !== undefined && weight !== null ? parseFloat(weight) : null,
+        weightUnit || 'kg',
+        length !== undefined && length !== null ? parseFloat(length) : null,
+        lengthUnit || 'mm',
+        width !== undefined && width !== null ? parseFloat(width) : null,
+        widthUnit || 'mm',
+        height !== undefined && height !== null ? parseFloat(height) : null,
+        heightUnit || 'mm',
         rackNumber || null,
         minStockLevel,
         reorderPoint || null,
         defaultStorageLocation || null,
-        currentStock !== undefined && currentStock !== null ? currentStock : (minStockLevel || 0), // Use user-entered currentStock, fallback to minStockLevel
+        currentStock !== undefined && currentStock !== null ? currentStock : (minStockLevel || 0),
+        customFieldsParsed,
         status,
         status === 'active',
       ]
@@ -492,6 +555,7 @@ router.put(
       series,
       unit,
       material,
+      manufactureOrImport,
       insulation,
       inputSupply,
       color,
@@ -501,34 +565,58 @@ router.put(
       ledType,
       shape,
       weight,
+      weightUnit,
       length,
+      lengthUnit,
       width,
+      widthUnit,
       height,
+      heightUnit,
       rackNumber,
       minStockLevel,
       reorderPoint,
       defaultStorageLocation,
+      customFields,
       status,
     } = req.body;
+
+    // Parse custom_fields if it's a string
+    let customFieldsParsed = null;
+    if (customFields) {
+      try {
+        customFieldsParsed = typeof customFields === 'string'
+          ? JSON.parse(customFields)
+          : customFields;
+        // Ensure it's valid JSON
+        if (customFieldsParsed && typeof customFieldsParsed === 'object') {
+          customFieldsParsed = JSON.stringify(customFieldsParsed);
+        } else {
+          customFieldsParsed = null;
+        }
+      } catch (e) {
+        console.error('Error parsing customFields:', e);
+        customFieldsParsed = null;
+      }
+    }
 
     const result = await client.query(
       `UPDATE skus SET
         product_category_id = $1, item_category_id = $2, sub_category_id = $3,
         item_name = $4, item_details = $5, vendor_id = $6, vendor_item_code = $7, brand_id = $8,
         hsn_sac_code = $9, gst_rate = $10, rating_size = $11, model = $12, series = $13, unit = $14,
-        material = $15, insulation = $16, input_supply = $17, color = $18, cri = $19, cct = $20,
-        beam_angle = $21, led_type = $22, shape = $23,
-        weight = $24, length = $25, width = $26, height = $27, rack_number = $28,
-        min_stock_level = $29, reorder_point = $30, default_storage_location = $31,
-        status = $32, is_active = $33, updated_at = CURRENT_TIMESTAMP
-      WHERE ${whereClause} AND company_id = $35 RETURNING *`,
+        material = $15, manufacture_or_import = $16, insulation = $17, input_supply = $18, color = $19, cri = $20, cct = $21,
+        beam_angle = $22, led_type = $23, shape = $24,
+        weight = $25, weight_unit = $26, length = $27, length_unit = $28, width = $29, width_unit = $30, height = $31, height_unit = $32, rack_number = $33,
+        min_stock_level = $34, reorder_point = $35, default_storage_location = $36,
+        custom_fields = $37, status = $38, is_active = $39, updated_at = CURRENT_TIMESTAMP
+      WHERE ${whereClause} AND company_id = $40 RETURNING *`,
       [
         productCategoryId,
         itemCategoryId,
         subCategoryId,
         itemName,
         itemDetails || null,
-        vendorId,
+        vendorId || null,
         vendorItemCode || null,
         brandId,
         hsnSacCode || null,
@@ -538,6 +626,7 @@ router.put(
         series || null,
         unit,
         material || null,
+        manufactureOrImport || null,
         insulation || null,
         inputSupply || null,
         color || null,
@@ -546,14 +635,19 @@ router.put(
         beamAngle || null,
         ledType || null,
         shape || null,
-        weight || null,
-        length || null,
-        width || null,
-        height || null,
+        weight !== undefined && weight !== null ? parseFloat(weight) : null,
+        weightUnit || 'kg',
+        length !== undefined && length !== null ? parseFloat(length) : null,
+        lengthUnit || 'mm',
+        width !== undefined && width !== null ? parseFloat(width) : null,
+        widthUnit || 'mm',
+        height !== undefined && height !== null ? parseFloat(height) : null,
+        heightUnit || 'mm',
         rackNumber || null,
         minStockLevel,
         reorderPoint || null,
         defaultStorageLocation || null,
+        customFieldsParsed,
         status || 'active',
         status === 'active',
         idValue,
