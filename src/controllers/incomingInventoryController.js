@@ -154,7 +154,17 @@ const getIncomingInventoryById = async (req, res, next) => {
       throw new NotFoundError('Incoming inventory record not found');
     }
 
-    res.json({ success: true, data: record });
+    // Transform the record and items from snake_case to camelCase
+    const transformedRecord = transformIncomingInventory(record);
+    const transformedItems = record.items ? record.items.map(transformItem) : [];
+    
+    res.json({ 
+      success: true, 
+      data: {
+        ...transformedRecord,
+        items: transformedItems
+      }
+    });
   } catch (error) {
     next(error);
   }
