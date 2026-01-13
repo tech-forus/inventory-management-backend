@@ -14,20 +14,23 @@ class IncomingInventoryModel {
     try {
       await client.query('BEGIN');
 
-      // Calculate total value from items (including GST)
+      // Calculate total value from items using frontend-calculated values (including GST)
       const totalValue = items.reduce((sum, item) => {
+        // Use frontend-calculated totalInclGst if available, otherwise calculate
+        if (item.totalInclGst !== undefined) {
+          return sum + parseFloat(item.totalInclGst);
+        }
+        if (item.totalValueInclGst !== undefined) {
+          return sum + parseFloat(item.totalValueInclGst);
+        }
+        // Fallback calculation if frontend values not provided
         const quantity = item.totalQuantity || 0;
         const unitPrice = item.unitPrice || 0;
         const gstPercentage = item.gstRate || item.gstPercentage || 0;
-        
-        // Calculate base value (excl GST)
         const baseValue = quantity * unitPrice;
-        // Calculate GST amount
         const gstAmount = baseValue * (gstPercentage / 100);
-        // Total value including GST
         const totalInclGst = baseValue + gstAmount;
-        
-        return sum + (item.totalValueInclGst || item.totalInclGst || totalInclGst);
+        return sum + totalInclGst;
       }, 0);
 
       // Insert main incoming inventory record
@@ -36,8 +39,9 @@ class IncomingInventoryModel {
           company_id, invoice_date, invoice_number, docket_number, transportor_name,
           vendor_id, brand_id, warranty, warranty_unit, receiving_date, received_by, remarks,
           document_type, document_sub_type, vendor_sub_type, delivery_challan_sub_type,
-          destination_type, destination_id, status, total_value
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+          destination_type, destination_id, status, total_value,
+          freight_amount, number_of_boxes, received_boxes
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
         RETURNING *`,
         [
           companyId.toUpperCase(),
@@ -60,32 +64,33 @@ class IncomingInventoryModel {
           inventoryData.destinationId || null,
           inventoryData.status || 'draft',
           totalValue,
+          inventoryData.freightAmount || 0,
+          inventoryData.numberOfBoxes || 0,
+          inventoryData.receivedBoxes || 0,
         ]
       );
 
       const incomingInventoryId = inventoryResult.rows[0].id;
 
-      // Insert items with GST calculations
+      // Insert items using frontend-calculated GST values
       const insertedItems = [];
       for (const item of items) {
         const quantity = item.totalQuantity || 0;
         const unitPrice = item.unitPrice || 0;
         const gstPercentage = item.gstRate || item.gstPercentage || 0;
         
-        // Calculate base value (excl GST)
-        const totalValueExclGst = quantity * unitPrice;
-        // Calculate GST amount
-        const gstAmount = totalValueExclGst * (gstPercentage / 100);
-        // Total value including GST
-        const totalValueInclGst = totalValueExclGst + gstAmount;
+        // Use frontend-calculated GST values (trust frontend calculations)
+        const totalValueExclGst = item.totalExclGst !== undefined ? parseFloat(item.totalExclGst) : (quantity * unitPrice);
+        const gstAmount = item.gstAmount !== undefined ? parseFloat(item.gstAmount) : (totalValueExclGst * (gstPercentage / 100));
+        const totalValueInclGst = item.totalInclGst !== undefined ? parseFloat(item.totalInclGst) : (totalValueExclGst + gstAmount);
         
         const itemResult = await client.query(
           `INSERT INTO incoming_inventory_items (
             incoming_inventory_id, sku_id, received, short,
             total_quantity, unit_price, total_value, 
             gst_percentage, gst_amount, total_value_excl_gst, total_value_incl_gst,
-            number_of_boxes, received_boxes
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            warranty
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
           RETURNING *`,
           [
             incomingInventoryId,
@@ -99,8 +104,7 @@ class IncomingInventoryModel {
             gstAmount,
             totalValueExclGst,
             totalValueInclGst,
-            item.numberOfBoxes || 0,
-            item.receivedBoxes || 0,
+            item.warranty || 0,
           ]
         );
         insertedItems.push(itemResult.rows[0]);
@@ -362,7 +366,12 @@ class IncomingInventoryModel {
         iii.challan_number,
         iii.challan_date,
         iii.unit_price,
-        iii.total_value
+        iii.total_value,
+        iii.gst_percentage,
+        iii.gst_amount,
+        iii.total_value_excl_gst,
+        iii.total_value_incl_gst,
+        iii.warranty
       FROM incoming_inventory_items iii
       LEFT JOIN skus s ON iii.sku_id = s.id
       INNER JOIN incoming_inventory ii ON iii.incoming_inventory_id = ii.id

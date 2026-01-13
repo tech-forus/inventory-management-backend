@@ -39,6 +39,9 @@ const transformIncomingInventory = (record) => {
     rejected: parseInt(record.rejected_sum || 0, 10),
     warranty: parseInt(record.warranty || 0, 10),
     warrantyUnit: record.warranty_unit || 'months',
+    freightAmount: parseFloat(record.freight_amount || 0),
+    numberOfBoxes: parseInt(record.number_of_boxes || 0, 10),
+    receivedBoxes: parseInt(record.received_boxes || 0, 10),
     isActive: record.is_active,
     createdAt: record.created_at,
     updatedAt: record.updated_at,
@@ -206,10 +209,14 @@ const transformItem = (item) => {
     challanDate: item.challan_date,
     unitPrice: parseFloat(item.unit_price || 0),
     totalValue: parseFloat(item.total_value || item.total_value_incl_gst || 0),
+    gstRate: parseFloat(item.gst_percentage || 0),
     gstPercentage: parseFloat(item.gst_percentage || 0),
     gstAmount: parseFloat(item.gst_amount || 0),
+    totalExclGst: parseFloat(item.total_value_excl_gst || 0),
     totalValueExclGst: parseFloat(item.total_value_excl_gst || 0),
+    totalInclGst: parseFloat(item.total_value_incl_gst || item.total_value || 0),
     totalValueInclGst: parseFloat(item.total_value_incl_gst || item.total_value || 0),
+    warranty: parseInt(item.warranty || 0, 10),
   };
 };
 
