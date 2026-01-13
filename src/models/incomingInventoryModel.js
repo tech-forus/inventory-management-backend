@@ -48,7 +48,7 @@ class IncomingInventoryModel {
           inventoryData.invoiceDate,
           inventoryData.invoiceNumber,
           inventoryData.docketNumber || null,
-          inventoryData.transportorName || null,
+          inventoryData.transporterName || inventoryData.transportorName || null,
           inventoryData.vendorId,
           inventoryData.brandId,
           inventoryData.warranty || 0,
