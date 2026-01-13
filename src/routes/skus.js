@@ -531,7 +531,7 @@ router.put(
     // Determine if ID is numeric or alphanumeric
     const idParam = req.params.id;
     const isNumeric = /^\d+$/.test(idParam);
-    const whereClause = isNumeric ? 'id = $34' : 'sku_id = $34';
+    const whereClause = isNumeric ? 'id = $41' : 'sku_id = $41';
     const idValue = isNumeric ? parseInt(idParam, 10) : idParam;
     const companyId = getCompanyId(req).toUpperCase();
     
@@ -573,6 +573,7 @@ router.put(
       height,
       heightUnit,
       rackNumber,
+      currentStock,
       minStockLevel,
       reorderPoint,
       defaultStorageLocation,
@@ -607,9 +608,9 @@ router.put(
         material = $15, manufacture_or_import = $16, insulation = $17, input_supply = $18, color = $19, cri = $20, cct = $21,
         beam_angle = $22, led_type = $23, shape = $24,
         weight = $25, weight_unit = $26, length = $27, length_unit = $28, width = $29, width_unit = $30, height = $31, height_unit = $32, rack_number = $33,
-        min_stock_level = $34, reorder_point = $35, default_storage_location = $36,
-        custom_fields = $37, status = $38, is_active = $39, updated_at = CURRENT_TIMESTAMP
-      WHERE ${whereClause} AND company_id = $40 RETURNING *`,
+        current_stock = $34, min_stock_level = $35, reorder_point = $36, default_storage_location = $37,
+        custom_fields = $38, status = $39, is_active = $40, updated_at = CURRENT_TIMESTAMP
+      WHERE ${whereClause} AND company_id = $42 RETURNING *`,
       [
         productCategoryId,
         itemCategoryId,
@@ -644,6 +645,7 @@ router.put(
         height !== undefined && height !== null ? parseFloat(height) : null,
         heightUnit || 'mm',
         rackNumber || null,
+        currentStock !== undefined && currentStock !== null ? currentStock : null,
         minStockLevel,
         reorderPoint || null,
         defaultStorageLocation || null,
