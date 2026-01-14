@@ -6,32 +6,88 @@ const pool = require('./database');
  */
 class VendorModel {
   /**
-   * Get all vendors for a company
+   * Get all vendors for a company with relationships
    */
   static async getAll(companyId) {
     const result = await pool.query(
-      'SELECT * FROM vendors WHERE company_id = $1 AND is_active = true ORDER BY name',
+      `SELECT 
+        v.*,
+        COALESCE(
+          (SELECT json_agg(product_category_id) 
+           FROM vendor_product_categories 
+           WHERE vendor_id = v.id), 
+          '[]'::json
+        ) as product_category_ids,
+        COALESCE(
+          (SELECT json_agg(item_category_id) 
+           FROM vendor_item_categories 
+           WHERE vendor_id = v.id), 
+          '[]'::json
+        ) as item_category_ids,
+        COALESCE(
+          (SELECT json_agg(sub_category_id) 
+           FROM vendor_sub_categories 
+           WHERE vendor_id = v.id), 
+          '[]'::json
+        ) as sub_category_ids,
+        COALESCE(
+          (SELECT json_agg(brand_id) 
+           FROM vendor_brands 
+           WHERE vendor_id = v.id), 
+          '[]'::json
+        ) as brand_ids
+      FROM vendors v 
+      WHERE v.company_id = $1 AND v.is_active = true 
+      ORDER BY v.name`,
       [companyId.toUpperCase()]
     );
     return result.rows;
   }
 
   /**
-   * Get vendor by ID
+   * Get vendor by ID with relationships
    */
   static async getById(id, companyId) {
     const result = await pool.query(
-      'SELECT * FROM vendors WHERE id = $1 AND company_id = $2 AND is_active = true',
+      `SELECT 
+        v.*,
+        COALESCE(
+          (SELECT json_agg(product_category_id) 
+           FROM vendor_product_categories 
+           WHERE vendor_id = v.id), 
+          '[]'::json
+        ) as product_category_ids,
+        COALESCE(
+          (SELECT json_agg(item_category_id) 
+           FROM vendor_item_categories 
+           WHERE vendor_id = v.id), 
+          '[]'::json
+        ) as item_category_ids,
+        COALESCE(
+          (SELECT json_agg(sub_category_id) 
+           FROM vendor_sub_categories 
+           WHERE vendor_id = v.id), 
+          '[]'::json
+        ) as sub_category_ids,
+        COALESCE(
+          (SELECT json_agg(brand_id) 
+           FROM vendor_brands 
+           WHERE vendor_id = v.id), 
+          '[]'::json
+        ) as brand_ids
+      FROM vendors v 
+      WHERE v.id = $1 AND v.company_id = $2 AND v.is_active = true`,
       [id, companyId.toUpperCase()]
     );
     return result.rows[0];
   }
 
   /**
-   * Create a new vendor
+   * Create a new vendor with relationships
    */
-  static async create(vendorData, companyId) {
-    const result = await pool.query(
+  static async create(vendorData, companyId, client = null) {
+    const queryClient = client || pool;
+    const result = await queryClient.query(
       `INSERT INTO vendors (
         company_id, name, contact_person, department, designation, email, phone, whatsapp_number, gst_number,
         address, city, state, pin, is_active
@@ -54,14 +110,88 @@ class VendorModel {
         vendorData.isActive !== false,
       ]
     );
-    return result.rows[0];
+    const vendor = result.rows[0];
+    
+    // Save relationships if provided
+    if (vendor.id) {
+      await this.saveRelationships(vendor.id, vendorData, queryClient);
+    }
+    
+    // Fetch vendor with relationships
+    return await this.getById(vendor.id, companyId);
   }
 
   /**
-   * Update vendor
+   * Save vendor relationships (categories and brands)
    */
-  static async update(id, vendorData, companyId) {
-    const result = await pool.query(
+  static async saveRelationships(vendorId, vendorData, client = null) {
+    const queryClient = client || pool;
+    
+    // Delete existing relationships
+    await queryClient.query('DELETE FROM vendor_product_categories WHERE vendor_id = $1', [vendorId]);
+    await queryClient.query('DELETE FROM vendor_item_categories WHERE vendor_id = $1', [vendorId]);
+    await queryClient.query('DELETE FROM vendor_sub_categories WHERE vendor_id = $1', [vendorId]);
+    await queryClient.query('DELETE FROM vendor_brands WHERE vendor_id = $1', [vendorId]);
+    
+    // Insert product categories
+    if (vendorData.productCategoryIds && Array.isArray(vendorData.productCategoryIds) && vendorData.productCategoryIds.length > 0) {
+      for (const categoryId of vendorData.productCategoryIds) {
+        const id = typeof categoryId === 'string' ? parseInt(categoryId) : categoryId;
+        if (!isNaN(id)) {
+          await queryClient.query(
+            'INSERT INTO vendor_product_categories (vendor_id, product_category_id) VALUES ($1, $2) ON CONFLICT (vendor_id, product_category_id) DO NOTHING',
+            [vendorId, id]
+          );
+        }
+      }
+    }
+    
+    // Insert item categories
+    if (vendorData.itemCategoryIds && Array.isArray(vendorData.itemCategoryIds) && vendorData.itemCategoryIds.length > 0) {
+      for (const categoryId of vendorData.itemCategoryIds) {
+        const id = typeof categoryId === 'string' ? parseInt(categoryId) : categoryId;
+        if (!isNaN(id)) {
+          await queryClient.query(
+            'INSERT INTO vendor_item_categories (vendor_id, item_category_id) VALUES ($1, $2) ON CONFLICT (vendor_id, item_category_id) DO NOTHING',
+            [vendorId, id]
+          );
+        }
+      }
+    }
+    
+    // Insert sub categories
+    if (vendorData.subCategoryIds && Array.isArray(vendorData.subCategoryIds) && vendorData.subCategoryIds.length > 0) {
+      for (const categoryId of vendorData.subCategoryIds) {
+        const id = typeof categoryId === 'string' ? parseInt(categoryId) : categoryId;
+        if (!isNaN(id)) {
+          await queryClient.query(
+            'INSERT INTO vendor_sub_categories (vendor_id, sub_category_id) VALUES ($1, $2) ON CONFLICT (vendor_id, sub_category_id) DO NOTHING',
+            [vendorId, id]
+          );
+        }
+      }
+    }
+    
+    // Insert brands
+    if (vendorData.brandIds && Array.isArray(vendorData.brandIds) && vendorData.brandIds.length > 0) {
+      for (const brandId of vendorData.brandIds) {
+        const id = typeof brandId === 'string' ? parseInt(brandId) : brandId;
+        if (!isNaN(id)) {
+          await queryClient.query(
+            'INSERT INTO vendor_brands (vendor_id, brand_id) VALUES ($1, $2) ON CONFLICT (vendor_id, brand_id) DO NOTHING',
+            [vendorId, id]
+          );
+        }
+      }
+    }
+  }
+
+  /**
+   * Update vendor with relationships
+   */
+  static async update(id, vendorData, companyId, client = null) {
+    const queryClient = client || pool;
+    const result = await queryClient.query(
       `UPDATE vendors SET
         name = $1, contact_person = $2, department = $3, designation = $4, email = $5,
         phone = $6, whatsapp_number = $7, gst_number = $8, address = $9, city = $10,
@@ -86,7 +216,16 @@ class VendorModel {
         companyId.toUpperCase(),
       ]
     );
-    return result.rows[0];
+    
+    if (result.rows.length === 0) {
+      return null;
+    }
+    
+    // Save relationships if provided
+    await this.saveRelationships(id, vendorData, queryClient);
+    
+    // Fetch vendor with relationships
+    return await this.getById(id, companyId);
   }
 
   /**

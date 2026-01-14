@@ -177,7 +177,7 @@ const createVendor = async (req, res, next) => {
   try {
     await client.query('BEGIN');
     const companyId = getCompanyId(req);
-    const vendor = await VendorModel.create(req.body, companyId);
+    const vendor = await VendorModel.create(req.body, companyId, client);
     await client.query('COMMIT');
     res.json({ success: true, data: transformVendor(vendor) });
   } catch (error) {
@@ -275,7 +275,7 @@ const updateVendor = async (req, res, next) => {
   try {
     await client.query('BEGIN');
     const companyId = getCompanyId(req);
-    const vendor = await VendorModel.update(req.params.id, req.body, companyId);
+    const vendor = await VendorModel.update(req.params.id, req.body, companyId, client);
     
     if (!vendor) {
       await client.query('ROLLBACK');

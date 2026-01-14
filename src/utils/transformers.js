@@ -8,6 +8,22 @@
  */
 const transformVendor = (vendor) => {
   if (!vendor) return null;
+  
+  // Extract IDs from JSON arrays or regular arrays
+  const extractIds = (ids) => {
+    if (!ids) return [];
+    if (Array.isArray(ids)) return ids.map(id => typeof id === 'string' ? parseInt(id) : id).filter(id => !isNaN(id));
+    if (typeof ids === 'string') {
+      try {
+        const parsed = JSON.parse(ids);
+        return Array.isArray(parsed) ? parsed.map(id => typeof id === 'string' ? parseInt(id) : id).filter(id => !isNaN(id)) : [];
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  };
+  
   return {
     id: vendor.id,
     name: vendor.name,
@@ -23,6 +39,10 @@ const transformVendor = (vendor) => {
     state: vendor.state,
     pin: vendor.pin,
     isActive: vendor.is_active,
+    productCategoryIds: extractIds(vendor.product_category_ids),
+    itemCategoryIds: extractIds(vendor.item_category_ids),
+    subCategoryIds: extractIds(vendor.sub_category_ids),
+    brandIds: extractIds(vendor.brand_ids),
     createdAt: vendor.created_at,
     updatedAt: vendor.updated_at,
   };
