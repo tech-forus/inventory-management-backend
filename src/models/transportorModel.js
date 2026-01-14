@@ -10,7 +10,7 @@ class TransportorModel {
    */
   static async getAll(companyId) {
     const result = await pool.query(
-      'SELECT * FROM transportors WHERE company_id = $1 AND is_active = true ORDER BY transporter_name',
+      'SELECT * FROM transportors WHERE company_id = $1 ORDER BY transporter_name',
       [companyId]
     );
     return result.rows;
@@ -21,7 +21,7 @@ class TransportorModel {
    */
   static async getById(id, companyId) {
     const result = await pool.query(
-      'SELECT * FROM transportors WHERE id = $1 AND company_id = $2 AND is_active = true',
+      'SELECT * FROM transportors WHERE id = $1 AND company_id = $2',
       [id, companyId]
     );
     return result.rows[0];
