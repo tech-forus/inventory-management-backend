@@ -165,6 +165,20 @@ const getVendors = async (req, res, next) => {
     const companyId = getCompanyId(req);
     const vendors = await VendorModel.getAll(companyId);
     const transformedData = transformArray(vendors, transformVendor);
+    
+    // Debug logging
+    if (vendors.length > 0) {
+      console.log('[getVendors] Sample vendor raw data:', {
+        id: vendors[0].id,
+        name: vendors[0].name,
+        product_category_ids: vendors[0].product_category_ids,
+        brand_ids: vendors[0].brand_ids,
+        product_category_ids_type: typeof vendors[0].product_category_ids,
+        brand_ids_type: typeof vendors[0].brand_ids,
+      });
+      console.log('[getVendors] Sample vendor transformed:', transformedData[0]);
+    }
+    
     res.json({ success: true, data: transformedData });
   } catch (error) {
     next(error); // Pass error to error handler
@@ -177,11 +191,28 @@ const createVendor = async (req, res, next) => {
   try {
     await client.query('BEGIN');
     const companyId = getCompanyId(req);
+    
+    console.log('[createVendor] Request body:', {
+      productCategoryIds: req.body.productCategoryIds,
+      brandIds: req.body.brandIds,
+      productCategoryIds_type: typeof req.body.productCategoryIds,
+      brandIds_type: typeof req.body.brandIds,
+    });
+    
     const vendor = await VendorModel.create(req.body, companyId, client);
     await client.query('COMMIT');
-    res.json({ success: true, data: transformVendor(vendor) });
+    
+    const transformed = transformVendor(vendor);
+    console.log('[createVendor] Transformed vendor:', {
+      id: transformed.id,
+      productCategoryIds: transformed.productCategoryIds,
+      brandIds: transformed.brandIds,
+    });
+    
+    res.json({ success: true, data: transformed });
   } catch (error) {
     await client.query('ROLLBACK');
+    console.error('[createVendor] Error:', error);
     next(error); // Pass error to error handler
   } finally {
     client.release();
@@ -275,6 +306,15 @@ const updateVendor = async (req, res, next) => {
   try {
     await client.query('BEGIN');
     const companyId = getCompanyId(req);
+    
+    console.log('[updateVendor] Request body:', {
+      vendorId: req.params.id,
+      productCategoryIds: req.body.productCategoryIds,
+      brandIds: req.body.brandIds,
+      productCategoryIds_type: typeof req.body.productCategoryIds,
+      brandIds_type: typeof req.body.brandIds,
+    });
+    
     const vendor = await VendorModel.update(req.params.id, req.body, companyId, client);
     
     if (!vendor) {
@@ -283,9 +323,18 @@ const updateVendor = async (req, res, next) => {
     }
 
     await client.query('COMMIT');
-    res.json({ success: true, data: transformVendor(vendor) });
+    
+    const transformed = transformVendor(vendor);
+    console.log('[updateVendor] Transformed vendor:', {
+      id: transformed.id,
+      productCategoryIds: transformed.productCategoryIds,
+      brandIds: transformed.brandIds,
+    });
+    
+    res.json({ success: true, data: transformed });
   } catch (error) {
     await client.query('ROLLBACK');
+    console.error('[updateVendor] Error:', error);
     next(error);
   } finally {
     client.release();

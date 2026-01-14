@@ -10,17 +10,48 @@ const transformVendor = (vendor) => {
   if (!vendor) return null;
   
   // Extract IDs from JSON arrays or regular arrays
+  // PostgreSQL jsonb/json_agg returns arrays directly when using pg library
   const extractIds = (ids) => {
-    if (!ids) return [];
-    if (Array.isArray(ids)) return ids.map(id => typeof id === 'string' ? parseInt(id) : id).filter(id => !isNaN(id));
+    if (ids === null || ids === undefined) return [];
+    
+    // PostgreSQL jsonb returns arrays directly
+    if (Array.isArray(ids)) {
+      return ids.map(id => {
+        if (typeof id === 'number') return id;
+        if (typeof id === 'string') {
+          const numId = parseInt(id);
+          return isNaN(numId) ? null : numId;
+        }
+        return null;
+      }).filter(id => id !== null && !isNaN(id));
+    }
+    
+    // Handle JSON string (fallback)
     if (typeof ids === 'string') {
+      // Empty array string
+      if (ids === '[]' || ids.trim() === '') return [];
       try {
         const parsed = JSON.parse(ids);
-        return Array.isArray(parsed) ? parsed.map(id => typeof id === 'string' ? parseInt(id) : id).filter(id => !isNaN(id)) : [];
+        if (Array.isArray(parsed)) {
+          return parsed.map(id => {
+            if (typeof id === 'number') return id;
+            if (typeof id === 'string') {
+              const numId = parseInt(id);
+              return isNaN(numId) ? null : numId;
+            }
+            return null;
+          }).filter(id => id !== null && !isNaN(id));
+        }
       } catch (e) {
-        return [];
+        // Not JSON
       }
     }
+    
+    // Handle single number (shouldn't happen but handle it)
+    if (typeof ids === 'number') {
+      return [ids];
+    }
+    
     return [];
   };
   

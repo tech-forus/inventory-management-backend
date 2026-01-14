@@ -17,25 +17,25 @@ class VendorModel {
            FROM vendor_product_categories 
            WHERE vendor_id = v.id), 
           '[]'::json
-        ) as product_category_ids,
+        )::jsonb as product_category_ids,
         COALESCE(
           (SELECT json_agg(item_category_id) 
            FROM vendor_item_categories 
            WHERE vendor_id = v.id), 
           '[]'::json
-        ) as item_category_ids,
+        )::jsonb as item_category_ids,
         COALESCE(
           (SELECT json_agg(sub_category_id) 
            FROM vendor_sub_categories 
            WHERE vendor_id = v.id), 
           '[]'::json
-        ) as sub_category_ids,
+        )::jsonb as sub_category_ids,
         COALESCE(
           (SELECT json_agg(brand_id) 
            FROM vendor_brands 
            WHERE vendor_id = v.id), 
           '[]'::json
-        ) as brand_ids
+        )::jsonb as brand_ids
       FROM vendors v 
       WHERE v.company_id = $1 AND v.is_active = true 
       ORDER BY v.name`,
@@ -47,8 +47,9 @@ class VendorModel {
   /**
    * Get vendor by ID with relationships
    */
-  static async getById(id, companyId) {
-    const result = await pool.query(
+  static async getById(id, companyId, client = null) {
+    const queryClient = client || pool;
+    const result = await queryClient.query(
       `SELECT 
         v.*,
         COALESCE(
@@ -56,25 +57,25 @@ class VendorModel {
            FROM vendor_product_categories 
            WHERE vendor_id = v.id), 
           '[]'::json
-        ) as product_category_ids,
+        )::jsonb as product_category_ids,
         COALESCE(
           (SELECT json_agg(item_category_id) 
            FROM vendor_item_categories 
            WHERE vendor_id = v.id), 
           '[]'::json
-        ) as item_category_ids,
+        )::jsonb as item_category_ids,
         COALESCE(
           (SELECT json_agg(sub_category_id) 
            FROM vendor_sub_categories 
            WHERE vendor_id = v.id), 
           '[]'::json
-        ) as sub_category_ids,
+        )::jsonb as sub_category_ids,
         COALESCE(
           (SELECT json_agg(brand_id) 
            FROM vendor_brands 
            WHERE vendor_id = v.id), 
           '[]'::json
-        ) as brand_ids
+        )::jsonb as brand_ids
       FROM vendors v 
       WHERE v.id = $1 AND v.company_id = $2 AND v.is_active = true`,
       [id, companyId.toUpperCase()]
@@ -117,8 +118,8 @@ class VendorModel {
       await this.saveRelationships(vendor.id, vendorData, queryClient);
     }
     
-    // Fetch vendor with relationships
-    return await this.getById(vendor.id, companyId);
+    // Fetch vendor with relationships using the same client (within transaction)
+    return await this.getById(vendor.id, companyId, queryClient);
   }
 
   /**
@@ -224,8 +225,8 @@ class VendorModel {
     // Save relationships if provided
     await this.saveRelationships(id, vendorData, queryClient);
     
-    // Fetch vendor with relationships
-    return await this.getById(id, companyId);
+    // Fetch vendor with relationships using the same client (within transaction)
+    return await this.getById(id, companyId, queryClient);
   }
 
   /**
