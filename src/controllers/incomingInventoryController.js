@@ -42,6 +42,8 @@ const transformIncomingInventory = (record) => {
     freightAmount: parseFloat(record.freight_amount || 0),
     numberOfBoxes: parseInt(record.number_of_boxes || 0, 10),
     receivedBoxes: parseInt(record.received_boxes || 0, 10),
+    invoiceLevelDiscount: parseFloat(record.invoice_level_discount || 0),
+    invoiceLevelDiscountType: record.invoice_level_discount_type || 'percentage',
     isActive: record.is_active,
     createdAt: record.created_at,
     updatedAt: record.updated_at,
@@ -242,6 +244,9 @@ const updateIncomingInventoryStatus = async (req, res, next) => {
 /**
  * Transform item from snake_case to camelCase
  */
+/**
+ * Transform incoming inventory item from snake_case to camelCase
+ */
 const transformItem = (item) => {
   if (!item) return null;
   return {
@@ -265,6 +270,11 @@ const transformItem = (item) => {
     totalInclGst: parseFloat(item.total_value_incl_gst || item.total_value || 0),
     totalValueInclGst: parseFloat(item.total_value_incl_gst || item.total_value || 0),
     warranty: parseInt(item.warranty || 0, 10),
+    skuDiscount: parseFloat(item.sku_discount || 0),
+    skuDiscountAmount: parseFloat(item.sku_discount_amount || 0),
+    amountAfterSkuDiscount: parseFloat(item.amount_after_sku_discount || item.total_value_excl_gst || 0),
+    invoiceDiscountShare: parseFloat(item.invoice_discount_share || 0),
+    finalTaxableAmount: parseFloat(item.final_taxable_amount || item.total_value_excl_gst || 0),
   };
 };
 

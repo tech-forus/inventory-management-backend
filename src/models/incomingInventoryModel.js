@@ -40,8 +40,9 @@ class IncomingInventoryModel {
           vendor_id, brand_id, warranty, warranty_unit, receiving_date, received_by, remarks,
           document_type, document_sub_type, vendor_sub_type, delivery_challan_sub_type,
           destination_type, destination_id, status, total_value,
-          freight_amount, number_of_boxes, received_boxes
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+          freight_amount, number_of_boxes, received_boxes,
+          invoice_level_discount, invoice_level_discount_type
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
         RETURNING *`,
         [
           companyId.toUpperCase(),
@@ -67,6 +68,8 @@ class IncomingInventoryModel {
           inventoryData.freightAmount || 0,
           inventoryData.numberOfBoxes || 0,
           inventoryData.receivedBoxes || 0,
+          inventoryData.invoiceLevelDiscount || 0,
+          inventoryData.invoiceLevelDiscountType || 'percentage',
         ]
       );
 
@@ -89,8 +92,10 @@ class IncomingInventoryModel {
             incoming_inventory_id, sku_id, received, short,
             total_quantity, unit_price, total_value, 
             gst_percentage, gst_amount, total_value_excl_gst, total_value_incl_gst,
-            warranty
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            warranty,
+            sku_discount, sku_discount_amount, amount_after_sku_discount,
+            invoice_discount_share, final_taxable_amount
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
           RETURNING *`,
           [
             incomingInventoryId,
@@ -105,6 +110,11 @@ class IncomingInventoryModel {
             totalValueExclGst,
             totalValueInclGst,
             item.warranty || 0,
+            item.skuDiscount || 0,
+            item.skuDiscountAmount || 0,
+            item.amountAfterSkuDiscount || totalValueExclGst,
+            item.invoiceDiscountShare || 0,
+            item.finalTaxableAmount || totalValueExclGst,
           ]
         );
         insertedItems.push(itemResult.rows[0]);
