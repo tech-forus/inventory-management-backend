@@ -409,22 +409,8 @@ class IncomingInventoryModel {
 
     const itemsResult = await pool.query(
       `SELECT 
-        iii.id as item_id,
-        iii.sku_id,
-        iii.received,
-        iii.short,
-        iii.rejected,
-        iii.total_quantity,
-        iii.challan_number,
-        iii.challan_date,
-        iii.unit_price,
-        iii.total_value,
-        iii.gst_percentage,
-        iii.gst_amount,
-        iii.total_value_excl_gst,
-        iii.total_value_incl_gst,
-        iii.warranty,
-        s.sku_id as sku_code,
+        iii.*,
+        s.sku_id,
         s.item_name
       FROM incoming_inventory_items iii
       LEFT JOIN skus s ON iii.sku_id = s.id

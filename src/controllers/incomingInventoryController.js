@@ -49,6 +49,42 @@ const transformIncomingInventory = (record) => {
 };
 
 /**
+ * Transform incoming inventory history record from snake_case to camelCase
+ * This is used specifically for the history endpoint which has different field names
+ */
+const transformIncomingHistory = (record) => {
+  if (!record) return null;
+  return {
+    id: record.id,
+    invoice_date: record.invoice_date,
+    invoiceDate: record.invoice_date,
+    invoice_number: record.invoice_number,
+    invoiceNumber: record.invoice_number,
+    receiving_date: record.receiving_date,
+    receivingDate: record.receiving_date,
+    vendor_name: record.vendor_name,
+    vendorName: record.vendor_name,
+    customer_name: record.customer_name,
+    customerName: record.customer_name,
+    supplier_name: record.supplier_name || record.vendor_name || record.customer_name || null,
+    supplierName: record.supplier_name || record.vendor_name || record.customer_name || null,
+    received_by_name: record.received_by_name,
+    receivedByName: record.received_by_name,
+    total_value: parseFloat(record.total_value || 0),
+    totalValue: parseFloat(record.total_value || 0),
+    total_quantity: parseInt(record.total_quantity || 0, 10),
+    totalQuantity: parseInt(record.total_quantity || 0, 10),
+    received_quantity: parseInt(record.received_quantity || 0, 10),
+    receivedQuantity: parseInt(record.received_quantity || 0, 10),
+    total_short: parseInt(record.total_short || 0, 10),
+    totalShort: parseInt(record.total_short || 0, 10),
+    status: record.status,
+    item_count: parseInt(record.item_count || 0, 10),
+    itemCount: parseInt(record.item_count || 0, 10),
+  };
+};
+
+/**
  * Incoming Inventory Controller
  * Handles all incoming inventory-related operations
  */
@@ -135,7 +171,9 @@ const getIncomingHistory = async (req, res, next) => {
     };
 
     const history = await IncomingInventoryModel.getHistory(companyId, filters);
-    res.json({ success: true, data: history });
+    // Transform records from snake_case to camelCase (and keep both for backward compatibility)
+    const transformedHistory = history.map(transformIncomingHistory);
+    res.json({ success: true, data: transformedHistory });
   } catch (error) {
     next(error);
   }
