@@ -158,6 +158,11 @@ class IncomingInventoryModel {
         const unitPrice = item.unitPrice || 0;
         const gstPercentage = item.gstRate || item.gstPercentage || 0;
 
+        // Calculate received and short quantities
+        const receivedQty = item.received || 0;
+        // Auto-calculate short quantity: short = total_quantity - received
+        const shortQty = item.short !== undefined ? item.short : Math.max(0, quantity - receivedQty);
+
         // Use frontend-calculated GST values (trust frontend calculations)
         const totalValueExclGst = item.totalExclGst !== undefined ? parseFloat(item.totalExclGst) : (quantity * unitPrice);
         const gstAmount = item.gstAmount !== undefined ? parseFloat(item.gstAmount) : (totalValueExclGst * (gstPercentage / 100));
@@ -166,7 +171,7 @@ class IncomingInventoryModel {
         const itemResult = await client.query(
           `INSERT INTO incoming_inventory_items (
             incoming_inventory_id, sku_id, received, short,
-            total_quantity, unit_price, total_value, 
+            total_quantity, unit_price, total_value,
             gst_percentage, gst_amount, total_value_excl_gst, total_value_incl_gst,
             warranty,
             sku_discount, sku_discount_amount, amount_after_sku_discount,
@@ -176,8 +181,8 @@ class IncomingInventoryModel {
           [
             incomingInventoryId,
             item.skuId,
-            item.received || 0,
-            item.short || 0,
+            receivedQty,
+            shortQty,
             quantity,
             unitPrice,
             totalValueInclGst, // total_value stores incl GST for consistency
