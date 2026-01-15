@@ -18,28 +18,14 @@ class IncomingInventoryModel {
 
     const client = await pool.connect();
     try {
-      // 1. Fetch Vendor Catalog details
-      const vendorRes = await client.query(
-        'SELECT product_category_ids, item_category_ids, sub_category_ids FROM vendors WHERE id = $1',
-        [vendorId]
-      );
+      // 1. Fetch Vendor Catalog details from join tables
+      const productCatsRes = await client.query('SELECT product_category_id FROM vendor_product_categories WHERE vendor_id = $1', [vendorId]);
+      const itemCatsRes = await client.query('SELECT item_category_id FROM vendor_item_categories WHERE vendor_id = $1', [vendorId]);
+      const subCatsRes = await client.query('SELECT sub_category_id FROM vendor_sub_categories WHERE vendor_id = $1', [vendorId]);
 
-      if (vendorRes.rows.length === 0) {
-        throw new Error(`Vendor ID ${vendorId} not found`);
-      }
-
-      const vendor = vendorRes.rows[0];
-
-      // helper to parse if string (JSON) or use directly if Array
-      const parseIds = (val) => {
-        if (!val) return [];
-        if (Array.isArray(val)) return val;
-        try { return JSON.parse(val); } catch (e) { return []; }
-      };
-
-      const allowedProductCats = parseIds(vendor.product_category_ids);
-      const allowedItemCats = parseIds(vendor.item_category_ids);
-      const allowedSubCats = parseIds(vendor.sub_category_ids);
+      const allowedProductCats = productCatsRes.rows.map(r => r.product_category_id);
+      const allowedItemCats = itemCatsRes.rows.map(r => r.item_category_id);
+      const allowedSubCats = subCatsRes.rows.map(r => r.sub_category_id);
 
       const hasProductRestrictions = allowedProductCats.length > 0;
       const hasItemRestrictions = allowedItemCats.length > 0;
