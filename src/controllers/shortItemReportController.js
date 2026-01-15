@@ -13,7 +13,7 @@ const transformShortReport = (report) => {
   const netRejected = report.net_rejected !== undefined && report.net_rejected !== null
     ? parseInt(report.net_rejected, 10)
     : Math.max(0, shortQuantity - receivedBack);
-
+  
   return {
     id: report.id,
     incomingInventoryId: report.incoming_inventory_id,
@@ -29,9 +29,7 @@ const transformShortReport = (report) => {
     status: report.status || 'Pending',
     createdAt: report.created_at,
     vendorId: report.vendor_id ? report.vendor_id.toString() : null,
-    vendorName: report.vendor_name || null,
     brandId: report.brand_id ? report.brand_id.toString() : null,
-    brandName: report.brand_name || null,
   };
 };
 
@@ -51,7 +49,7 @@ const getAllShortItemReports = async (req, res, next) => {
     } = req.query;
 
     let query = `
-      SELECT
+      SELECT 
         iii.id,
         iii.incoming_inventory_id,
         iii.id as incoming_inventory_item_id,
@@ -63,22 +61,18 @@ const getAllShortItemReports = async (req, res, next) => {
         (iii.total_quantity - iii.received) as short_quantity,
         GREATEST(0, (iii.total_quantity - iii.received) - iii.short) as received_back,
         iii.short as net_rejected,
-        CASE
+        CASE 
           WHEN iii.short = 0 THEN 'Received Back'
           WHEN iii.short < (iii.total_quantity - iii.received) THEN 'Partially Received'
           ELSE 'Pending'
         END as status,
         iii.created_at,
         ii.vendor_id,
-        v.name as vendor_name,
-        ii.brand_id,
-        b.name as brand_name
+        ii.brand_id
       FROM incoming_inventory_items iii
       INNER JOIN incoming_inventory ii ON iii.incoming_inventory_id = ii.id
       LEFT JOIN skus s ON iii.sku_id = s.id
-      LEFT JOIN vendors v ON ii.vendor_id = v.id
-      LEFT JOIN brands b ON ii.brand_id = b.id
-      WHERE ii.company_id = $1
+      WHERE ii.company_id = $1 
         AND ii.is_active = true
         AND (iii.total_quantity - iii.received) > 0
         AND iii.short >= 0
