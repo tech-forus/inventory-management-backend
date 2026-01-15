@@ -100,18 +100,28 @@ const createIncomingInventory = async (req, res, next) => {
     const { items, ...inventoryData } = req.body;
 
     // Log the incoming data for debugging
-    logger.debug({ 
-      companyId, 
+    logger.debug({
+      companyId,
       inventoryDataKeys: Object.keys(inventoryData),
       itemsCount: items?.length,
-      documentType: inventoryData.documentType 
+      documentType: inventoryData.documentType
     }, 'Creating incoming inventory');
 
     // Validation is now handled by middleware
     // Additional business logic validation can go here if needed
 
+    // Strict Lineage Validation (SKU Integrity)
+    if (items && items.length > 0) {
+      await IncomingInventoryModel.validateItemsLineage(
+        items,
+        inventoryData.brandId,
+        inventoryData.vendorId, // Pass Vendor ID for Catalog Validation
+        companyId
+      );
+    }
+
     const result = await IncomingInventoryModel.create(inventoryData, items, companyId);
-    
+
     // Update price history if status is 'completed'
     if (inventoryData.status === 'completed' && result.id) {
       try {
@@ -121,13 +131,13 @@ const createIncomingInventory = async (req, res, next) => {
         // Don't fail the request if price history update fails
       }
     }
-    
+
     res.json({ success: true, data: result });
   } catch (error) {
-    logger.error({ 
-      error: error.message, 
+    logger.error({
+      error: error.message,
       stack: error.stack,
-      body: req.body 
+      body: req.body
     }, 'Error in createIncomingInventory controller');
     next(error); // Pass error to error handler
   }
@@ -150,7 +160,7 @@ const getAllIncomingInventory = async (req, res, next) => {
 
     const records = await IncomingInventoryModel.getAll(companyId, filters);
     logger.debug({ requestId: req.id, recordCount: records.length }, 'Fetched incoming inventory records');
-    
+
     const transformedRecords = records.map(transformIncomingInventory);
     res.json({ success: true, data: transformedRecords });
   } catch (error) {
@@ -197,9 +207,9 @@ const getIncomingInventoryById = async (req, res, next) => {
     // Transform the record and items from snake_case to camelCase
     const transformedRecord = transformIncomingInventory(record);
     const transformedItems = record.items ? record.items.map(transformItem) : [];
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       data: {
         ...transformedRecord,
         items: transformedItems
@@ -224,7 +234,7 @@ const updateIncomingInventoryStatus = async (req, res, next) => {
     }
 
     const result = await IncomingInventoryModel.updateStatus(id, status, companyId);
-    
+
     // Update price history if status changed to 'completed'
     if (status === 'completed') {
       try {
@@ -234,7 +244,7 @@ const updateIncomingInventoryStatus = async (req, res, next) => {
         // Don't fail the request if price history update fails
       }
     }
-    
+
     res.json({ success: true, data: result });
   } catch (error) {
     next(error);
@@ -316,7 +326,7 @@ const moveReceivedToRejected = async (req, res, next) => {
     // Get item details BEFORE moving to rejected (for report creation)
     const itemResultBefore = await IncomingInventoryModel.getItemsByInventoryId(id, companyId);
     const itemBefore = itemResultBefore.find(i => (i.item_id || i.itemId) === parseInt(itemId));
-    
+
     if (!itemBefore) {
       throw new ValidationError('Item not found');
     }
@@ -326,7 +336,7 @@ const moveReceivedToRejected = async (req, res, next) => {
 
     // Move to rejected in inventory
     const result = await IncomingInventoryModel.moveReceivedToRejected(id, itemId, moveQty, companyId);
-    
+
     // Create rejected item report - ALWAYS create a new report for each rejection action
     // Each rejection creates a new report with sequential number (001, 002, 003, etc.)
     let reportCreated = false;
@@ -334,7 +344,7 @@ const moveReceivedToRejected = async (req, res, next) => {
       // Get item details for the report (after update) - need SKU and item name
       const itemResult = await IncomingInventoryModel.getItemsByInventoryId(id, companyId);
       const item = itemResult.find(i => (i.item_id || i.itemId) === parseInt(itemId));
-      
+
       if (!item) {
         logger.error({ itemId, inventoryId: id }, 'Item not found after update');
         throw new Error('Item not found after update');
@@ -364,28 +374,28 @@ const moveReceivedToRejected = async (req, res, next) => {
         reason: reason ? reason.trim().substring(0, 30) : null,
       };
 
-      logger.info({ 
-        reportData, 
+      logger.info({
+        reportData,
         companyId: companyId.toUpperCase(),
         oldRejected: oldRejected,
         newRejected: item.rejected || 0,
         moveQty
       }, 'Creating rejected item report');
-      
+
       const createdReport = await RejectedItemReportModel.create(reportData, companyId);
       reportCreated = true;
-      
-      logger.info({ 
-        reportId: createdReport.id, 
+
+      logger.info({
+        reportId: createdReport.id,
         reportNumber: createdReport.report_number,
         quantity: moveQty,
         invoiceNumber: createdReport.original_invoice_number
       }, 'Successfully created rejected item report');
-      
+
     } catch (reportError) {
       // Log the error with full context
-      logger.error({ 
-        error: reportError.message, 
+      logger.error({
+        error: reportError.message,
         stack: reportError.stack,
         itemId,
         inventoryId: id,
@@ -395,21 +405,21 @@ const moveReceivedToRejected = async (req, res, next) => {
         reportErrorCode: reportError.code,
         reportErrorDetail: reportError.detail
       }, 'Error creating rejected item report');
-      
+
       // Return success for inventory update, but include warning about report creation failure
       // This allows the inventory operation to complete even if report creation fails
-      res.json({ 
-        success: true, 
+      res.json({
+        success: true,
         data: result,
         warning: `Inventory updated successfully, but failed to create rejected item report: ${reportError.message}`,
         reportCreated: false
       });
       return;
     }
-    
+
     // Return success with report creation confirmation
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       data: result,
       reportCreated: true,
       message: 'Items moved to rejected and report created successfully'
@@ -579,7 +589,7 @@ const getRejectedItems = async (req, res, next) => {
 
     const items = await IncomingInventoryModel.getRejectedItems(companyId, filters);
     logger.debug({ requestId: req.id, itemCount: items.length }, 'Fetched rejected items');
-    
+
     // Transform to camelCase
     const transformedItems = items.map(item => ({
       itemId: item.item_id,
@@ -627,7 +637,7 @@ const getPriceHistory = async (req, res, next) => {
 
     // Check if skuId is a numeric ID or a SKU code string
     let numericSkuId = parseInt(skuId);
-    
+
     // If parseInt returns NaN, it means skuId is a SKU code string
     // We need to look up the numeric ID from the skus table
     if (isNaN(numericSkuId)) {
@@ -636,11 +646,11 @@ const getPriceHistory = async (req, res, next) => {
         'SELECT id FROM skus WHERE sku_id = $1 AND company_id = $2 AND is_active = true',
         [skuId, companyId.toUpperCase()]
       );
-      
+
       if (skuResult.rows.length === 0) {
         throw new ValidationError('SKU not found');
       }
-      
+
       numericSkuId = skuResult.rows[0].id;
     }
 
@@ -665,7 +675,7 @@ const hasPriceHistory = async (req, res, next) => {
 
     // Check if skuId is a numeric ID or a SKU code string
     let numericSkuId = parseInt(skuId);
-    
+
     // If parseInt returns NaN, it means skuId is a SKU code string
     // We need to look up the numeric ID from the skus table
     if (isNaN(numericSkuId)) {
@@ -674,11 +684,11 @@ const hasPriceHistory = async (req, res, next) => {
         'SELECT id FROM skus WHERE sku_id = $1 AND company_id = $2 AND is_active = true',
         [skuId, companyId.toUpperCase()]
       );
-      
+
       if (skuResult.rows.length === 0) {
         return res.json({ success: true, data: { hasHistory: false } });
       }
-      
+
       numericSkuId = skuResult.rows[0].id;
     }
 

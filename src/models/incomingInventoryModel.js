@@ -7,6 +7,96 @@ const { logger } = require('../utils/logger');
  */
 class IncomingInventoryModel {
   /**
+   * Validate that all items belong to the selected Brand and respect Vendor Catalog restrictions
+   * @param {Array} items - List of items with skuId
+   * @param {number|string} brandId - Selected Brand ID
+   * @param {number|string} vendorId - Selected Vendor ID
+   * @param {string} companyId - Company ID
+   */
+  static async validateItemsLineage(items, brandId, vendorId, companyId) {
+    if (!items || items.length === 0) return;
+
+    const client = await pool.connect();
+    try {
+      // 1. Fetch Vendor Catalog details
+      const vendorRes = await client.query(
+        'SELECT product_category_ids, item_category_ids, sub_category_ids FROM vendors WHERE id = $1',
+        [vendorId]
+      );
+
+      if (vendorRes.rows.length === 0) {
+        throw new Error(`Vendor ID ${vendorId} not found`);
+      }
+
+      const vendor = vendorRes.rows[0];
+
+      // helper to parse if string (JSON) or use directly if Array
+      const parseIds = (val) => {
+        if (!val) return [];
+        if (Array.isArray(val)) return val;
+        try { return JSON.parse(val); } catch (e) { return []; }
+      };
+
+      const allowedProductCats = parseIds(vendor.product_category_ids);
+      const allowedItemCats = parseIds(vendor.item_category_ids);
+      const allowedSubCats = parseIds(vendor.sub_category_ids);
+
+      const hasProductRestrictions = allowedProductCats.length > 0;
+      const hasItemRestrictions = allowedItemCats.length > 0;
+      const hasSubRestrictions = allowedSubCats.length > 0;
+
+      // 2. Fetch details for all SKUs in the invoice
+      const skuIds = [...new Set(items.map(i => i.skuId))]; // Unique IDs
+
+      const skusRes = await client.query(
+        `SELECT id, code, name, brand_id, product_category_id, item_category_id, sub_category_id 
+         FROM skus 
+         WHERE id = ANY($1::int[]) AND company_id = $2`,
+        [skuIds, companyId.toUpperCase()]
+      );
+
+      const skusMap = new Map(skusRes.rows.map(s => [s.id, s]));
+
+      // 3. Iterate and Validate
+      for (const item of items) {
+        if (!item.skuId) continue;
+
+        const sku = skusMap.get(item.skuId);
+        if (!sku) {
+          throw new Error(`SKU ID ${item.skuId} not found in database or belongs to another company.`);
+        }
+
+        // A. Brand Integrity
+        if (brandId && sku.brand_id != brandId) {
+          throw new Error(`Integrity Violation: SKU '${sku.code}' (Brand ID: ${sku.brand_id}) does not belong to the selected Brand (ID: ${brandId}).`);
+        }
+
+        // B. Vendor Catalog Integrity
+        if (hasProductRestrictions) {
+          if (!sku.product_category_id || !allowedProductCats.includes(sku.product_category_id)) {
+            throw new Error(`Integrity Violation: SKU '${sku.code}' Product Category is not authorized for this Vendor.`);
+          }
+        }
+
+        if (hasItemRestrictions) {
+          if (!sku.item_category_id || !allowedItemCats.includes(sku.item_category_id)) {
+            throw new Error(`Integrity Violation: SKU '${sku.code}' Item Category is not authorized for this Vendor.`);
+          }
+        }
+
+        if (hasSubRestrictions) {
+          if (!sku.sub_category_id || !allowedSubCats.includes(sku.sub_category_id)) {
+            throw new Error(`Integrity Violation: SKU '${sku.code}' Sub Category is not authorized for this Vendor.`);
+          }
+        }
+      }
+
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
    * Create a new incoming inventory transaction with items
    */
   static async create(inventoryData, items, companyId) {
@@ -81,12 +171,12 @@ class IncomingInventoryModel {
         const quantity = item.totalQuantity || 0;
         const unitPrice = item.unitPrice || 0;
         const gstPercentage = item.gstRate || item.gstPercentage || 0;
-        
+
         // Use frontend-calculated GST values (trust frontend calculations)
         const totalValueExclGst = item.totalExclGst !== undefined ? parseFloat(item.totalExclGst) : (quantity * unitPrice);
         const gstAmount = item.gstAmount !== undefined ? parseFloat(item.gstAmount) : (totalValueExclGst * (gstPercentage / 100));
         const totalValueInclGst = item.totalInclGst !== undefined ? parseFloat(item.totalInclGst) : (totalValueExclGst + gstAmount);
-        
+
         const itemResult = await client.query(
           `INSERT INTO incoming_inventory_items (
             incoming_inventory_id, sku_id, received, short,
@@ -140,8 +230,8 @@ class IncomingInventoryModel {
       };
     } catch (error) {
       await client.query('ROLLBACK');
-      logger.error({ 
-        error: error.message, 
+      logger.error({
+        error: error.message,
         stack: error.stack,
         code: error.code,
         detail: error.detail,
@@ -156,7 +246,7 @@ class IncomingInventoryModel {
           vendorId: inventoryData.vendorId,
           brandId: inventoryData.brandId,
         },
-        itemsCount: items?.length 
+        itemsCount: items?.length
       }, 'Error creating incoming inventory in model');
       throw error;
     } finally {
@@ -850,7 +940,7 @@ class IncomingInventoryModel {
       const oldShort = currentItem.short || 0;
       const oldRejected = currentItem.rejected || 0;
       const totalQty = currentItem.total_quantity || 0;
-      
+
       // Get new values from updates (only what's provided)
       const newRejected = updates.rejected !== undefined ? parseInt(updates.rejected, 10) : oldRejected;
       const newShort = updates.short !== undefined ? parseInt(updates.short, 10) : oldShort;
@@ -918,7 +1008,7 @@ class IncomingInventoryModel {
       // When short increases: stock decreases (items moved to short, remove from stock)
       const rejectedDiff = newRejected - oldRejected;
       const shortDiff = newShort - oldShort;
-      
+
       // Rejected changes affect stock
       if (rejectedDiff !== 0) {
         await client.query(
@@ -927,7 +1017,7 @@ class IncomingInventoryModel {
         );
         logger.debug({ skuId: currentItem.sku_id, stockChange: -rejectedDiff }, `Updated SKU ${currentItem.sku_id} stock: ${rejectedDiff > 0 ? '-' : '+'}${Math.abs(rejectedDiff)} (from rejected update)`);
       }
-      
+
       // Short changes directly affect stock (short value directly updates available stock)
       // When short decreases (items arrive): stock increases
       // When short increases (items become short): stock decreases
