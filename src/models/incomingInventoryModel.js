@@ -35,7 +35,7 @@ class IncomingInventoryModel {
       const skuIds = [...new Set(items.map(i => i.skuId))]; // Unique IDs
 
       const skusRes = await client.query(
-        `SELECT id, code, name, brand_id, product_category_id, item_category_id, sub_category_id 
+        `SELECT id, sku_id, item_name, brand_id, product_category_id, item_category_id, sub_category_id 
          FROM skus 
          WHERE id = ANY($1::int[]) AND company_id = $2`,
         [skuIds, companyId.toUpperCase()]
@@ -54,25 +54,25 @@ class IncomingInventoryModel {
 
         // A. Brand Integrity
         if (brandId && sku.brand_id != brandId) {
-          throw new Error(`Integrity Violation: SKU '${sku.code}' (Brand ID: ${sku.brand_id}) does not belong to the selected Brand (ID: ${brandId}).`);
+          throw new Error(`Integrity Violation: SKU '${sku.sku_id}' (Brand ID: ${sku.brand_id}) does not belong to the selected Brand (ID: ${brandId}).`);
         }
 
         // B. Vendor Catalog Integrity
         if (hasProductRestrictions) {
           if (!sku.product_category_id || !allowedProductCats.includes(sku.product_category_id)) {
-            throw new Error(`Integrity Violation: SKU '${sku.code}' Product Category is not authorized for this Vendor.`);
+            throw new Error(`Integrity Violation: SKU '${sku.sku_id}' Product Category is not authorized for this Vendor.`);
           }
         }
 
         if (hasItemRestrictions) {
           if (!sku.item_category_id || !allowedItemCats.includes(sku.item_category_id)) {
-            throw new Error(`Integrity Violation: SKU '${sku.code}' Item Category is not authorized for this Vendor.`);
+            throw new Error(`Integrity Violation: SKU '${sku.sku_id}' Item Category is not authorized for this Vendor.`);
           }
         }
 
         if (hasSubRestrictions) {
           if (!sku.sub_category_id || !allowedSubCats.includes(sku.sub_category_id)) {
-            throw new Error(`Integrity Violation: SKU '${sku.code}' Sub Category is not authorized for this Vendor.`);
+            throw new Error(`Integrity Violation: SKU '${sku.sku_id}' Sub Category is not authorized for this Vendor.`);
           }
         }
       }
