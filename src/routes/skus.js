@@ -128,6 +128,8 @@ router.get('/', async (req, res, next) => {
       brand,
       stockStatus,
       hsnCode,
+      sortBy,
+      sortOrder = 'asc',
       page = 1,
       limit = 20,
     } = req.query;
@@ -196,6 +198,8 @@ router.get('/', async (req, res, next) => {
         query += ` AND s.current_stock > 0 AND s.current_stock < s.min_stock_level`;
       } else if (stockStatus === 'in') {
         query += ` AND s.current_stock > 0 AND s.current_stock >= s.min_stock_level`;
+      } else if (stockStatus === 'alert') {
+        query += ` AND (s.current_stock < s.min_stock_level OR s.current_stock = 0)`;
       }
     }
     if (hsnCode) {
@@ -204,9 +208,22 @@ router.get('/', async (req, res, next) => {
       paramIndex++;
     }
 
+    // Add sorting
+    const validSortFields = {
+      skuId: 's.sku_id',
+      itemName: 's.item_name',
+      brand: 'b.name',
+      currentStock: 's.current_stock',
+      usefulStocks: 's.current_stock',
+      createdAt: 's.created_at'
+    };
+
+    const sortField = validSortFields[sortBy] || 's.created_at';
+    const sortDirection = sortOrder === 'desc' ? 'DESC' : 'ASC';
+
     // Add pagination
     const offset = (parseInt(page) - 1) * parseInt(limit);
-    query += ` ORDER BY s.created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    query += ` ORDER BY ${sortField} ${sortDirection} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
     params.push(parseInt(limit), offset);
 
     const result = await pool.query(query, params);
