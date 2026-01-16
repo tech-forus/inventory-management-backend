@@ -556,7 +556,7 @@ router.put(
     // Determine if ID is numeric or alphanumeric
     const idParam = req.params.id;
     const isNumeric = /^\d+$/.test(idParam);
-    const whereClause = isNumeric ? 'id = $41' : 'sku_id = $41';
+    const whereClause = isNumeric ? 'id = $42' : 'sku_id = $42';
     const idValue = isNumeric ? parseInt(idParam, 10) : idParam;
     const companyId = getCompanyId(req).toUpperCase();
 
