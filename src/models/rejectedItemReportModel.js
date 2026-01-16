@@ -126,10 +126,12 @@ class RejectedItemReportModel {
           ii.vendor_id,
           ii.brand_id,
           v.name as vendor_name,
-          b.name as brand_name
+          b.name as brand_name,
+          iii.unit_price as original_unit_price
         FROM rejected_item_reports rir
         LEFT JOIN skus s ON rir.sku_id = s.id
         LEFT JOIN incoming_inventory ii ON rir.incoming_inventory_id = ii.id
+        LEFT JOIN incoming_inventory_items iii ON rir.incoming_inventory_item_id = iii.id
         LEFT JOIN vendors v ON ii.vendor_id = v.id
         LEFT JOIN brands b ON ii.brand_id = b.id
         WHERE rir.company_id = $1 AND rir.is_active = true
@@ -234,10 +236,12 @@ class RejectedItemReportModel {
         ii.vendor_id,
         ii.brand_id,
         v.name as vendor_name,
-        b.name as brand_name
+        b.name as brand_name,
+        iii.unit_price as original_unit_price
       FROM rejected_item_reports rir
       LEFT JOIN skus s ON rir.sku_id = s.id
       LEFT JOIN incoming_inventory ii ON rir.incoming_inventory_id = ii.id
+      LEFT JOIN incoming_inventory_items iii ON rir.incoming_inventory_item_id = iii.id
       LEFT JOIN vendors v ON ii.vendor_id = v.id
       LEFT JOIN brands b ON ii.brand_id = b.id
       WHERE rir.id = $1 

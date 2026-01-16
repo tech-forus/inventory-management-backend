@@ -38,6 +38,7 @@ const transformReport = (report) => {
     brandId: report.brand_id ? report.brand_id.toString() : null,
     vendorName: report.vendor_name || null,
     brandName: report.brand_name || null,
+    originalUnitPrice: parseFloat(report.original_unit_price || 0),
   };
 };
 

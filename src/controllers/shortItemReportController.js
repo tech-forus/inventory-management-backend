@@ -33,6 +33,7 @@ const transformShortReport = (report) => {
     vendorName: report.vendor_name || null,
     brandName: report.brand_name || null,
     supplierName: report.supplier_name || null,
+    originalUnitPrice: parseFloat(report.original_unit_price || 0),
   };
 };
 
@@ -61,6 +62,7 @@ const getAllShortItemReports = async (req, res, next) => {
         iii.sku_id,
         s.sku_id as sku_code,
         s.item_name,
+        iii.unit_price as original_unit_price,
         (iii.total_quantity - iii.received) as short_quantity,
         GREATEST(0, (iii.total_quantity - iii.received) - iii.short) as received_back,
         iii.short as net_rejected,
@@ -158,6 +160,7 @@ const getShortItemReportById = async (req, res, next) => {
         iii.sku_id,
         s.sku_id as sku_code,
         s.item_name,
+        iii.unit_price as original_unit_price,
         (iii.total_quantity - iii.received) as short_quantity,
         GREATEST(0, (iii.total_quantity - iii.received) - iii.short) as received_back,
         iii.short as net_rejected,
