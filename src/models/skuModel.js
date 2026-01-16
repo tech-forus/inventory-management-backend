@@ -93,12 +93,14 @@ class SKUModel {
       paramIndex++;
     }
     if (filters.stockStatus) {
-      if (filters.stockStatus === 'low') {
-        query += ` AND s.current_stock <= s.min_stock_level`;
+      if (filters.stockStatus === 'critical') {
+        query += ` AND s.current_stock = 0 AND s.min_stock_level > 0`;
       } else if (filters.stockStatus === 'out') {
-        query += ` AND s.current_stock = 0`;
+        query += ` AND s.current_stock = 0 AND (s.min_stock_level <= 0 OR s.min_stock_level IS NULL)`;
+      } else if (filters.stockStatus === 'low') {
+        query += ` AND s.current_stock > 0 AND s.current_stock < s.min_stock_level`;
       } else if (filters.stockStatus === 'in') {
-        query += ` AND s.current_stock > s.min_stock_level`;
+        query += ` AND s.current_stock > 0 AND s.current_stock >= s.min_stock_level`;
       }
     }
     if (filters.hsnCode) {
@@ -107,12 +109,36 @@ class SKUModel {
       paramIndex++;
     }
 
+
+    // Add dynamic sorting
+    let orderBy = 's.created_at DESC'; // default
+    if (filters.sortBy) {
+      const validSortFields = {
+        'productCategory': 'pc.name',
+        'itemCategory': 'ic.name',
+        'subCategory': 'sc.name',
+        'itemName': 's.item_name',
+        'brand': 'b.name',
+        'vendor': 'v.name',
+        'currentStock': 's.current_stock',
+        'skuId': 's.sku_id',
+        'model': 's.model',
+        'hsnSacCode': 's.hsn_sac_code'
+      };
+
+      if (validSortFields[filters.sortBy]) {
+        const direction = filters.sortOrder === 'desc' ? 'DESC' : 'ASC';
+        orderBy = `${validSortFields[filters.sortBy]} ${direction}`;
+      }
+    }
+
     // Add pagination (ensure valid values)
     const page = Math.max(1, parseInt(filters.page) || 1); // Ensure page >= 1
     const limit = Math.max(1, parseInt(filters.limit) || 20); // Ensure limit >= 1
     const offset = Math.max(0, (page - 1) * limit); // Ensure offset >= 0
-    query += ` ORDER BY s.created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    query += ` ORDER BY ${orderBy} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
     params.push(limit, offset);
+
 
     const result = await pool.query(query, params);
     return result.rows;
@@ -180,12 +206,14 @@ class SKUModel {
       paramIndex++;
     }
     if (filters.stockStatus) {
-      if (filters.stockStatus === 'low') {
-        query += ` AND s.current_stock <= s.min_stock_level`;
+      if (filters.stockStatus === 'critical') {
+        query += ` AND s.current_stock = 0 AND s.min_stock_level > 0`;
       } else if (filters.stockStatus === 'out') {
-        query += ` AND s.current_stock = 0`;
+        query += ` AND s.current_stock = 0 AND (s.min_stock_level <= 0 OR s.min_stock_level IS NULL)`;
+      } else if (filters.stockStatus === 'low') {
+        query += ` AND s.current_stock > 0 AND s.current_stock < s.min_stock_level`;
       } else if (filters.stockStatus === 'in') {
-        query += ` AND s.current_stock > s.min_stock_level`;
+        query += ` AND s.current_stock > 0 AND s.current_stock >= s.min_stock_level`;
       }
     }
     if (filters.hsnCode) {

@@ -81,12 +81,14 @@ router.get('/', async (req, res, next) => {
       paramIndex++;
     }
     if (stockStatus) {
-      if (stockStatus === 'low') {
-        query += ` AND s.current_stock <= s.min_stock_level`;
+      if (stockStatus === 'critical') {
+        query += ` AND s.current_stock = 0 AND s.min_stock_level > 0`;
       } else if (stockStatus === 'out') {
-        query += ` AND s.current_stock = 0`;
+        query += ` AND s.current_stock = 0 AND (s.min_stock_level <= 0 OR s.min_stock_level IS NULL)`;
+      } else if (stockStatus === 'low') {
+        query += ` AND s.current_stock > 0 AND s.current_stock < s.min_stock_level`;
       } else if (stockStatus === 'in') {
-        query += ` AND s.current_stock > s.min_stock_level`;
+        query += ` AND s.current_stock > 0 AND s.current_stock >= s.min_stock_level`;
       }
     }
 
