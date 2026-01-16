@@ -29,6 +29,8 @@ const getAllSKUs = async (req, res, next) => {
       hsnCode: req.query.hsnCode,
       page: req.query.page || 1,
       limit: req.query.limit || 20,
+      sortBy: req.query.sortBy,
+      sortOrder: req.query.sortOrder,
     };
     const skus = await SKUModel.getAll(filters, companyId);
     const total = await SKUModel.getCount(filters, companyId);
