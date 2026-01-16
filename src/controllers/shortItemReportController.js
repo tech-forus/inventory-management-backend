@@ -13,7 +13,7 @@ const transformShortReport = (report) => {
   const netRejected = report.net_rejected !== undefined && report.net_rejected !== null
     ? parseInt(report.net_rejected, 10)
     : Math.max(0, shortQuantity - receivedBack);
-  
+
   return {
     id: report.id,
     incomingInventoryId: report.incoming_inventory_id,
@@ -30,6 +30,9 @@ const transformShortReport = (report) => {
     createdAt: report.created_at,
     vendorId: report.vendor_id ? report.vendor_id.toString() : null,
     brandId: report.brand_id ? report.brand_id.toString() : null,
+    vendorName: report.vendor_name || null,
+    brandName: report.brand_name || null,
+    supplierName: report.supplier_name || null,
   };
 };
 
@@ -68,16 +71,22 @@ const getAllShortItemReports = async (req, res, next) => {
         END as status,
         iii.created_at,
         ii.vendor_id,
-        ii.brand_id
+        ii.brand_id,
+        v.name as vendor_name,
+        b.name as brand_name,
+        COALESCE(v.name, c.customer_name) as supplier_name
       FROM incoming_inventory_items iii
       INNER JOIN incoming_inventory ii ON iii.incoming_inventory_id = ii.id
       LEFT JOIN skus s ON iii.sku_id = s.id
+      LEFT JOIN vendors v ON ii.vendor_id = v.id
+      LEFT JOIN brands b ON ii.brand_id = b.id
+      LEFT JOIN customers c ON ii.destination_id = c.id AND ii.destination_type = 'customer'
       WHERE ii.company_id = $1 
         AND ii.is_active = true
         AND (iii.total_quantity - iii.received) > 0
         AND iii.short >= 0
     `;
-    
+
     const params = [companyId.toUpperCase()];
     let paramIndex = 2;
 
@@ -159,10 +168,16 @@ const getShortItemReportById = async (req, res, next) => {
         END as status,
         iii.created_at,
         ii.vendor_id,
-        ii.brand_id
+        ii.brand_id,
+        v.name as vendor_name,
+        b.name as brand_name,
+        COALESCE(v.name, c.customer_name) as supplier_name
       FROM incoming_inventory_items iii
       INNER JOIN incoming_inventory ii ON iii.incoming_inventory_id = ii.id
       LEFT JOIN skus s ON iii.sku_id = s.id
+      LEFT JOIN vendors v ON ii.vendor_id = v.id
+      LEFT JOIN brands b ON ii.brand_id = b.id
+      LEFT JOIN customers c ON ii.destination_id = c.id AND ii.destination_type = 'customer'
       WHERE iii.id = $1 
         AND ii.company_id = $2
         AND ii.is_active = true
