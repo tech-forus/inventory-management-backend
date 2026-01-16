@@ -259,8 +259,14 @@ const updateIncomingInventoryStatus = async (req, res, next) => {
  */
 const transformItem = (item) => {
   if (!item) return null;
+
+  // Handle multiple possible field names for item ID
+  const itemIdValue = item.item_id || item.id;
+
   return {
-    itemId: item.item_id,
+    // Include both versions for maximum compatibility
+    itemId: itemIdValue,
+    item_id: itemIdValue,
     skuId: item.sku_id,
     skuCode: item.sku_code,
     itemName: item.item_name,
@@ -297,7 +303,28 @@ const getIncomingInventoryItems = async (req, res, next) => {
     const { id } = req.params;
 
     const items = await IncomingInventoryModel.getItemsByInventoryId(id, companyId);
+
+    // Debug logging - check what database returns
+    if (items.length > 0) {
+      logger.debug({
+        inventoryId: id,
+        firstItemKeys: Object.keys(items[0]),
+        firstItemId: items[0].item_id,
+        firstItemIdField: items[0].id,
+      }, 'Raw database result before transformation');
+    }
+
     const transformedItems = items.map(transformItem);
+
+    // Debug logging - check transformed result
+    if (transformedItems.length > 0) {
+      logger.debug({
+        inventoryId: id,
+        firstTransformedKeys: Object.keys(transformedItems[0]),
+        firstTransformedItemId: transformedItems[0].itemId
+      }, 'Transformed result');
+    }
+
     res.json({ success: true, data: transformedItems });
   } catch (error) {
     next(error);
