@@ -132,6 +132,7 @@ router.get('/', async (req, res, next) => {
       sortOrder = 'asc',
       page = 1,
       limit = 20,
+      excludeNonMovable,
     } = req.query;
     let query = `
       SELECT 
@@ -206,6 +207,9 @@ router.get('/', async (req, res, next) => {
       query += ` AND s.hsn_sac_code ILIKE $${paramIndex}`;
       params.push(`%${hsnCode}%`);
       paramIndex++;
+    }
+    if (excludeNonMovable === 'true') {
+      query += ` AND s.is_non_movable = false`;
     }
 
     // Add sorting
@@ -910,6 +914,44 @@ router.get('/analytics/non-movable', async (req, res, next) => {
     res.json({
       success: true,
       data: transformedData
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * PATCH /api/skus/bulk-non-movable
+ * Mark multiple SKUs as non-movable
+ */
+router.patch('/bulk-non-movable', async (req, res, next) => {
+  try {
+    const { ids } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, error: 'No IDs provided' });
+    }
+
+    const companyId = getCompanyId(req).toUpperCase();
+
+    // We support both numeric IDs and alphanumeric SKU IDs
+    const isNumericArray = ids.every(id => /^\d+$/.test(String(id)));
+    const idColumn = isNumericArray ? 'id' : 'sku_id';
+
+    const query = `
+      UPDATE skus 
+      SET is_non_movable = true, updated_at = NOW()
+      WHERE company_id = $1 AND ${idColumn} = ANY($2)
+      RETURNING id
+    `;
+
+    const result = await pool.query(query, [companyId, ids]);
+
+    res.json({
+      success: true,
+      data: {
+        updatedCount: result.rowCount,
+        ids: result.rows.map(row => row.id)
+      }
     });
   } catch (error) {
     next(error);
