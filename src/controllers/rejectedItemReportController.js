@@ -15,7 +15,7 @@ const transformReport = (report) => {
   const netRejected = report.net_rejected !== undefined && report.net_rejected !== null
     ? parseInt(report.net_rejected, 10)
     : Math.max(0, quantity - sentToVendor - receivedBack - scrapped);
-  
+
   return {
     id: report.id,
     reportNumber: report.report_number,
@@ -36,6 +36,8 @@ const transformReport = (report) => {
     incomingInventoryItemId: report.incoming_inventory_item_id,
     vendorId: report.vendor_id ? report.vendor_id.toString() : null,
     brandId: report.brand_id ? report.brand_id.toString() : null,
+    vendorName: report.vendor_name || null,
+    brandName: report.brand_name || null,
   };
 };
 
