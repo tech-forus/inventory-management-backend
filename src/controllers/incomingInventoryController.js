@@ -439,7 +439,7 @@ const moveShortToRejected = async (req, res, next) => {
     const { itemId, quantity } = req.body;
 
     if (!itemId) {
-      throw new ValidationError('itemId is required');
+      throw new ValidationError('Item ID not found. The item may not be fully loaded. Please refresh the page and try again.');
     }
 
     const result = await IncomingInventoryModel.moveShortToRejected(id, itemId, quantity, companyId);
