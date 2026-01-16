@@ -309,11 +309,11 @@ class SKUModel {
         material, manufacture_or_import, color,
         weight, weight_unit, length, length_unit, width, width_unit, height, height_unit,
         min_stock_level, reorder_point, default_storage_location,
-        current_stock, custom_fields, status, is_active
+        current_stock, custom_fields, status, is_active, is_non_movable
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
         $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27,
-        $28, $29, $30, $31, $32, $33, $34
+        $28, $29, $30, $31, $32, $33, $34, $35
       ) RETURNING *`,
       [
         companyId.toUpperCase(),
