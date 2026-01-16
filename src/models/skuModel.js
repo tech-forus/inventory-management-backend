@@ -101,6 +101,8 @@ class SKUModel {
         query += ` AND s.current_stock > 0 AND s.current_stock < s.min_stock_level`;
       } else if (filters.stockStatus === 'in') {
         query += ` AND s.current_stock > 0 AND s.current_stock >= s.min_stock_level`;
+      } else if (filters.stockStatus === 'alert') {
+        query += ` AND (s.current_stock < s.min_stock_level OR s.current_stock = 0)`;
       }
     }
     if (filters.hsnCode) {
@@ -214,6 +216,8 @@ class SKUModel {
         query += ` AND s.current_stock > 0 AND s.current_stock < s.min_stock_level`;
       } else if (filters.stockStatus === 'in') {
         query += ` AND s.current_stock > 0 AND s.current_stock >= s.min_stock_level`;
+      } else if (filters.stockStatus === 'alert') {
+        query += ` AND (s.current_stock < s.min_stock_level OR s.current_stock = 0)`;
       }
     }
     if (filters.hsnCode) {
