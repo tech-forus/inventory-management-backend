@@ -107,6 +107,7 @@ const transformSKU = (sku) => {
     reorderPoint: sku.reorder_point,
     defaultStorageLocation: sku.default_storage_location,
     isActive: sku.is_active,
+    isNonMovable: sku.is_non_movable,
     createdAt: sku.created_at,
     updatedAt: sku.updated_at,
   };
