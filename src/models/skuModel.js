@@ -354,6 +354,7 @@ class SKUModel {
         customFields ? JSON.stringify(customFields) : null,
         skuData.status || 'active',
         skuData.status === 'active',
+        skuData.isNonMovable || false,
       ]
     );
     return result.rows[0];
@@ -376,7 +377,7 @@ class SKUModel {
       }
     }
 
-    let paramIndex = 33;
+    let paramIndex = 34;
     let query = `
       UPDATE skus SET
         product_category_id = $1, item_category_id = $2, sub_category_id = $3,
@@ -386,7 +387,7 @@ class SKUModel {
         weight = $18, weight_unit = $19, length = $20, length_unit = $21, width = $22, width_unit = $23, height = $24, height_unit = $25,
         min_stock_level = $26, reorder_point = $27, default_storage_location = $28,
         current_stock = $29, custom_fields = $30,
-        status = $31, is_active = $32, updated_at = CURRENT_TIMESTAMP
+        status = $31, is_active = $32, is_non_movable = $33, updated_at = CURRENT_TIMESTAMP
       WHERE id = $${paramIndex}
     `;
 
@@ -429,12 +430,13 @@ class SKUModel {
       customFields ? JSON.stringify(customFields) : null,
       skuData.status || 'active',
       skuData.status === 'active',
+      skuData.isNonMovable !== undefined ? skuData.isNonMovable : false,
       id,
     ];
 
     // Add company ID filter if provided
     if (companyId) {
-      query = query.replace('WHERE id = $33', `WHERE id = $33 AND company_id = $34`);
+      query = query.replace('WHERE id = $34', `WHERE id = $34 AND company_id = $35`);
       params.push(companyId.toUpperCase());
     }
 
