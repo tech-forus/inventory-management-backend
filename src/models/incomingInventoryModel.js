@@ -1156,8 +1156,8 @@ class IncomingInventoryModel {
         v.id as vendor_id,
         b.name as brand_name,
         b.id as brand_id,
-        s.code as sku_code,
-        s.name as sku_name,
+        s.sku_id as sku_code,
+        s.item_name as sku_name,
         s.product_category,
         s.item_category,
         s.sub_category
@@ -1198,7 +1198,7 @@ class IncomingInventoryModel {
     }
 
     if (filters.sku) {
-      query += ` AND s.code ILIKE $${paramIndex}`;
+      query += ` AND s.sku_id ILIKE $${paramIndex}`;
       params.push(`%${filters.sku}%`);
       paramIndex++;
     }
