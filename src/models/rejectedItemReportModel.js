@@ -161,8 +161,8 @@ class RejectedItemReportModel {
         s.sku_id ILIKE $${paramIndex}
       )`;
         const searchTerm = `%${searchTrimmed}%`;
-        params.push(searchTerm, searchTerm, searchTerm, searchTerm);
-        paramIndex += 4;
+        params.push(searchTerm);
+        paramIndex++;
       }
 
       query += ` ORDER BY rir.created_at DESC, rir.inspection_date DESC`;
