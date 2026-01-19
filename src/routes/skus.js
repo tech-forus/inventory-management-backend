@@ -202,6 +202,8 @@ router.get('/', async (req, res, next) => {
         query += ` AND s.current_stock > 0 AND s.current_stock >= s.min_stock_level`;
       } else if (stockStatus === 'alert') {
         query += ` AND (s.current_stock < s.min_stock_level OR s.current_stock = 0)`;
+      } else if (stockStatus === 'non-movable') {
+        query += ` AND s.is_non_movable = true`;
       }
     }
     if (hsnCode) {
