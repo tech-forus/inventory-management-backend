@@ -16,7 +16,7 @@ class ItemHistoryModel {
   static async getItemHistory(skuId, companyId, filters = {}) {
     try {
       let query = `
-        SELECT * FROM (
+        WITH combined_transactions AS (
           -- Incoming transactions
           SELECT 
             iii.id as item_id,
@@ -37,7 +37,9 @@ class ItemHistoryModel {
             iii.challan_date,
             iii.updated_at,
             iii.created_at,
-            s.current_stock as current_stock
+            s.current_stock,
+            -- Calculate net quantity change (what actually went into stock)
+            (iii.received - iii.rejected - iii.short) as quantity_change
           FROM incoming_inventory_items iii
           JOIN incoming_inventory ii ON iii.incoming_inventory_id = ii.id
           JOIN skus s ON iii.sku_id = s.id
@@ -69,7 +71,9 @@ class ItemHistoryModel {
             oi.invoice_challan_date as challan_date,
             oii.updated_at,
             oii.created_at,
-            s.current_stock as current_stock
+            s.current_stock,
+            -- Outgoing reduces stock (negative value)
+            -oii.outgoing_quantity as quantity_change
           FROM outgoing_inventory_items oii
           JOIN outgoing_inventory oi ON oii.outgoing_inventory_id = oi.id
           JOIN skus s ON oii.sku_id = s.id
@@ -78,7 +82,39 @@ class ItemHistoryModel {
             AND oi.company_id = $2
             AND oi.is_active = true
             AND oi.status = 'completed'
-        ) combined_history
+        )
+        SELECT 
+          item_id,
+          transaction_id,
+          transaction_type,
+          invoice_number,
+          invoice_date,
+          transaction_date,
+          item_name,
+          sku_id,
+          sku_code,
+          total_quantity,
+          received,
+          rejected,
+          short,
+          source_destination,
+          challan_number,
+          challan_date,
+          updated_at,
+          created_at,
+          -- Calculate historical stock level at this transaction
+          -- Start with current stock, subtract all newer transactions (work backwards)
+          (\r
+            current_stock - \r
+            COALESCE(\r
+              SUM(quantity_change) OVER (\r
+                ORDER BY transaction_date DESC, updated_at DESC, created_at DESC, transaction_id DESC\r
+                ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING\r
+              ),\r
+              0\r
+            )\r
+          ) as current_stock
+        FROM combined_transactions
         WHERE 1=1
       `;
 
