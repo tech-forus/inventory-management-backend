@@ -16,107 +16,27 @@ class ItemHistoryModel {
   static async getItemHistory(skuId, companyId, filters = {}) {
     try {
       let query = `
-        WITH combined_transactions AS (
-          -- Incoming transactions
-          SELECT 
-            iii.id as item_id,
-            iii.incoming_inventory_id as transaction_id,
-            'incoming' as transaction_type,
-            ii.invoice_number,
-            ii.invoice_date,
-            ii.receiving_date as transaction_date,
-            s.item_name,
-            s.sku_id,
-            s.sku_id as sku_code,
-            iii.total_quantity,
-            iii.received,
-            iii.rejected,
-            iii.short,
-            v.name as source_destination,
-            iii.challan_number,
-            iii.challan_date,
-            iii.updated_at,
-            iii.created_at,
-            s.current_stock,
-            -- Calculate net quantity change (what actually went into stock)
-            (iii.received - iii.rejected - iii.short) as quantity_change
-          FROM incoming_inventory_items iii
-          JOIN incoming_inventory ii ON iii.incoming_inventory_id = ii.id
-          JOIN skus s ON iii.sku_id = s.id
-          LEFT JOIN vendors v ON ii.vendor_id = v.id
-          WHERE s.sku_id = $1 
-            AND ii.company_id = $2 
-            AND ii.is_active = true
-            AND ii.status = 'completed'
-          
-          UNION ALL
-          
-          -- Outgoing transactions
-          SELECT
-            oii.id as item_id,
-            oii.outgoing_inventory_id as transaction_id,
-            'outgoing' as transaction_type,
-            oi.invoice_challan_number as invoice_number,
-            oi.invoice_challan_date as invoice_date,
-            oi.invoice_challan_date as transaction_date,
-            s.item_name,
-            s.sku_id,
-            s.sku_id as sku_code,
-            oii.outgoing_quantity as total_quantity,
-            oii.outgoing_quantity as received,
-            0 as rejected,
-            0 as short,
-            COALESCE(c.customer_name, v.name, 'Store to Factory') as source_destination,
-            oi.invoice_challan_number as challan_number,
-            oi.invoice_challan_date as challan_date,
-            oii.updated_at,
-            oii.created_at,
-            s.current_stock,
-            -- Outgoing reduces stock (negative value)
-            -oii.outgoing_quantity as quantity_change
-          FROM outgoing_inventory_items oii
-          JOIN outgoing_inventory oi ON oii.outgoing_inventory_id = oi.id
-          JOIN skus s ON oii.sku_id = s.id
-          LEFT JOIN customers c ON oi.destination_id = c.id AND oi.destination_type = 'customer'
-          LEFT JOIN vendors v ON oi.destination_id = v.id AND oi.destination_type = 'vendor'
-          WHERE s.sku_id = $1 
-            AND oi.company_id = $2
-            AND oi.is_active = true
-            AND oi.status = 'completed'
-        )
         SELECT 
-          item_id,
-          transaction_id,
-          transaction_type,
-          invoice_number,
-          invoice_date,
-          transaction_date,
-          item_name,
-          sku_id,
-          sku_code,
-          total_quantity,
-          received,
-          rejected,
-          short,
-          source_destination,
-          challan_number,
-          challan_date,
-          updated_at,
-          created_at,
-          -- Calculate historical stock level at this transaction
-          -- Start with current stock, subtract all newer transactions (work backwards)
-          (\r
-            current_stock - \r
-            COALESCE(\r
-              SUM(quantity_change) OVER (\r
-                ORDER BY transaction_date DESC, updated_at DESC, created_at DESC, transaction_id DESC\r
-                ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING\r
-              ),\r
-              0\r
-            )\r
-          ) as current_stock
-        FROM combined_transactions
-        WHERE 1=1
+          il.id as transaction_id,
+          il.transaction_date,
+          il.transaction_type,
+          il.reference_number as invoice_number,
+          il.source_destination,
+          il.created_by_name as created_by,
+          il.quantity_change,
+          il.net_balance as current_stock,
+          il.created_at,
+          -- Backward compatibility fields
+          il.reference_number as challan_number,
+          il.transaction_date as challan_date, 
+          CASE 
+            WHEN il.quantity_change < 0 THEN -il.quantity_change 
+            ELSE il.quantity_change 
+          END as total_quantity
+        FROM inventory_ledgers il
+        JOIN skus s ON il.sku_id = s.id
+        WHERE s.sku_id = $1 
+          AND il.company_id = $2
       `;
 
       const params = [skuId, companyId.toUpperCase()];
@@ -124,19 +44,19 @@ class ItemHistoryModel {
 
       // Add date filters if provided
       if (filters.dateFrom) {
-        query += ` AND transaction_date >= $${paramIndex}`;
+        query += ` AND il.transaction_date >= $${paramIndex}`;
         params.push(filters.dateFrom);
         paramIndex++;
       }
 
       if (filters.dateTo) {
-        query += ` AND transaction_date <= $${paramIndex}`;
+        query += ` AND il.transaction_date <= $${paramIndex}`;
         params.push(filters.dateTo);
         paramIndex++;
       }
 
-      // Order by transaction date (most recent first), then by updated_at
-      query += ` ORDER BY transaction_date DESC, updated_at DESC, created_at DESC`;
+      // Order by transaction date (most recent first), then by id (for stable sort)
+      query += ` ORDER BY il.transaction_date DESC, il.created_at DESC, il.id DESC`;
 
       if (filters.limit) {
         query += ` LIMIT $${paramIndex}`;
