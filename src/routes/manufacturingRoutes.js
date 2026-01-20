@@ -36,4 +36,11 @@ router.get(
     ManufacturingController.getManufacturingDetails
 );
 
+// Save Bill of Materials
+router.post(
+    '/bom',
+    authenticate,
+    ManufacturingController.saveBOM
+);
+
 module.exports = router;

@@ -128,9 +128,41 @@ const getManufacturingDetails = async (req, res, next) => {
     }
 };
 
+/**
+ * Save Bill of Materials
+ */
+const saveBOM = async (req, res, next) => {
+    try {
+        const companyId = getCompanyId(req);
+        const userId = req.user.userId;
+        const { finishedGoodSkuId, components } = req.body;
+
+        if (!finishedGoodSkuId) {
+            throw new ValidationError('Finished good SKU ID is required');
+        }
+
+        if (!components || !Array.isArray(components)) {
+            throw new ValidationError('Components list is required');
+        }
+
+        await ManufacturingModel.saveBOM({
+            finishedGoodSkuId,
+            components
+        }, companyId, userId);
+
+        res.json({
+            success: true,
+            message: 'Bill of Materials saved successfully'
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 module.exports = {
     getFinishedGoodWithComponents,
     processManufacturing,
     getManufacturingHistory,
-    getManufacturingDetails
+    getManufacturingDetails,
+    saveBOM
 };

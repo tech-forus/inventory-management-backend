@@ -308,6 +308,56 @@ class ManufacturingModel {
             components: componentsRes.rows
         };
     }
+
+    /**
+     * Save Bill of Materials (BOM)
+     * Replaces existing BOM for a finished good with new components
+     */
+    static async saveBOM(data, companyId, userId) {
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+
+            const { finishedGoodSkuId, components } = data;
+            const companyIdUpper = companyId.toUpperCase();
+
+            // 1. Delete existing BOM for this finished good
+            await client.query(
+                `DELETE FROM bom_materials 
+                 WHERE finished_good_sku_id = $1 AND company_id = $2`,
+                [finishedGoodSkuId, companyIdUpper]
+            );
+
+            // 2. Insert new BOM components
+            if (components && components.length > 0) {
+                for (const component of components) {
+                    await client.query(
+                        `INSERT INTO bom_materials (
+                            company_id, finished_good_sku_id, raw_material_sku_id, 
+                            quantity_required, created_by
+                        ) VALUES ($1, $2, $3, $4, $5)`,
+                        [
+                            companyIdUpper,
+                            finishedGoodSkuId,
+                            component.rawMaterialSkuId,
+                            component.quantity,
+                            userId
+                        ]
+                    );
+                }
+            }
+
+            await client.query('COMMIT');
+            return { success: true };
+
+        } catch (error) {
+            await client.query('ROLLBACK');
+            logger.error({ error: error.message, stack: error.stack }, 'Save BOM Failed');
+            throw error;
+        } finally {
+            client.release();
+        }
+    }
 }
 
 module.exports = ManufacturingModel;
