@@ -1,4 +1,5 @@
 const pool = require('./database');
+const LedgerService = require('../services/ledgerService');
 
 /**
  * SKU Model
@@ -290,76 +291,106 @@ class SKUModel {
   }
 
   /**
-   * Create a new SKU
-   */
+ * Create a new SKU
+ */
   static async create(skuData, companyId, skuId) {
-    // Parse custom_fields if it's a string
-    let customFields = null;
-    if (skuData.customFields) {
-      try {
-        customFields = typeof skuData.customFields === 'string'
-          ? JSON.parse(skuData.customFields)
-          : skuData.customFields;
-      } catch (e) {
-        console.error('Error parsing custom_fields:', e);
-        customFields = null;
-      }
-    }
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    const result = await pool.query(
-      `INSERT INTO skus (
-        company_id, sku_id, product_category_id, item_category_id, sub_category_id,
-        item_name, item_details, vendor_id, vendor_item_code, brand_id,
-        hsn_sac_code, gst_rate, rating_size, model, series, unit,
-        material, manufacture_or_import, color,
-        weight, weight_unit, length, length_unit, width, width_unit, height, height_unit,
-        min_stock_level, reorder_point, default_storage_location,
-        current_stock, custom_fields, status, is_active, is_non_movable, opening_stock
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-        $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27,
-        $28, $29, $30, $31, $32, $33, $34, $35, $36
-      ) RETURNING *`,
-      [
-        companyId.toUpperCase(),
-        skuId,
-        skuData.productCategoryId,
-        skuData.itemCategoryId,
-        skuData.subCategoryId || null,
-        skuData.itemName,
-        skuData.itemDetails || null,
-        skuData.vendorId || null, // Now nullable
-        skuData.vendorItemCode || null,
-        skuData.brandId,
-        skuData.hsnSacCode || null,
-        skuData.gstRate || null,
-        skuData.ratingSize || null,
-        skuData.model || null,
-        skuData.series || null,
-        skuData.unit,
-        skuData.material || null,
-        skuData.manufactureOrImport || null,
-        skuData.color || null,
-        skuData.weight || null,
-        skuData.weightUnit || 'kg',
-        skuData.length || null,
-        skuData.lengthUnit || 'mm',
-        skuData.width || null,
-        skuData.widthUnit || 'mm',
-        skuData.height || null,
-        skuData.heightUnit || 'mm',
-        skuData.minStockLevel || 0,
-        skuData.reorderPoint || null,
-        skuData.defaultStorageLocation || null,
-        skuData.currentStock !== undefined && skuData.currentStock !== null ? skuData.currentStock : (skuData.minStockLevel || 0),
-        customFields ? JSON.stringify(customFields) : null,
-        skuData.status || 'active',
-        skuData.status === 'active',
-        skuData.isNonMovable || false,
-        skuData.openingStock || 0,
-      ]
-    );
-    return result.rows[0];
+      // Parse custom_fields if it's a string
+      let customFields = null;
+      if (skuData.customFields) {
+        try {
+          customFields = typeof skuData.customFields === 'string'
+            ? JSON.parse(skuData.customFields)
+            : skuData.customFields;
+        } catch (e) {
+          console.error('Error parsing custom_fields:', e);
+          customFields = null;
+        }
+      }
+
+      const result = await client.query(
+        `INSERT INTO skus (
+          company_id, sku_id, product_category_id, item_category_id, sub_category_id,
+          item_name, item_details, vendor_id, vendor_item_code, brand_id,
+          hsn_sac_code, gst_rate, rating_size, model, series, unit,
+          material, manufacture_or_import, color,
+          weight, weight_unit, length, length_unit, width, width_unit, height, height_unit,
+          min_stock_level, reorder_point, default_storage_location,
+          current_stock, custom_fields, status, is_active, is_non_movable, opening_stock
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+          $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27,
+          $28, $29, $30, $31, $32, $33, $34, $35, $36
+        ) RETURNING *`,
+        [
+          companyId.toUpperCase(),
+          skuId,
+          skuData.productCategoryId,
+          skuData.itemCategoryId,
+          skuData.subCategoryId || null,
+          skuData.itemName,
+          skuData.itemDetails || null,
+          skuData.vendorId || null, // Now nullable
+          skuData.vendorItemCode || null,
+          skuData.brandId,
+          skuData.hsnSacCode || null,
+          skuData.gstRate || null,
+          skuData.ratingSize || null,
+          skuData.model || null,
+          skuData.series || null,
+          skuData.unit,
+          skuData.material || null,
+          skuData.manufactureOrImport || null,
+          skuData.color || null,
+          skuData.weight || null,
+          skuData.weightUnit || 'kg',
+          skuData.length || null,
+          skuData.lengthUnit || 'mm',
+          skuData.width || null,
+          skuData.widthUnit || 'mm',
+          skuData.height || null,
+          skuData.heightUnit || 'mm',
+          skuData.minStockLevel || 0,
+          skuData.reorderPoint || null,
+          skuData.defaultStorageLocation || null,
+          skuData.currentStock !== undefined && skuData.currentStock !== null ? skuData.currentStock : (skuData.minStockLevel || 0),
+          customFields ? JSON.stringify(customFields) : null,
+          skuData.status || 'active',
+          skuData.status === 'active',
+          skuData.isNonMovable || false,
+          skuData.openingStock || 0,
+        ]
+      );
+
+      const newSku = result.rows[0];
+
+      // Record Opening Stock in Ledger if > 0
+      if (newSku.opening_stock > 0) {
+        await LedgerService.addTransaction(client, {
+          skuId: newSku.id,
+          transactionDate: newSku.created_at,
+          transactionType: 'OPENING',
+          referenceNumber: 'Opening Stock',
+          sourceDestination: 'Opening Balance',
+          createdBy: null,
+          createdByName: 'System',
+          quantityChange: newSku.opening_stock,
+          companyId: companyId.toUpperCase()
+        });
+      }
+
+      await client.query('COMMIT');
+      return newSku;
+
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   /**

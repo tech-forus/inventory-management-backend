@@ -1,5 +1,6 @@
 const pool = require('./database');
 const { logger } = require('../utils/logger');
+const LedgerService = require('../services/ledgerService');
 
 /**
  * Outgoing Inventory Model
@@ -19,14 +20,14 @@ class OutgoingInventoryModel {
         const quantity = item.outgoingQuantity || 0;
         const unitPrice = item.unitPrice || 0;
         const gstPercentage = item.gstPercentage || item.gstRate || 0;
-        
+
         // Calculate base value (excl GST)
         const baseValue = quantity * unitPrice;
         // Calculate GST amount
         const gstAmount = baseValue * (gstPercentage / 100);
         // Total value including GST
         const totalInclGst = baseValue + gstAmount;
-        
+
         return sum + (item.totalValueInclGst || item.totalInclGst || totalInclGst);
       }, 0);
 
@@ -80,7 +81,7 @@ class OutgoingInventoryModel {
         const gstPercentage = item.gstPercentage || item.gstRate || 0;
         const outgoingQty = quantity;
         const rejectedQty = isRejectedCase ? outgoingQty : 0;
-        
+
         // Calculate base value (excl GST)
         const totalValueExclGst = quantity * unitPrice;
         // Calculate GST amount
@@ -126,7 +127,7 @@ class OutgoingInventoryModel {
               'SELECT current_stock FROM skus WHERE id = $1',
               [item.skuId]
             );
-            
+
             if (skuCheck.rows.length === 0) {
               throw new Error(`SKU ${item.skuId} not found`);
             }
@@ -141,6 +142,54 @@ class OutgoingInventoryModel {
               [outgoingQty, item.skuId]
             );
             logger.debug({ skuId: item.skuId, stockChange: -outgoingQty }, `Updated SKU ${item.skuId} stock: -${outgoingQty}`);
+
+            // Ledger Entry
+            // We need metadata: Team Name, Dest Name.
+            // Optimized: Fetch once if likely same for all items?
+            // Yes, OUT inventory has one destination.
+            // But we are inside loop.
+            // Fetching names outside loop is better.
+          }
+        }
+      }
+
+      // Ledger Logic (Post-Item Loop, Pre-Commit)
+      if (inventoryData.status === 'completed' && !isRejectedCase) {
+        // Fetch Names
+        let teamName = 'System';
+        let destName = 'Store to Factory';
+
+        if (inventoryData.dispatchedBy) {
+          const teamRes = await client.query('SELECT name FROM teams WHERE id = $1', [inventoryData.dispatchedBy]);
+          if (teamRes.rows.length > 0) teamName = teamRes.rows[0].name;
+        }
+
+        if (inventoryData.destinationId) {
+          if (inventoryData.destinationType === 'customer') {
+            const custRes = await client.query('SELECT customer_name FROM customers WHERE id = $1', [inventoryData.destinationId]);
+            if (custRes.rows.length > 0) destName = `Customer: ${custRes.rows[0].customer_name}`;
+          } else if (inventoryData.destinationType === 'vendor') {
+            const vendRes = await client.query('SELECT name FROM vendors WHERE id = $1', [inventoryData.destinationId]);
+            if (vendRes.rows.length > 0) destName = `Vendor: ${vendRes.rows[0].name}`;
+          }
+        }
+
+        // Loop items again? Or use `insertedItems`?
+        // Use `insertedItems`.
+        for (const item of insertedItems) {
+          const qty = item.outgoing_quantity || 0;
+          if (qty > 0) {
+            await LedgerService.addTransaction(client, {
+              skuId: item.sku_id,
+              transactionDate: inventoryData.invoiceChallanDate,
+              transactionType: 'OUT',
+              referenceNumber: `OUT / ${inventoryData.invoiceChallanNumber || inventoryData.docketNumber || 'N/A'}`,
+              sourceDestination: destName,
+              createdBy: inventoryData.dispatchedBy,
+              createdByName: teamName,
+              quantityChange: -qty, // Negative for OUT
+              companyId: companyId.toUpperCase()
+            });
           }
         }
       }
@@ -364,6 +413,19 @@ class OutgoingInventoryModel {
               [item.outgoing_quantity, item.sku_id]
             );
             logger.debug({ skuId: item.sku_id, stockChange: item.outgoing_quantity }, `Restored SKU ${item.sku_id} stock: +${item.outgoing_quantity}`);
+
+            // Ledger Entry for Deletion
+            await LedgerService.addTransaction(client, {
+              skuId: item.sku_id,
+              transactionDate: new Date(),
+              transactionType: 'IN', // Restore stock
+              referenceNumber: `VOID / ${record.invoice_challan_number || record.docket_number || 'N/A'}`,
+              sourceDestination: 'Transaction Deleted',
+              createdBy: record.dispatched_by,
+              createdByName: record.dispatched_by_name || 'System',
+              quantityChange: item.outgoing_quantity,
+              companyId: companyId.toUpperCase()
+            });
           }
         }
       }

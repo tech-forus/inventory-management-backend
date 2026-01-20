@@ -1,5 +1,6 @@
 const pool = require('./database');
 const { logger } = require('../utils/logger');
+const LedgerService = require('../services/ledgerService');
 
 /**
  * Incoming Inventory Model
@@ -211,6 +212,46 @@ class IncomingInventoryModel {
             );
             logger.debug({ skuId: item.skuId, stockChange: receivedQty }, `Updated SKU ${item.skuId} stock: +${receivedQty} (received items only)`);
           }
+
+          // Ledger Entry
+          let teamName = 'System';
+          if (inventoryData.receivedBy) {
+            const teamRes = await client.query('SELECT name FROM teams WHERE id = $1', [inventoryData.receivedBy]);
+            if (teamRes.rows.length > 0) teamName = teamRes.rows[0].name;
+          }
+
+          // IN Transaction (Received Quantity)
+          if (receivedQty > 0) {
+            await LedgerService.addTransaction(client, {
+              skuId: item.skuId,
+              transactionDate: inventoryData.receivingDate,
+              transactionType: 'IN',
+              referenceNumber: `IN / ${inventoryData.invoiceNumber}`,
+              sourceDestination: `Vendor: ${inventoryData.vendorId}`, // ideally vendor name but ID is available here.
+              // To get Vendor Name, we need to query Vendor.
+              // We can fetch it once outside loop.
+              createdBy: inventoryData.receivedBy,
+              createdByName: teamName,
+              quantityChange: receivedQty,
+              companyId: companyId.toUpperCase()
+            });
+          }
+          // REJ Transaction (if any rejected immediately)
+          // Usually rejected is 0 on create, but if not:
+          const rejQty = item.rejected || 0; // Front end might perform this?
+          if (rejQty > 0) {
+            await LedgerService.addTransaction(client, {
+              skuId: item.skuId,
+              transactionDate: inventoryData.receivingDate,
+              transactionType: 'REJ',
+              referenceNumber: `REJ / ${inventoryData.invoiceNumber}`,
+              sourceDestination: `Vendor: ${inventoryData.vendorId}`,
+              createdBy: inventoryData.receivedBy,
+              createdByName: teamName,
+              quantityChange: -rejQty,
+              companyId: companyId.toUpperCase()
+            });
+          }
         }
       }
 
@@ -352,8 +393,8 @@ class IncomingInventoryModel {
         COALESCE(SUM(iii.received), 0)::INTEGER as received_quantity,
         COALESCE(SUM(iii.short), 0)::INTEGER as total_short,
         COALESCE(SUM(iii.total_value_excl_gst), 0)::DECIMAL(15, 2) as total_value_excl_gst,
-        COALESCE(SUM(iii.total_value_incl_gst), 0)::DECIMAL(15, 2) as total_value_incl_gst,
         COALESCE(SUM(iii.gst_amount), 0)::DECIMAL(15, 2) as gst_amount,
+        COALESCE(SUM(iii.total_value_incl_gst), 0)::DECIMAL(15, 2) as total_value_incl_gst,
         CASE 
           WHEN COALESCE(SUM(iii.short), 0) > 0 THEN 'Pending'
           ELSE 'Complete'
@@ -582,6 +623,59 @@ class IncomingInventoryModel {
         }
       }
 
+      const inventoryDetails = await client.query(`
+          SELECT ii.invoice_number, ii.receiving_date, ii.received_by, v.name as vendor_name, t.name as team_name
+          FROM incoming_inventory ii
+          LEFT JOIN vendors v ON ii.vendor_id = v.id
+          LEFT JOIN teams t ON ii.received_by = t.id
+          WHERE ii.id = $1
+      `, [id]);
+
+      const invInfo = inventoryDetails.rows[0];
+
+      if (currentStatus === 'draft' && status === 'completed' && invInfo) {
+        // Fetch all items to record them in Ledger
+        const itemsRes = await client.query(
+          'SELECT sku_id, received, total_quantity, rejected FROM incoming_inventory_items WHERE incoming_inventory_id = $1',
+          [id]
+        );
+
+        for (const item of itemsRes.rows) {
+          const received = item.received || 0;
+
+          // IN (Received)
+          if (received > 0) {
+            await LedgerService.addTransaction(client, {
+              skuId: item.sku_id,
+              transactionDate: invInfo.receiving_date,
+              transactionType: 'IN',
+              referenceNumber: `IN / ${invInfo.invoice_number}`,
+              sourceDestination: `Vendor: ${invInfo.vendor_name || 'Unknown'}`,
+              createdBy: invInfo.received_by,
+              createdByName: invInfo.team_name || 'System',
+              quantityChange: received,
+              companyId: companyId.toUpperCase()
+            });
+          }
+
+          // REJ (Rejected)
+          const rejQty = item.rejected || 0;
+          if (rejQty > 0) {
+            await LedgerService.addTransaction(client, {
+              skuId: item.sku_id,
+              transactionDate: invInfo.receiving_date,
+              transactionType: 'REJ', // Rejection at time of receiving
+              referenceNumber: `REJ / ${invInfo.invoice_number}`,
+              sourceDestination: `Vendor: ${invInfo.vendor_name || 'Unknown'}`,
+              createdBy: invInfo.received_by,
+              createdByName: invInfo.team_name || 'System',
+              quantityChange: -rejQty,
+              companyId: companyId.toUpperCase()
+            });
+          }
+        }
+      }
+
       await client.query('COMMIT');
       return updateResult.rows[0];
     } catch (error) {
@@ -658,6 +752,40 @@ class IncomingInventoryModel {
       );
 
       logger.debug({ itemId, skuId: currentItem.sku_id, moveQty }, `Moved ${moveQty} to rejected for item ${itemId}, reduced stock by ${moveQty}`);
+
+      // Ledger Update for Rejection
+      // Fetch Inventory Details for Reference
+      const invDetailsRes = await client.query(`
+          SELECT ii.invoice_number, ii.receiving_date, ii.received_by, v.name as vendor_name, t.name as team_name
+          FROM incoming_inventory ii
+          LEFT JOIN vendors v ON ii.vendor_id = v.id
+          LEFT JOIN teams t ON ii.received_by = t.id
+          WHERE ii.id = $1
+      `, [inventoryId]);
+
+      if (invDetailsRes.rows.length > 0) {
+        const invInfo = invDetailsRes.rows[0];
+        await LedgerService.addTransaction(client, {
+          skuId: currentItem.sku_id,
+          transactionDate: invInfo.receiving_date || new Date(), // Rejection Date = Action Date? Or Receiving Date?
+          // Users usually want rejection logged on the day it happens.
+          // But User Request: "Date" in ledger matches old logic?
+          // History Page shows "Transaction Date".
+          // Migrated data used `receiving_date`.
+          // Real-time rejection happens LATER (inspection).
+          // `current_stock` is updated NOW.
+          // So `transactionDate` should be NOW (CURRENT_TIMESTAMP in DB, or Date passed).
+          // I'll use `new Date()` for Rejection Action Date.
+          transactionDate: new Date(),
+          transactionType: 'REJ',
+          referenceNumber: `REJ / ${invInfo.invoice_number}`,
+          sourceDestination: `Vendor: ${invInfo.vendor_name || 'Unknown'}`,
+          createdBy: invInfo.received_by,
+          createdByName: invInfo.team_name || 'System', // Or current user if verified?
+          quantityChange: -moveQty,
+          companyId: companyId.toUpperCase()
+        });
+      }
 
       await client.query('COMMIT');
 
@@ -868,6 +996,30 @@ class IncomingInventoryModel {
           [-shortDiff, currentItem.sku_id]
         );
         logger.debug({ skuId: currentItem.sku_id, stockChange: -shortDiff }, `Updated SKU ${currentItem.sku_id} stock: ${-shortDiff > 0 ? '+' : ''}${-shortDiff} (from short update - short directly affects available stock)`);
+
+        // Ledger Update for Short Arrived / Adjusted
+        const invDetailsRes = await client.query(`
+            SELECT ii.invoice_number, ii.receiving_date, ii.received_by, v.name as vendor_name, t.name as team_name
+            FROM incoming_inventory ii
+            LEFT JOIN vendors v ON ii.vendor_id = v.id
+            LEFT JOIN teams t ON ii.received_by = t.id
+            WHERE ii.id = $1
+        `, [inventoryId]);
+
+        if (invDetailsRes.rows.length > 0) {
+          const invInfo = invDetailsRes.rows[0];
+          await LedgerService.addTransaction(client, {
+            skuId: currentItem.sku_id,
+            transactionDate: new Date(),
+            transactionType: 'IN', // Treating as additional arrival
+            referenceNumber: `IN (Short) / ${invInfo.invoice_number}`,
+            sourceDestination: `Vendor: ${invInfo.vendor_name || 'Unknown'}`,
+            createdBy: invInfo.received_by,
+            createdByName: invInfo.team_name || 'System',
+            quantityChange: -shortDiff, // If short decreases by 5, -(-5) = +5 stock. Correct.
+            companyId: companyId.toUpperCase()
+          });
+        }
       } else if (skipStockUpdate && shortDiff !== 0) {
         logger.debug({ skuId: currentItem.sku_id, shortDiff }, `Skipped stock update for SKU ${currentItem.sku_id} (items received via separate incoming inventory record)`);
       }
@@ -1020,6 +1172,56 @@ class IncomingInventoryModel {
           [-shortDiff, currentItem.sku_id]
         );
         logger.debug({ skuId: currentItem.sku_id, stockChange: -shortDiff }, `Updated SKU ${currentItem.sku_id} stock: ${-shortDiff > 0 ? '+' : ''}${-shortDiff} (from short update - short directly affects available stock)`);
+
+        // Ledger Update for Short change
+        const invDetailsRes = await client.query(`
+            SELECT ii.invoice_number, ii.receiving_date, ii.received_by, v.name as vendor_name, t.name as team_name
+            FROM incoming_inventory ii
+            LEFT JOIN vendors v ON ii.vendor_id = v.id
+            LEFT JOIN teams t ON ii.received_by = t.id
+            WHERE ii.id = $1
+        `, [id]);
+
+        if (invDetailsRes.rows.length > 0) {
+          const invInfo = invDetailsRes.rows[0];
+          await LedgerService.addTransaction(client, {
+            skuId: currentItem.sku_id,
+            transactionDate: new Date(),
+            transactionType: 'IN',
+            referenceNumber: `IN (Adj) / ${invInfo.invoice_number}`,
+            sourceDestination: `Vendor: ${invInfo.vendor_name || 'Unknown'}`,
+            createdBy: invInfo.received_by,
+            createdByName: invInfo.team_name || 'System',
+            quantityChange: -shortDiff,
+            companyId: companyId.toUpperCase()
+          });
+        }
+      }
+
+      // Ledger Update for Rejected change
+      if (rejectedDiff !== 0) {
+        const invDetailsRes = await client.query(`
+            SELECT ii.invoice_number, ii.receiving_date, ii.received_by, v.name as vendor_name, t.name as team_name
+            FROM incoming_inventory ii
+            LEFT JOIN vendors v ON ii.vendor_id = v.id
+            LEFT JOIN teams t ON ii.received_by = t.id
+            WHERE ii.id = $1
+        `, [id]);
+
+        if (invDetailsRes.rows.length > 0) {
+          const invInfo = invDetailsRes.rows[0];
+          await LedgerService.addTransaction(client, {
+            skuId: currentItem.sku_id,
+            transactionDate: new Date(),
+            transactionType: 'REJ',
+            referenceNumber: `REJ (Adj) / ${invInfo.invoice_number}`,
+            sourceDestination: `Vendor: ${invInfo.vendor_name || 'Unknown'}`,
+            createdBy: invInfo.received_by,
+            createdByName: invInfo.team_name || 'System',
+            quantityChange: -rejectedDiff, // If rejected increases by 2, -2 stock. Correct.
+            companyId: companyId.toUpperCase()
+          });
+        }
       }
 
       // Optionally update invoice/challan number and date if provided
@@ -1089,7 +1291,11 @@ class IncomingInventoryModel {
 
       // Get items to reverse stock if status is completed
       const inventoryResult = await client.query(
-        'SELECT status FROM incoming_inventory WHERE id = $1 AND company_id = $2',
+        `SELECT ii.status, ii.invoice_number, ii.receiving_date, ii.received_by, v.name as vendor_name, t.name as team_name
+         FROM incoming_inventory ii
+         LEFT JOIN vendors v ON ii.vendor_id = v.id
+         LEFT JOIN teams t ON ii.received_by = t.id
+         WHERE ii.id = $1 AND ii.company_id = $2`,
         [id, companyId.toUpperCase()]
       );
 
@@ -1097,7 +1303,9 @@ class IncomingInventoryModel {
         throw new Error('Incoming inventory record not found');
       }
 
-      if (inventoryResult.rows[0].status === 'completed') {
+      const invInfo = inventoryResult.rows[0];
+
+      if (invInfo.status === 'completed') {
         const itemsResult = await client.query(
           'SELECT sku_id, received FROM incoming_inventory_items WHERE incoming_inventory_id = $1',
           [id]
@@ -1112,6 +1320,19 @@ class IncomingInventoryModel {
               [receivedQty, item.sku_id]
             );
             logger.debug({ skuId: item.sku_id, stockChange: -receivedQty }, `Reversed SKU ${item.sku_id} stock on delete: -${receivedQty} (received items only)`);
+
+            // Ledger Entry for Deletion
+            await LedgerService.addTransaction(client, {
+              skuId: item.sku_id,
+              transactionDate: new Date(),
+              transactionType: 'OUT', // Removing stock
+              referenceNumber: `VOID / ${invInfo.invoice_number}`,
+              sourceDestination: `Transaction Deleted (Vendor: ${invInfo.vendor_name || 'Unknown'})`,
+              createdBy: invInfo.received_by,
+              createdByName: invInfo.team_name || 'System',
+              quantityChange: -receivedQty,
+              companyId: companyId.toUpperCase()
+            });
           }
         }
       }
