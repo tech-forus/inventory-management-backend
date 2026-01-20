@@ -107,6 +107,7 @@ const transformSKU = (sku) => {
     reorderPoint: sku.reorder_point,
     defaultStorageLocation: sku.default_storage_location,
     isActive: sku.is_active,
+    isNonMovable: sku.is_non_movable,
     createdAt: sku.created_at,
     updatedAt: sku.updated_at,
   };
@@ -132,6 +133,7 @@ router.get('/', async (req, res, next) => {
       sortOrder = 'asc',
       page = 1,
       limit = 20,
+      excludeNonMovable,
     } = req.query;
     let query = `
       SELECT 
@@ -200,12 +202,17 @@ router.get('/', async (req, res, next) => {
         query += ` AND s.current_stock > 0 AND s.current_stock >= s.min_stock_level`;
       } else if (stockStatus === 'alert') {
         query += ` AND (s.current_stock < s.min_stock_level OR s.current_stock = 0)`;
+      } else if (stockStatus === 'non-movable') {
+        query += ` AND s.is_non_movable = true`;
       }
     }
     if (hsnCode) {
       query += ` AND s.hsn_sac_code ILIKE $${paramIndex}`;
       params.push(`%${hsnCode}%`);
       paramIndex++;
+    }
+    if (excludeNonMovable === 'true') {
+      query += ` AND s.is_non_movable = false`;
     }
 
     // Add sorting
@@ -393,6 +400,7 @@ router.post(
         minStockLevel,
         reorderPoint,
         defaultStorageLocation,
+        isNonMovable, // Added isNonMovable
         customFields,
         status = 'active',
       } = req.body;
@@ -424,11 +432,11 @@ router.post(
         material, manufacture_or_import, insulation, input_supply, color, cri, cct, beam_angle, led_type, shape,
         weight, weight_unit, length, length_unit, width, width_unit, height, height_unit, rack_number,
         min_stock_level, reorder_point, default_storage_location,
-        current_stock, custom_fields, status, is_active
+        current_stock, is_non_movable, custom_fields, status, is_active
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
         $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35,
-        $36, $37, $38, $39, $40, $41, $42
+        $36, $37, $38, $39, $40, $41, $42, $43
       ) RETURNING *`,
         [
           companyId,
@@ -470,6 +478,7 @@ router.post(
           reorderPoint || null,
           defaultStorageLocation || null,
           currentStock !== undefined && currentStock !== null ? currentStock : (minStockLevel || 0),
+          req.body.isNonMovable || false,
           customFieldsParsed,
           status,
           status === 'active',
@@ -550,7 +559,7 @@ router.put(
     // Determine if ID is numeric or alphanumeric
     const idParam = req.params.id;
     const isNumeric = /^\d+$/.test(idParam);
-    const whereClause = isNumeric ? 'id = $41' : 'sku_id = $41';
+    const whereClause = isNumeric ? 'id = $42' : 'sku_id = $42';
     const idValue = isNumeric ? parseInt(idParam, 10) : idParam;
     const companyId = getCompanyId(req).toUpperCase();
 
@@ -628,8 +637,8 @@ router.put(
         beam_angle = $22, led_type = $23, shape = $24,
         weight = $25, weight_unit = $26, length = $27, length_unit = $28, width = $29, width_unit = $30, height = $31, height_unit = $32, rack_number = $33,
         current_stock = $34, min_stock_level = $35, reorder_point = $36, default_storage_location = $37,
-        custom_fields = $38, status = $39, is_active = $40, updated_at = CURRENT_TIMESTAMP
-      WHERE ${whereClause} AND company_id = $42 RETURNING *`,
+        is_non_movable = $38, custom_fields = $39, status = $40, is_active = $41, updated_at = CURRENT_TIMESTAMP
+      WHERE ${whereClause} AND company_id = $43 RETURNING *`,
         [
           productCategoryId,
           itemCategoryId,
@@ -668,6 +677,7 @@ router.put(
           minStockLevel,
           reorderPoint || null,
           defaultStorageLocation || null,
+          req.body.isNonMovable || false,
           customFieldsParsed,
           status || 'active',
           status === 'active',
@@ -871,19 +881,80 @@ router.get('/analytics/slow-moving', async (req, res, next) => {
 router.get('/analytics/non-movable', async (req, res, next) => {
   try {
     const companyId = getCompanyId(req).toUpperCase();
-    const period = parseInt(req.query.period || 6, 10); // Default 6 months
 
-    // Calculate date range
-    const dateFrom = new Date();
-    dateFrom.setMonth(dateFrom.getMonth() - period);
+    const query = `
+      SELECT 
+        s.*,
+        pc.name as product_category,
+        ic.name as item_category,
+        sc.name as sub_category,
+        b.name as brand,
+        v.name as vendor
+      FROM skus s
+      LEFT JOIN product_categories pc ON s.product_category_id = pc.id
+      LEFT JOIN item_categories ic ON s.item_category_id = ic.id
+      LEFT JOIN sub_categories sc ON s.sub_category_id = sc.id
+      LEFT JOIN brands b ON s.brand_id = b.id
+      LEFT JOIN vendors v ON s.vendor_id = v.id
+      WHERE s.company_id = $1 AND s.is_active = true AND s.is_non_movable = true
+      ORDER BY s.updated_at DESC
+    `;
 
-    // Query to find SKUs with no movement
-    // For now, return empty array as outgoing inventory is not fully implemented
-    // TODO: Implement when outgoing inventory is ready
+    const result = await pool.query(query, [companyId]);
+
+    // Transform data
+    const transformedData = result.rows.map(sku => ({
+      skuId: sku.sku_id,
+      itemName: sku.item_name,
+      category: sku.product_category || 'Uncategorized',
+      currentStock: sku.current_stock,
+      lastMovementDate: sku.updated_at,
+      aging: Math.floor((new Date() - new Date(sku.updated_at)) / (1000 * 60 * 60 * 24)),
+      unitPrice: 0, // In standard inventory view, unit price might be elsewhere
+      inventoryValue: 0 // Placeholder
+    }));
+
     res.json({
       success: true,
-      data: [],
-      message: 'Non-movable SKU analytics not yet implemented'
+      data: transformedData
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * PATCH /api/skus/bulk-non-movable
+ * Mark multiple SKUs as non-movable
+ */
+router.patch('/bulk-non-movable', async (req, res, next) => {
+  try {
+    const { ids } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, error: 'No IDs provided' });
+    }
+
+    const companyId = getCompanyId(req).toUpperCase();
+
+    // We support both numeric IDs and alphanumeric SKU IDs
+    const isNumericArray = ids.every(id => /^\d+$/.test(String(id)));
+    const idColumn = isNumericArray ? 'id' : 'sku_id';
+
+    const query = `
+      UPDATE skus 
+      SET is_non_movable = true, updated_at = NOW()
+      WHERE company_id = $1 AND ${idColumn} = ANY($2)
+      RETURNING id
+    `;
+
+    const result = await pool.query(query, [companyId, ids]);
+
+    res.json({
+      success: true,
+      data: {
+        updatedCount: result.rowCount,
+        ids: result.rows.map(row => row.id)
+      }
     });
   } catch (error) {
     next(error);

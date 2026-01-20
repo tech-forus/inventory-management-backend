@@ -103,6 +103,8 @@ class SKUModel {
         query += ` AND s.current_stock > 0 AND s.current_stock >= s.min_stock_level`;
       } else if (filters.stockStatus === 'alert') {
         query += ` AND (s.current_stock < s.min_stock_level OR s.current_stock = 0)`;
+      } else if (filters.stockStatus === 'non-movable') {
+        query += ` AND s.is_non_movable = true`;
       }
     }
     if (filters.hsnCode) {
@@ -218,6 +220,8 @@ class SKUModel {
         query += ` AND s.current_stock > 0 AND s.current_stock >= s.min_stock_level`;
       } else if (filters.stockStatus === 'alert') {
         query += ` AND (s.current_stock < s.min_stock_level OR s.current_stock = 0)`;
+      } else if (filters.stockStatus === 'non-movable') {
+        query += ` AND s.is_non_movable = true`;
       }
     }
     if (filters.hsnCode) {
@@ -309,11 +313,11 @@ class SKUModel {
         material, manufacture_or_import, color,
         weight, weight_unit, length, length_unit, width, width_unit, height, height_unit,
         min_stock_level, reorder_point, default_storage_location,
-        current_stock, custom_fields, status, is_active
+        current_stock, custom_fields, status, is_active, is_non_movable
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
         $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27,
-        $28, $29, $30, $31, $32, $33, $34
+        $28, $29, $30, $31, $32, $33, $34, $35
       ) RETURNING *`,
       [
         companyId.toUpperCase(),
@@ -350,6 +354,7 @@ class SKUModel {
         customFields ? JSON.stringify(customFields) : null,
         skuData.status || 'active',
         skuData.status === 'active',
+        skuData.isNonMovable || false,
       ]
     );
     return result.rows[0];
@@ -372,7 +377,7 @@ class SKUModel {
       }
     }
 
-    let paramIndex = 33;
+    let paramIndex = 34;
     let query = `
       UPDATE skus SET
         product_category_id = $1, item_category_id = $2, sub_category_id = $3,
@@ -382,7 +387,7 @@ class SKUModel {
         weight = $18, weight_unit = $19, length = $20, length_unit = $21, width = $22, width_unit = $23, height = $24, height_unit = $25,
         min_stock_level = $26, reorder_point = $27, default_storage_location = $28,
         current_stock = $29, custom_fields = $30,
-        status = $31, is_active = $32, updated_at = CURRENT_TIMESTAMP
+        status = $31, is_active = $32, is_non_movable = $33, updated_at = CURRENT_TIMESTAMP
       WHERE id = $${paramIndex}
     `;
 
@@ -425,12 +430,13 @@ class SKUModel {
       customFields ? JSON.stringify(customFields) : null,
       skuData.status || 'active',
       skuData.status === 'active',
+      skuData.isNonMovable !== undefined ? skuData.isNonMovable : false,
       id,
     ];
 
     // Add company ID filter if provided
     if (companyId) {
-      query = query.replace('WHERE id = $33', `WHERE id = $33 AND company_id = $34`);
+      query = query.replace('WHERE id = $34', `WHERE id = $34 AND company_id = $35`);
       params.push(companyId.toUpperCase());
     }
 

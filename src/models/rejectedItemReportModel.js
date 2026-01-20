@@ -158,11 +158,11 @@ class RejectedItemReportModel {
         rir.report_number ILIKE $${paramIndex} OR
         rir.original_invoice_number ILIKE $${paramIndex} OR
         rir.item_name ILIKE $${paramIndex} OR
-        s.code ILIKE $${paramIndex}
+        s.sku_id ILIKE $${paramIndex}
       )`;
         const searchTerm = `%${searchTrimmed}%`;
-        params.push(searchTerm, searchTerm, searchTerm, searchTerm);
-        paramIndex += 4;
+        params.push(searchTerm);
+        paramIndex++;
       }
 
       query += ` ORDER BY rir.created_at DESC, rir.inspection_date DESC`;
