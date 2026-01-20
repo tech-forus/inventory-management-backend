@@ -4,6 +4,7 @@ const { authenticate, getCompanyId } = require('../middlewares/auth');
 const incomingInventoryController = require('../controllers/incomingInventoryController');
 const outgoingInventoryController = require('../controllers/outgoingInventoryController');
 const rejectedItemReportController = require('../controllers/rejectedItemReportController');
+const itemHistoryController = require('../controllers/itemHistoryController');
 const { validateRequired, validateArray, validateDate, validateNumeric, validateIncomingItems, validateIncomingInventorySupplier } = require('../middlewares/validation');
 const pool = require('../models/database');
 
@@ -226,9 +227,7 @@ router.put(
 router.delete('/rejected-item-reports/:id', rejectedItemReportController.deleteRejectedItemReport);
 
 // Short Item Reports Routes
-const shortItemReportController = require('../controllers/shortItemReportController');
-router.get('/short-item-reports', shortItemReportController.getAllShortItemReports);
-router.get('/short-item-reports/:id', shortItemReportController.getShortItemReportById);
+
 
 /**
  * GET /api/inventory/outgoing/history
