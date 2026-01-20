@@ -64,7 +64,7 @@ class ItemHistoryModel {
             oii.quantity as received,
             0 as rejected,
             0 as short,
-            COALESCE(c.customer_name, d.name, oi.destination_name) as source_destination,
+            COALESCE(c.customer_name, oi.destination_name) as source_destination,
             oi.challan_number,
             oi.challan_date,
             oii.updated_at,
@@ -74,7 +74,6 @@ class ItemHistoryModel {
           JOIN outgoing_inventory oi ON oii.outgoing_inventory_id = oi.id
           JOIN skus s ON oii.sku_id = s.id
           LEFT JOIN customers c ON oi.destination_id = c.id AND oi.destination_type = 'customer'
-          LEFT JOIN destinations d ON oi.destination_id = d.id AND oi.destination_type = 'destination'
           WHERE s.sku_id = $1 
             AND oi.company_id = $2
             AND oi.is_active = true
