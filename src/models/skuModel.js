@@ -47,7 +47,18 @@ class SKUModel {
     // Add filters
     if (filters.search && filters.search.trim()) {
       const searchTrimmed = filters.search.trim();
-      query += ` AND (s.sku_id ILIKE $${paramIndex} OR s.item_name ILIKE $${paramIndex} OR s.model ILIKE $${paramIndex} OR s.hsn_sac_code ILIKE $${paramIndex})`;
+      query += ` AND (
+        s.sku_id ILIKE $${paramIndex} 
+        OR s.item_name ILIKE $${paramIndex} 
+        OR s.model ILIKE $${paramIndex} 
+        OR s.hsn_sac_code ILIKE $${paramIndex}
+        OR s.series ILIKE $${paramIndex}
+        OR s.rating_size ILIKE $${paramIndex}
+        OR s.item_details ILIKE $${paramIndex}
+        OR s.vendor_item_code ILIKE $${paramIndex}
+        OR b.name ILIKE $${paramIndex}
+        OR sc.name ILIKE $${paramIndex}
+      )`;
       params.push(`%${searchTrimmed}%`);
       paramIndex++;
     }
@@ -156,6 +167,8 @@ class SKUModel {
     let query = `
       SELECT COUNT(*) 
       FROM skus s
+      LEFT JOIN brands b ON s.brand_id = b.id
+      LEFT JOIN sub_categories sc ON s.sub_category_id = sc.id
       WHERE s.company_id = $1 AND s.is_active = true
     `;
     const params = [companyId.toUpperCase()];
@@ -164,7 +177,18 @@ class SKUModel {
     // Add same filters as getAll
     if (filters.search && filters.search.trim()) {
       const searchTrimmed = filters.search.trim();
-      query += ` AND (s.sku_id ILIKE $${paramIndex} OR s.item_name ILIKE $${paramIndex} OR s.model ILIKE $${paramIndex} OR s.hsn_sac_code ILIKE $${paramIndex})`;
+      query += ` AND (
+        s.sku_id ILIKE $${paramIndex} 
+        OR s.item_name ILIKE $${paramIndex} 
+        OR s.model ILIKE $${paramIndex} 
+        OR s.hsn_sac_code ILIKE $${paramIndex}
+        OR s.series ILIKE $${paramIndex}
+        OR s.rating_size ILIKE $${paramIndex}
+        OR s.item_details ILIKE $${paramIndex}
+        OR s.vendor_item_code ILIKE $${paramIndex}
+        OR b.name ILIKE $${paramIndex}
+        OR sc.name ILIKE $${paramIndex}
+      )`;
       params.push(`%${searchTrimmed}%`);
       paramIndex++;
     }
