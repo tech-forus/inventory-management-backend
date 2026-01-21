@@ -356,12 +356,12 @@ class SKUModel {
           skuData.minStockLevel || 0,
           skuData.reorderPoint || null,
           skuData.defaultStorageLocation || null,
-          skuData.currentStock !== undefined && skuData.currentStock !== null ? skuData.currentStock : (skuData.minStockLevel || 0),
+          skuData.openingStock !== undefined && skuData.openingStock !== null ? skuData.openingStock : 0, // Use openingStock for current_stock initialization
           customFields ? JSON.stringify(customFields) : null,
           skuData.status || 'active',
           skuData.status === 'active',
           skuData.isNonMovable || false,
-          skuData.openingStock || 0,
+          skuData.openingStock || 0, // opening_stock value
         ]
       );
 
@@ -459,12 +459,12 @@ class SKUModel {
       skuData.minStockLevel || 0,
       skuData.reorderPoint || null,
       skuData.defaultStorageLocation || null,
-      skuData.currentStock !== undefined && skuData.currentStock !== null ? skuData.currentStock : (skuData.minStockLevel || 0),
+      skuData.openingStock !== undefined && skuData.openingStock !== null ? skuData.openingStock : 0, // Use openingStock for current_stock
       customFields ? JSON.stringify(customFields) : null,
       skuData.status || 'active',
       skuData.status === 'active',
       skuData.isNonMovable !== undefined ? skuData.isNonMovable : false,
-      skuData.openingStock || 0,
+      skuData.openingStock || 0, // opening_stock value
       id,
     ];
 

@@ -396,7 +396,6 @@ router.post(
         height,
         heightUnit,
         rackNumber,
-        currentStock,
         openingStock,
         minStockLevel,
         reorderPoint,
@@ -478,8 +477,8 @@ router.post(
           minStockLevel,
           reorderPoint || null,
           defaultStorageLocation || null,
-          currentStock !== undefined && currentStock !== null ? currentStock : (minStockLevel || 0),
-          openingStock !== undefined && openingStock !== null ? openingStock : 0,
+          openingStock !== undefined && openingStock !== null ? openingStock : 0, // Use openingStock for current_stock initialization
+          openingStock !== undefined && openingStock !== null ? openingStock : 0, // opening_stock value
           req.body.isNonMovable || false,
           customFieldsParsed,
           status,
@@ -620,7 +619,6 @@ router.put(
         height,
         heightUnit,
         rackNumber,
-        currentStock,
         openingStock,
         minStockLevel,
         reorderPoint,
@@ -693,7 +691,7 @@ router.put(
           height !== undefined && height !== null ? parseFloat(height) : null,
           heightUnit || 'mm',
           rackNumber || null,
-          currentStock !== undefined && currentStock !== null ? currentStock : null,
+          openingStock !== undefined && openingStock !== null ? openingStock : 0, // Use openingStock for current_stock
           minStockLevel,
           reorderPoint || null,
           defaultStorageLocation || null,
@@ -701,7 +699,7 @@ router.put(
           customFieldsParsed,
           status || 'active',
           status === 'active',
-          openingStock !== undefined && openingStock !== null ? openingStock : 0,
+          openingStock !== undefined && openingStock !== null ? openingStock : 0, // opening_stock value
           idValue,
           companyId,
         ]
