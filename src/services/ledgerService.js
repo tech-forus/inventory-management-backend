@@ -46,7 +46,7 @@ class LedgerService {
                 `SELECT net_balance 
          FROM inventory_ledgers 
          WHERE sku_id = $1 AND company_id = $2
-         ORDER BY transaction_date DESC, created_at DESC, id DESC 
+         ORDER BY created_at DESC, id DESC 
          LIMIT 1`,
                 [skuId, companyId]
             );
