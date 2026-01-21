@@ -75,9 +75,6 @@ class ItemHistoryModel {
         LEFT JOIN teams ot ON oi.dispatched_by = ot.id
         WHERE s.sku_id = $1 
           AND il.company_id = $2
-        GROUP BY il.id, il.transaction_date, il.transaction_type, il.reference_number, 
-                 il.source_destination, il.created_by_name, il.created_by, il.quantity_change,
-                 il.net_balance, il.created_at, s.sku_id
       `;
 
       const params = [skuId, companyId.toUpperCase()];
@@ -135,6 +132,11 @@ class ItemHistoryModel {
         params.push(filters.dateTo);
         paramIndex++;
       }
+
+      // Add GROUP BY after all WHERE conditions
+      query += ` GROUP BY il.id, il.transaction_date, il.transaction_type, il.reference_number, 
+                 il.source_destination, il.created_by_name, il.created_by, il.quantity_change,
+                 il.net_balance, il.created_at, s.sku_id`;
 
       // Order by created_at DESC (most recent first), then id DESC for consistent sorting
       query += ` ORDER BY il.created_at DESC, il.id DESC`;
