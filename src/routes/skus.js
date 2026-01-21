@@ -397,6 +397,7 @@ router.post(
         heightUnit,
         rackNumber,
         currentStock,
+        openingStock,
         minStockLevel,
         reorderPoint,
         defaultStorageLocation,
@@ -432,11 +433,11 @@ router.post(
         material, manufacture_or_import, insulation, input_supply, color, cri, cct, beam_angle, led_type, shape,
         weight, weight_unit, length, length_unit, width, width_unit, height, height_unit, rack_number,
         min_stock_level, reorder_point, default_storage_location,
-        current_stock, is_non_movable, custom_fields, status, is_active
+        current_stock, opening_stock, is_non_movable, custom_fields, status, is_active
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
         $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35,
-        $36, $37, $38, $39, $40, $41, $42, $43
+        $36, $37, $38, $39, $40, $41, $42, $43, $44
       ) RETURNING *`,
         [
           companyId,
@@ -478,12 +479,30 @@ router.post(
           reorderPoint || null,
           defaultStorageLocation || null,
           currentStock !== undefined && currentStock !== null ? currentStock : (minStockLevel || 0),
+          openingStock !== undefined && openingStock !== null ? openingStock : 0,
           req.body.isNonMovable || false,
           customFieldsParsed,
           status,
           status === 'active',
         ]
       );
+
+      // Record Opening Stock in Ledger if > 0
+      const newSku = result.rows[0];
+      if (newSku.opening_stock > 0) {
+        const LedgerService = require('../services/ledgerService');
+        await LedgerService.addTransaction(client, {
+          skuId: newSku.id,
+          transactionDate: newSku.created_at,
+          transactionType: 'OPENING',
+          referenceNumber: 'Opening Stock',
+          sourceDestination: 'Opening Balance',
+          createdBy: null,
+          createdByName: 'System',
+          quantityChange: newSku.opening_stock,
+          companyId: companyId
+        });
+      }
 
       await client.query('COMMIT');
 
@@ -559,7 +578,7 @@ router.put(
     // Determine if ID is numeric or alphanumeric
     const idParam = req.params.id;
     const isNumeric = /^\d+$/.test(idParam);
-    const whereClause = isNumeric ? 'id = $42' : 'sku_id = $42';
+    const whereClause = isNumeric ? 'id = $43' : 'sku_id = $43';
     const idValue = isNumeric ? parseInt(idParam, 10) : idParam;
     const companyId = getCompanyId(req).toUpperCase();
 
@@ -602,6 +621,7 @@ router.put(
         heightUnit,
         rackNumber,
         currentStock,
+        openingStock,
         minStockLevel,
         reorderPoint,
         defaultStorageLocation,
@@ -637,8 +657,8 @@ router.put(
         beam_angle = $22, led_type = $23, shape = $24,
         weight = $25, weight_unit = $26, length = $27, length_unit = $28, width = $29, width_unit = $30, height = $31, height_unit = $32, rack_number = $33,
         current_stock = $34, min_stock_level = $35, reorder_point = $36, default_storage_location = $37,
-        is_non_movable = $38, custom_fields = $39, status = $40, is_active = $41, updated_at = CURRENT_TIMESTAMP
-      WHERE ${whereClause} AND company_id = $43 RETURNING *`,
+        is_non_movable = $38, custom_fields = $39, status = $40, is_active = $41, opening_stock = $42, updated_at = CURRENT_TIMESTAMP
+      WHERE ${whereClause} AND company_id = $44 RETURNING *`,
         [
           productCategoryId,
           itemCategoryId,
@@ -681,6 +701,7 @@ router.put(
           customFieldsParsed,
           status || 'active',
           status === 'active',
+          openingStock !== undefined && openingStock !== null ? openingStock : 0,
           idValue,
           companyId,
         ]
