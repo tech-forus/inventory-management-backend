@@ -379,14 +379,7 @@ router.post(
         unit,
         material,
         manufactureOrImport,
-        insulation,
-        inputSupply,
         color,
-        cri,
-        cct,
-        beamAngle,
-        ledType,
-        shape,
         weight,
         weightUnit,
         length,
@@ -395,7 +388,6 @@ router.post(
         widthUnit,
         height,
         heightUnit,
-        rackNumber,
         openingStock,
         minStockLevel,
         reorderPoint,
@@ -429,14 +421,13 @@ router.post(
         company_id, sku_id, product_category_id, item_category_id, sub_category_id,
         item_name, item_details, vendor_id, vendor_item_code, brand_id,
         hsn_sac_code, gst_rate, rating_size, model, series, unit,
-        material, manufacture_or_import, insulation, input_supply, color, cri, cct, beam_angle, led_type, shape,
-        weight, weight_unit, length, length_unit, width, width_unit, height, height_unit, rack_number,
+        material, manufacture_or_import, color,
+        weight, weight_unit, length, length_unit, width, width_unit, height, height_unit,
         min_stock_level, reorder_point, default_storage_location,
         current_stock, opening_stock, is_non_movable, custom_fields, status, is_active
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-        $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35,
-        $36, $37, $38, $39, $40, $41, $42, $43, $44
+        $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36
       ) RETURNING *`,
         [
           companyId,
@@ -457,14 +448,7 @@ router.post(
           unit,
           material || null,
           manufactureOrImport || null,
-          insulation || null,
-          inputSupply || null,
           color || null,
-          cri || null,
-          cct || null,
-          beamAngle || null,
-          ledType || null,
-          shape || null,
           weight !== undefined && weight !== null ? parseFloat(weight) : null,
           weightUnit || 'kg',
           length !== undefined && length !== null ? parseFloat(length) : null,
@@ -473,7 +457,6 @@ router.post(
           widthUnit || 'mm',
           height !== undefined && height !== null ? parseFloat(height) : null,
           heightUnit || 'mm',
-          rackNumber || null,
           minStockLevel,
           reorderPoint || null,
           defaultStorageLocation || null,
@@ -577,7 +560,7 @@ router.put(
     // Determine if ID is numeric or alphanumeric
     const idParam = req.params.id;
     const isNumeric = /^\d+$/.test(idParam);
-    const whereClause = isNumeric ? 'id = $43' : 'sku_id = $43';
+    const whereClause = isNumeric ? 'id = $35' : 'sku_id = $35';
     const idValue = isNumeric ? parseInt(idParam, 10) : idParam;
     const companyId = getCompanyId(req).toUpperCase();
 
@@ -602,14 +585,7 @@ router.put(
         unit,
         material,
         manufactureOrImport,
-        insulation,
-        inputSupply,
         color,
-        cri,
-        cct,
-        beamAngle,
-        ledType,
-        shape,
         weight,
         weightUnit,
         length,
@@ -618,7 +594,6 @@ router.put(
         widthUnit,
         height,
         heightUnit,
-        rackNumber,
         openingStock,
         minStockLevel,
         reorderPoint,
@@ -651,12 +626,11 @@ router.put(
         product_category_id = $1, item_category_id = $2, sub_category_id = $3,
         item_name = $4, item_details = $5, vendor_id = $6, vendor_item_code = $7, brand_id = $8,
         hsn_sac_code = $9, gst_rate = $10, rating_size = $11, model = $12, series = $13, unit = $14,
-        material = $15, manufacture_or_import = $16, insulation = $17, input_supply = $18, color = $19, cri = $20, cct = $21,
-        beam_angle = $22, led_type = $23, shape = $24,
-        weight = $25, weight_unit = $26, length = $27, length_unit = $28, width = $29, width_unit = $30, height = $31, height_unit = $32, rack_number = $33,
-        current_stock = $34, min_stock_level = $35, reorder_point = $36, default_storage_location = $37,
-        is_non_movable = $38, custom_fields = $39, status = $40, is_active = $41, opening_stock = $42, updated_at = CURRENT_TIMESTAMP
-      WHERE ${whereClause} AND company_id = $44 RETURNING *`,
+        material = $15, manufacture_or_import = $16, color = $17,
+        weight = $18, weight_unit = $19, length = $20, length_unit = $21, width = $22, width_unit = $23, height = $24, height_unit = $25,
+        current_stock = $26, min_stock_level = $27, reorder_point = $28, default_storage_location = $29,
+        is_non_movable = $30, custom_fields = $31, status = $32, is_active = $33, opening_stock = $34, updated_at = CURRENT_TIMESTAMP
+      WHERE ${whereClause} AND company_id = $36 RETURNING *`,
         [
           productCategoryId,
           itemCategoryId,
@@ -674,14 +648,7 @@ router.put(
           unit,
           material || null,
           manufactureOrImport || null,
-          insulation || null,
-          inputSupply || null,
           color || null,
-          cri || null,
-          cct || null,
-          beamAngle || null,
-          ledType || null,
-          shape || null,
           weight !== undefined && weight !== null ? parseFloat(weight) : null,
           weightUnit || 'kg',
           length !== undefined && length !== null ? parseFloat(length) : null,
@@ -690,7 +657,6 @@ router.put(
           widthUnit || 'mm',
           height !== undefined && height !== null ? parseFloat(height) : null,
           heightUnit || 'mm',
-          rackNumber || null,
           openingStock !== undefined && openingStock !== null ? openingStock : 0, // Use openingStock for current_stock
           minStockLevel,
           reorderPoint || null,
