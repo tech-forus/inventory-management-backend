@@ -18,10 +18,13 @@ const transformHistoryRecord = (record) => {
         itemName: record.item_name,
         skuId: record.sku_id,
         skuCode: record.sku_code,
+        // Keep totalQuantity signed (IN/OPENING positive, OUT/REJ usually negative; REJ can be positive for received-back)
         totalQuantity: record.total_quantity,
-        received: record.received || 0,
-        rejected: record.rejected || 0,
-        short: record.short || 0,
+        quantityChange: record.quantity_change,
+        // Do not duplicate rejected/short values onto IN rows. UI will show these on the appropriate rows.
+        received: record.transaction_type === 'IN' ? (record.received || 0) : 0,
+        rejected: 0,
+        short: record.transaction_type === 'IN' ? (record.short || 0) : 0,
         sourceDestination: record.source_destination,
         vendorName: record.source_destination, // Alias for backward compatibility
         challanNumber: record.challan_number || record.challan_number_ledger || '',

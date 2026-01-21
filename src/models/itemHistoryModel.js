@@ -46,10 +46,8 @@ class ItemHistoryModel {
           -- Backward compatibility fields
           il.reference_number as challan_number_ledger,
           il.transaction_date as challan_date_ledger, 
-          CASE 
-            WHEN il.quantity_change < 0 THEN -il.quantity_change 
-            ELSE il.quantity_change 
-          END as total_quantity
+          -- Preserve sign in total_quantity so UI can show + / - correctly
+          il.quantity_change as total_quantity
         FROM inventory_ledgers il
         JOIN skus s ON il.sku_id = s.id
         -- Left join with incoming_inventory to get rejected/short for IN transactions
