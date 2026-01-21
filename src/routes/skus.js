@@ -157,7 +157,18 @@ router.get('/', async (req, res, next) => {
     // Add filters
     if (search && search.trim()) {
       const searchTrimmed = search.trim();
-      query += ` AND (s.sku_id ILIKE $${paramIndex} OR s.item_name ILIKE $${paramIndex} OR s.model ILIKE $${paramIndex} OR s.hsn_sac_code ILIKE $${paramIndex})`;
+      query += ` AND (
+        s.sku_id ILIKE $${paramIndex} 
+        OR s.item_name ILIKE $${paramIndex} 
+        OR s.model ILIKE $${paramIndex} 
+        OR s.hsn_sac_code ILIKE $${paramIndex}
+        OR s.series ILIKE $${paramIndex}
+        OR s.rating_size ILIKE $${paramIndex}
+        OR s.item_details ILIKE $${paramIndex}
+        OR s.vendor_item_code ILIKE $${paramIndex}
+        OR b.name ILIKE $${paramIndex}
+        OR sc.name ILIKE $${paramIndex}
+      )`;
       params.push(`%${searchTrimmed}%`);
       paramIndex++;
     }
