@@ -403,7 +403,7 @@ class IncomingInventoryModel {
       LEFT JOIN vendors v ON ii.vendor_id = v.id
       LEFT JOIN customers c ON ii.destination_id = c.id AND ii.destination_type = 'customer'
       LEFT JOIN teams t ON ii.received_by = t.id
-      ${needsSkuJoin ? 'LEFT JOIN skus s ON iii.sku_id = s.id' : ''}
+      ${needsSkuJoin ? 'LEFT JOIN skus s ON iii.sku_id = s.id LEFT JOIN brands b ON s.brand_id = b.id LEFT JOIN sub_categories sc ON s.sub_category_id = sc.id' : ''}
       WHERE ii.company_id = $1 AND ii.is_active = true AND ii.status = 'completed'
     `;
     const params = [companyId.toUpperCase()];
@@ -427,7 +427,7 @@ class IncomingInventoryModel {
       paramIndex++;
     }
 
-    // General search across multiple fields
+    // General search across multiple fields (matching SKU Management search)
     if (filters.search) {
       const searchTerm = `%${filters.search}%`;
       query += ` AND (
@@ -439,6 +439,14 @@ class IncomingInventoryModel {
         OR COALESCE(iii.challan_number, '') ILIKE $${paramIndex}
         OR COALESCE(s.sku_id, '') ILIKE $${paramIndex}
         OR COALESCE(s.item_name, '') ILIKE $${paramIndex}
+        OR COALESCE(s.model, '') ILIKE $${paramIndex}
+        OR COALESCE(s.hsn_sac_code, '') ILIKE $${paramIndex}
+        OR COALESCE(s.series, '') ILIKE $${paramIndex}
+        OR COALESCE(s.rating_size, '') ILIKE $${paramIndex}
+        OR COALESCE(s.item_details, '') ILIKE $${paramIndex}
+        OR COALESCE(s.vendor_item_code, '') ILIKE $${paramIndex}
+        OR COALESCE(b.name, '') ILIKE $${paramIndex}
+        OR COALESCE(sc.name, '') ILIKE $${paramIndex}
       )`;
       params.push(searchTerm);
       paramIndex++;

@@ -346,6 +346,8 @@ class OutgoingInventoryModel {
       FROM outgoing_inventory oi
       INNER JOIN outgoing_inventory_items oii ON oi.id = oii.outgoing_inventory_id
       LEFT JOIN skus s ON oii.sku_id = s.id
+      LEFT JOIN brands b ON s.brand_id = b.id
+      LEFT JOIN sub_categories sc ON s.sub_category_id = sc.id
       LEFT JOIN customers c ON oi.destination_id = c.id AND oi.destination_type = 'customer'
       LEFT JOIN vendors v ON oi.destination_id = v.id AND oi.destination_type = 'vendor'
       LEFT JOIN teams ot ON oi.dispatched_by = ot.id
@@ -367,7 +369,7 @@ class OutgoingInventoryModel {
       paramIndex++;
     }
 
-    // General search across multiple fields
+    // General search across multiple fields (matching SKU Management search)
     if (filters.search) {
       const searchTerm = `%${filters.search}%`;
       query += ` AND (
@@ -375,9 +377,17 @@ class OutgoingInventoryModel {
         OR COALESCE(oi.docket_number, '') ILIKE $${paramIndex}
         OR COALESCE(c.customer_name, '') ILIKE $${paramIndex}
         OR COALESCE(v.name, '') ILIKE $${paramIndex}
+        OR COALESCE(ot.name, '') ILIKE $${paramIndex}
         OR COALESCE(s.sku_id, '') ILIKE $${paramIndex}
         OR COALESCE(s.item_name, '') ILIKE $${paramIndex}
-        OR COALESCE(ot.name, '') ILIKE $${paramIndex}
+        OR COALESCE(s.model, '') ILIKE $${paramIndex}
+        OR COALESCE(s.hsn_sac_code, '') ILIKE $${paramIndex}
+        OR COALESCE(s.series, '') ILIKE $${paramIndex}
+        OR COALESCE(s.rating_size, '') ILIKE $${paramIndex}
+        OR COALESCE(s.item_details, '') ILIKE $${paramIndex}
+        OR COALESCE(s.vendor_item_code, '') ILIKE $${paramIndex}
+        OR COALESCE(b.name, '') ILIKE $${paramIndex}
+        OR COALESCE(sc.name, '') ILIKE $${paramIndex}
       )`;
       queryParams.push(searchTerm);
       paramIndex++;
