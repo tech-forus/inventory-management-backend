@@ -27,7 +27,6 @@ class ItemHistoryModel {
           il.quantity_change,
           il.net_balance as current_stock,
           il.created_at,
-          il.updated_at,
           -- Get rejected and short from incoming_inventory_items for IN transactions
           COALESCE(iii.rejected, 0) as rejected,
           COALESCE(iii.short, 0) as short,
@@ -135,8 +134,8 @@ class ItemHistoryModel {
         paramIndex++;
       }
 
-      // Order by updated_at DESC (most recent first), then created_at DESC, then id DESC
-      query += ` ORDER BY COALESCE(il.updated_at, il.created_at) DESC, il.created_at DESC, il.id DESC`;
+      // Order by created_at DESC (most recent first), then id DESC
+      query += ` ORDER BY il.created_at DESC, il.id DESC`;
 
       if (filters.limit) {
         query += ` LIMIT $${paramIndex}`;
@@ -177,7 +176,7 @@ class ItemHistoryModel {
             FROM inventory_ledgers il2
             JOIN skus s2 ON il2.sku_id = s2.id
             WHERE s2.sku_id = $1 AND il2.company_id = $2
-            ORDER BY COALESCE(il2.updated_at, il2.created_at) DESC, il2.created_at DESC, il2.id DESC
+            ORDER BY il2.created_at DESC, il2.id DESC
             LIMIT 1
           ), 0)::INTEGER as current_stock,
           -- Total Rejected (from incoming_inventory_items)

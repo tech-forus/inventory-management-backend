@@ -26,7 +26,7 @@ const transformHistoryRecord = (record) => {
         vendorName: record.source_destination, // Alias for backward compatibility
         challanNumber: record.challan_number || record.challan_number_ledger || '',
         challanDate: record.challan_date || record.challan_date_ledger || null,
-        updatedAt: record.updated_at || record.created_at,
+        updatedAt: record.created_at,
         createdAt: record.created_at,
         currentStock: record.current_stock,
         createdBy: record.created_by,
