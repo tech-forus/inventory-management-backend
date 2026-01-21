@@ -179,6 +179,7 @@ const getIncomingHistory = async (req, res, next) => {
       dateTo: req.query.dateTo,
       vendor: req.query.vendor,
       sku: req.query.sku,
+      search: req.query.search,
       limit: req.query.limit ? parseInt(req.query.limit) : 1000,
     };
 

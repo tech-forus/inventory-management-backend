@@ -326,6 +326,8 @@ class OutgoingInventoryModel {
         oi.id as record_id,
         oi.invoice_challan_date as date,
         COALESCE(oi.invoice_challan_number, oi.docket_number) as document_number,
+        oi.invoice_challan_number,
+        oi.docket_number,
         oi.document_type,
         oi.document_sub_type,
         oi.vendor_sub_type,
@@ -339,12 +341,14 @@ class OutgoingInventoryModel {
         oii.gst_percentage,
         oii.gst_amount,
         oi.status,
-        oi.created_at
+        oi.created_at,
+        ot.name as dispatched_by_name
       FROM outgoing_inventory oi
       INNER JOIN outgoing_inventory_items oii ON oi.id = oii.outgoing_inventory_id
       LEFT JOIN skus s ON oii.sku_id = s.id
       LEFT JOIN customers c ON oi.destination_id = c.id AND oi.destination_type = 'customer'
       LEFT JOIN vendors v ON oi.destination_id = v.id AND oi.destination_type = 'vendor'
+      LEFT JOIN teams ot ON oi.dispatched_by = ot.id
       WHERE oi.company_id = $1 AND oi.is_active = true AND oi.status = 'completed'
     `;
 
@@ -363,13 +367,31 @@ class OutgoingInventoryModel {
       paramIndex++;
     }
 
-    if (filters.destination) {
+    // General search across multiple fields
+    if (filters.search) {
+      const searchTerm = `%${filters.search}%`;
+      query += ` AND (
+        COALESCE(oi.invoice_challan_number, '') ILIKE $${paramIndex}
+        OR COALESCE(oi.docket_number, '') ILIKE $${paramIndex}
+        OR COALESCE(c.customer_name, '') ILIKE $${paramIndex}
+        OR COALESCE(v.name, '') ILIKE $${paramIndex}
+        OR COALESCE(s.sku_id, '') ILIKE $${paramIndex}
+        OR COALESCE(s.item_name, '') ILIKE $${paramIndex}
+        OR COALESCE(ot.name, '') ILIKE $${paramIndex}
+      )`;
+      queryParams.push(searchTerm);
+      paramIndex++;
+    }
+
+    // Legacy destination filter (keep for backward compatibility)
+    if (filters.destination && !filters.search) {
       query += ` AND (c.customer_name ILIKE $${paramIndex} OR v.name ILIKE $${paramIndex})`;
       queryParams.push(`%${filters.destination}%`);
       paramIndex++;
     }
 
-    if (filters.sku) {
+    // Legacy SKU filter (keep for backward compatibility)
+    if (filters.sku && !filters.search) {
       query += ` AND s.sku_id ILIKE $${paramIndex}`;
       queryParams.push(`%${filters.sku}%`);
       paramIndex++;

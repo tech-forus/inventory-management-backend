@@ -372,12 +372,16 @@ class IncomingInventoryModel {
    * Get incoming inventory history (for history tab) - grouped by invoice
    */
   static async getHistory(companyId, filters = {}) {
+    // Check if we need to join with skus (for search or sku filter)
+    const needsSkuJoin = filters.search || filters.sku;
+    
     let query = `
       SELECT 
         ii.id,
         ii.invoice_date,
         ii.invoice_number,
         ii.receiving_date,
+        ii.docket_number,
         v.name as vendor_name,
         c.customer_name,
         COALESCE(v.name, c.customer_name) as supplier_name,
@@ -399,6 +403,7 @@ class IncomingInventoryModel {
       LEFT JOIN vendors v ON ii.vendor_id = v.id
       LEFT JOIN customers c ON ii.destination_id = c.id AND ii.destination_type = 'customer'
       LEFT JOIN teams t ON ii.received_by = t.id
+      ${needsSkuJoin ? 'LEFT JOIN skus s ON iii.sku_id = s.id' : ''}
       WHERE ii.company_id = $1 AND ii.is_active = true AND ii.status = 'completed'
     `;
     const params = [companyId.toUpperCase()];
@@ -422,46 +427,32 @@ class IncomingInventoryModel {
       paramIndex++;
     }
 
-    query += ` GROUP BY ii.id, ii.invoice_date, ii.invoice_number, ii.receiving_date, v.name, c.customer_name, t.name, ii.total_value`;
+    // General search across multiple fields
+    if (filters.search) {
+      const searchTerm = `%${filters.search}%`;
+      query += ` AND (
+        ii.invoice_number ILIKE $${paramIndex}
+        OR COALESCE(ii.docket_number, '') ILIKE $${paramIndex}
+        OR COALESCE(v.name, '') ILIKE $${paramIndex}
+        OR COALESCE(c.customer_name, '') ILIKE $${paramIndex}
+        OR COALESCE(t.name, '') ILIKE $${paramIndex}
+        OR COALESCE(iii.challan_number, '') ILIKE $${paramIndex}
+        OR COALESCE(s.sku_id, '') ILIKE $${paramIndex}
+        OR COALESCE(s.item_name, '') ILIKE $${paramIndex}
+      )`;
+      params.push(searchTerm);
+      paramIndex++;
+    }
 
-    if (filters.sku) {
-      // Filter by SKU - need to add HAVING clause or subquery
-      query = `
-        SELECT DISTINCT
-          ii.id,
-          ii.invoice_date,
-          ii.invoice_number,
-          ii.receiving_date,
-          v.name as vendor_name,
-          c.customer_name,
-          COALESCE(v.name, c.customer_name) as supplier_name,
-          t.name as received_by_name,
-          ii.total_value,
-          COALESCE(SUM(iii.total_quantity), 0)::INTEGER as total_quantity,
-          COALESCE(SUM(iii.received), 0)::INTEGER as received_quantity,
-          COALESCE(SUM(iii.short), 0)::INTEGER as total_short,
-          COALESCE(SUM(iii.total_value_excl_gst), 0)::DECIMAL(15, 2) as total_value_excl_gst,
-          COALESCE(SUM(iii.total_value_incl_gst), 0)::DECIMAL(15, 2) as total_value_incl_gst,
-          COALESCE(SUM(iii.gst_amount), 0)::DECIMAL(15, 2) as gst_amount,
-          CASE 
-            WHEN COALESCE(SUM(iii.short), 0) > 0 THEN 'Pending'
-            ELSE 'Complete'
-          END as status,
-          COUNT(DISTINCT iii.id) as item_count
-        FROM incoming_inventory ii
-        LEFT JOIN incoming_inventory_items iii ON ii.id = iii.incoming_inventory_id
-        LEFT JOIN vendors v ON ii.vendor_id = v.id
-        LEFT JOIN customers c ON ii.destination_id = c.id AND ii.destination_type = 'customer'
-        LEFT JOIN teams t ON ii.received_by = t.id
-        LEFT JOIN skus s ON iii.sku_id = s.id
-        WHERE ii.company_id = $1 AND ii.is_active = true AND ii.status = 'completed'
-          AND (s.sku_id ILIKE $${paramIndex} OR s.item_name ILIKE $${paramIndex})
-      `;
+    // Legacy SKU filter (keep for backward compatibility)
+    if (filters.sku && !filters.search) {
       const skuSearch = `%${filters.sku}%`;
+      query += ` AND (s.sku_id ILIKE $${paramIndex} OR s.item_name ILIKE $${paramIndex})`;
       params.push(skuSearch);
       paramIndex++;
-      query += ` GROUP BY ii.id, ii.invoice_date, ii.invoice_number, ii.receiving_date, v.name, c.customer_name, t.name, ii.total_value`;
     }
+
+    query += ` GROUP BY ii.id, ii.invoice_date, ii.invoice_number, ii.receiving_date, ii.docket_number, v.name, c.customer_name, t.name, ii.total_value`;
 
     query += ` ORDER BY ii.receiving_date DESC, ii.id DESC`;
 
