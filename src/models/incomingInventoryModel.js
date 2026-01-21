@@ -203,17 +203,11 @@ class IncomingInventoryModel {
 
         // Update SKU stock if status is 'completed'
         // IMPORTANT: Only add RECEIVED items to stock, not total quantity
+        // Note: LedgerService.addTransaction() will sync skus.current_stock with ledger net_balance
         if (inventoryData.status === 'completed') {
           const receivedQty = item.received || 0;
-          if (receivedQty > 0) {
-            await client.query(
-              'UPDATE skus SET current_stock = current_stock + $1 WHERE id = $2',
-              [receivedQty, item.skuId]
-            );
-            logger.debug({ skuId: item.skuId, stockChange: receivedQty }, `Updated SKU ${item.skuId} stock: +${receivedQty} (received items only)`);
-          }
-
-          // Ledger Entry
+          
+          // Ledger Entry (LedgerService will update skus.current_stock automatically)
           let teamName = 'System';
           if (inventoryData.receivedBy) {
             const teamRes = await client.query('SELECT name FROM teams WHERE id = $1', [inventoryData.receivedBy]);
@@ -745,15 +739,7 @@ class IncomingInventoryModel {
         [newRejected, itemId, inventoryId]
       );
 
-      // Reduce stock by the quantity moved to rejected (rejected items are not in stock)
-      await client.query(
-        'UPDATE skus SET current_stock = GREATEST(0, current_stock - $1) WHERE id = $2',
-        [moveQty, currentItem.sku_id]
-      );
-
-      logger.debug({ itemId, skuId: currentItem.sku_id, moveQty }, `Moved ${moveQty} to rejected for item ${itemId}, reduced stock by ${moveQty}`);
-
-      // Ledger Update for Rejection
+      // Ledger Update for Rejection (LedgerService will sync skus.current_stock automatically)
       // Fetch Inventory Details for Reference
       const invDetailsRes = await client.query(`
           SELECT ii.invoice_number, ii.receiving_date, ii.received_by, v.name as vendor_name, t.name as team_name

@@ -120,9 +120,10 @@ class OutgoingInventoryModel {
 
         // Update SKU stock if status is 'completed'
         // IMPORTANT: Reduce stock for outgoing items, except for rejected quantity case
+        // Note: LedgerService.addTransaction() will sync skus.current_stock with ledger net_balance
         if (inventoryData.status === 'completed' && !isRejectedCase) {
           if (outgoingQty > 0) {
-            // Verify stock availability before updating
+            // Verify stock availability before ledger entry
             const skuCheck = await client.query(
               'SELECT current_stock FROM skus WHERE id = $1',
               [item.skuId]
@@ -137,13 +138,7 @@ class OutgoingInventoryModel {
               throw new Error(`Insufficient stock for SKU ${item.skuId}. Available: ${currentStock}, Required: ${outgoingQty}`);
             }
 
-            await client.query(
-              'UPDATE skus SET current_stock = current_stock - $1 WHERE id = $2',
-              [outgoingQty, item.skuId]
-            );
-            logger.debug({ skuId: item.skuId, stockChange: -outgoingQty }, `Updated SKU ${item.skuId} stock: -${outgoingQty}`);
-
-            // Ledger Entry
+            // Ledger Entry (LedgerService will update skus.current_stock automatically)
             // We need metadata: Team Name, Dest Name.
             // Optimized: Fetch once if likely same for all items?
             // Yes, OUT inventory has one destination.
