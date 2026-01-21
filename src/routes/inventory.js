@@ -233,6 +233,7 @@ router.get('/short-item-reports/:id', shortItemReportController.getShortItemRepo
 
 // Item History Routes (Unified incoming + outgoing)
 router.get('/items/:skuId/history', itemHistoryController.getItemHistory);
+router.get('/items/:skuId/history/summary', itemHistoryController.getItemHistorySummary);
 
 /**
  * GET /api/inventory/outgoing/history
