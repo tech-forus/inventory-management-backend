@@ -118,37 +118,41 @@ class OutgoingInventoryModel {
         );
         insertedItems.push(itemResult.rows[0]);
 
-        // Update SKU stock if status is 'completed'
-        // IMPORTANT: Reduce stock for outgoing items, except for rejected quantity case
+        // Verify stock availability before allowing outgoing (status is 'completed')
+        // IMPORTANT: Stock update is now handled by LedgerService (single source of truth)
+        // We still need to check availability before creating the ledger entry
         if (inventoryData.status === 'completed' && !isRejectedCase) {
           if (outgoingQty > 0) {
-            // Verify stock availability before updating
-            const skuCheck = await client.query(
-              'SELECT current_stock FROM skus WHERE id = $1',
-              [item.skuId]
+            // Verify stock availability - check latest ledger balance
+            const lastBalanceResult = await client.query(
+              `SELECT net_balance 
+               FROM inventory_ledgers 
+               WHERE sku_id = $1 AND company_id = $2
+               ORDER BY transaction_date DESC, created_at DESC, id DESC 
+               LIMIT 1`,
+              [item.skuId, companyId.toUpperCase()]
             );
 
-            if (skuCheck.rows.length === 0) {
-              throw new Error(`SKU ${item.skuId} not found`);
+            let availableStock = 0;
+            if (lastBalanceResult.rows.length > 0) {
+              availableStock = parseInt(lastBalanceResult.rows[0].net_balance, 10);
+            } else {
+              // Fallback: check skus.current_stock if no ledger entries exist
+              const skuCheck = await client.query(
+                'SELECT current_stock FROM skus WHERE id = $1',
+                [item.skuId]
+              );
+              if (skuCheck.rows.length === 0) {
+                throw new Error(`SKU ${item.skuId} not found`);
+              }
+              availableStock = skuCheck.rows[0].current_stock;
             }
 
-            const currentStock = skuCheck.rows[0].current_stock;
-            if (currentStock < outgoingQty) {
-              throw new Error(`Insufficient stock for SKU ${item.skuId}. Available: ${currentStock}, Required: ${outgoingQty}`);
+            if (availableStock < outgoingQty) {
+              throw new Error(`Insufficient stock for SKU ${item.skuId}. Available: ${availableStock}, Required: ${outgoingQty}`);
             }
 
-            await client.query(
-              'UPDATE skus SET current_stock = current_stock - $1 WHERE id = $2',
-              [outgoingQty, item.skuId]
-            );
-            logger.debug({ skuId: item.skuId, stockChange: -outgoingQty }, `Updated SKU ${item.skuId} stock: -${outgoingQty}`);
-
-            // Ledger Entry
-            // We need metadata: Team Name, Dest Name.
-            // Optimized: Fetch once if likely same for all items?
-            // Yes, OUT inventory has one destination.
-            // But we are inside loop.
-            // Fetching names outside loop is better.
+            logger.debug({ skuId: item.skuId, availableStock, outgoingQty }, `Stock check passed for SKU ${item.skuId}, stock will be updated by ledger`);
           }
         }
       }
@@ -408,11 +412,8 @@ class OutgoingInventoryModel {
 
         for (const item of items) {
           if (!isRejectedCase && item.outgoing_quantity > 0) {
-            await client.query(
-              'UPDATE skus SET current_stock = current_stock + $1 WHERE id = $2',
-              [item.outgoing_quantity, item.sku_id]
-            );
-            logger.debug({ skuId: item.sku_id, stockChange: item.outgoing_quantity }, `Restored SKU ${item.sku_id} stock: +${item.outgoing_quantity}`);
+            // Stock update is now handled by LedgerService (single source of truth)
+            logger.debug({ skuId: item.sku_id, stockChange: item.outgoing_quantity }, `Restoring SKU ${item.sku_id} stock: +${item.outgoing_quantity}, will be updated by ledger`);
 
             // Ledger Entry for Deletion
             await LedgerService.addTransaction(client, {

@@ -82,13 +82,19 @@ class LedgerService {
                 ]
             );
 
+            // 4. Update skus.current_stock to match the ledger net_balance (single source of truth)
+            await client.query(
+                `UPDATE skus SET current_stock = $1 WHERE id = $2`,
+                [newBalance, skuId]
+            );
+
             logger.info({
                 type: 'LEDGER_INSERT',
                 skuId,
-                type: transactionType,
+                transactionType,
                 change,
                 balance: newBalance
-            }, 'Recorded ledger transaction');
+            }, 'Recorded ledger transaction and synced skus.current_stock');
 
             return insertResult.rows[0];
 

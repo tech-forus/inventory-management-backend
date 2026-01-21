@@ -202,16 +202,10 @@ class IncomingInventoryModel {
         insertedItems.push(itemResult.rows[0]);
 
         // Update SKU stock if status is 'completed'
-        // IMPORTANT: Only add RECEIVED items to stock, not total quantity
+        // IMPORTANT: Stock is now managed by LedgerService (single source of truth)
+        // LedgerService.addTransaction() will update skus.current_stock from ledger net_balance
         if (inventoryData.status === 'completed') {
           const receivedQty = item.received || 0;
-          if (receivedQty > 0) {
-            await client.query(
-              'UPDATE skus SET current_stock = current_stock + $1 WHERE id = $2',
-              [receivedQty, item.skuId]
-            );
-            logger.debug({ skuId: item.skuId, stockChange: receivedQty }, `Updated SKU ${item.skuId} stock: +${receivedQty} (received items only)`);
-          }
 
           // Ledger Entry
           let teamName = 'System';
@@ -583,45 +577,9 @@ class IncomingInventoryModel {
         [status, id, companyId.toUpperCase()]
       );
 
-      // If changing from draft to completed, update SKU stock
-      // IMPORTANT: Only add RECEIVED items to stock, not total quantity
-      if (currentStatus === 'draft' && status === 'completed') {
-        const itemsResult = await client.query(
-          'SELECT sku_id, received FROM incoming_inventory_items WHERE incoming_inventory_id = $1',
-          [id]
-        );
-
-        for (const item of itemsResult.rows) {
-          const receivedQty = item.received || 0;
-          if (receivedQty > 0) {
-            await client.query(
-              'UPDATE skus SET current_stock = current_stock + $1 WHERE id = $2',
-              [receivedQty, item.sku_id]
-            );
-            logger.debug({ skuId: item.sku_id, stockChange: receivedQty }, `Updated SKU ${item.sku_id} stock: +${receivedQty} (received items only)`);
-          }
-        }
-      }
-
-      // If changing from completed to draft, reverse SKU stock
-      // IMPORTANT: Only reverse RECEIVED items from stock, not total quantity
-      if (currentStatus === 'completed' && status === 'draft') {
-        const itemsResult = await client.query(
-          'SELECT sku_id, received FROM incoming_inventory_items WHERE incoming_inventory_id = $1',
-          [id]
-        );
-
-        for (const item of itemsResult.rows) {
-          const receivedQty = item.received || 0;
-          if (receivedQty > 0) {
-            await client.query(
-              'UPDATE skus SET current_stock = GREATEST(0, current_stock - $1) WHERE id = $2',
-              [receivedQty, item.sku_id]
-            );
-            logger.debug({ skuId: `Reversed SKU ${item.sku_id} stock: -${receivedQty} (received items only)` }, `Reversed SKU ${item.sku_id} stock: -${receivedQty} (received items only)`);
-          }
-        }
-      }
+      // Stock updates are now handled by LedgerService (single source of truth)
+      // When changing from draft to completed, ledger entries are created below
+      // When changing from completed to draft, ledger entries are reversed below
 
       const inventoryDetails = await client.query(`
           SELECT ii.invoice_number, ii.receiving_date, ii.received_by, v.name as vendor_name, t.name as team_name
@@ -745,13 +703,8 @@ class IncomingInventoryModel {
         [newRejected, itemId, inventoryId]
       );
 
-      // Reduce stock by the quantity moved to rejected (rejected items are not in stock)
-      await client.query(
-        'UPDATE skus SET current_stock = GREATEST(0, current_stock - $1) WHERE id = $2',
-        [moveQty, currentItem.sku_id]
-      );
-
-      logger.debug({ itemId, skuId: currentItem.sku_id, moveQty }, `Moved ${moveQty} to rejected for item ${itemId}, reduced stock by ${moveQty}`);
+      // Stock update is now handled by LedgerService (single source of truth)
+      logger.debug({ itemId, skuId: currentItem.sku_id, moveQty }, `Moved ${moveQty} to rejected for item ${itemId}, stock will be updated by ledger`);
 
       // Ledger Update for Rejection
       // Fetch Inventory Details for Reference
@@ -991,11 +944,8 @@ class IncomingInventoryModel {
       if (shortDiff !== 0 && !skipStockUpdate) {
         // shortDiff is negative when short decreases (items arrived), so we subtract (which adds to stock)
         // shortDiff is positive when short increases (items become short), so we subtract (which removes from stock)
-        await client.query(
-          'UPDATE skus SET current_stock = GREATEST(0, current_stock - $1) WHERE id = $2',
-          [-shortDiff, currentItem.sku_id]
-        );
-        logger.debug({ skuId: currentItem.sku_id, stockChange: -shortDiff }, `Updated SKU ${currentItem.sku_id} stock: ${-shortDiff > 0 ? '+' : ''}${-shortDiff} (from short update - short directly affects available stock)`);
+        // Stock update is now handled by LedgerService (single source of truth)
+        logger.debug({ skuId: currentItem.sku_id, stockChange: -shortDiff }, `Short update for SKU ${currentItem.sku_id}: ${-shortDiff > 0 ? '+' : ''}${-shortDiff}, stock will be updated by ledger`);
 
         // Ledger Update for Short Arrived / Adjusted
         const invDetailsRes = await client.query(`

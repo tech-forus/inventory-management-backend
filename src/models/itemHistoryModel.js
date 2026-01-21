@@ -28,14 +28,15 @@ class ItemHistoryModel {
           il.net_balance as current_stock,
           il.created_at,
           -- Get rejected and short from incoming_inventory_items for IN transactions
-          COALESCE(iii.rejected, 0) as rejected,
-          COALESCE(iii.short, 0) as short,
-          COALESCE(iii.received, 0) as received,
+          -- Use MAX to handle potential duplicates (shouldn't happen, but safe)
+          MAX(COALESCE(iii.rejected, 0)) as rejected,
+          MAX(COALESCE(iii.short, 0)) as short,
+          MAX(COALESCE(iii.received, 0)) as received,
           -- Get challan info from incoming_inventory_items
-          COALESCE(iii.challan_number, '') as challan_number,
-          COALESCE(iii.challan_date, NULL) as challan_date,
+          MAX(COALESCE(iii.challan_number, '')) as challan_number,
+          MAX(iii.challan_date) as challan_date,
           -- Get dispatch person name for OUT transactions
-          ot.name as dispatch_person_name,
+          MAX(ot.name) as dispatch_person_name,
           -- Extract invoice number from reference_number (remove "IN / " or "OUT / " prefix)
           CASE 
             WHEN il.transaction_type = 'IN' THEN REPLACE(il.reference_number, 'IN / ', '')
@@ -74,6 +75,9 @@ class ItemHistoryModel {
         LEFT JOIN teams ot ON oi.dispatched_by = ot.id
         WHERE s.sku_id = $1 
           AND il.company_id = $2
+        GROUP BY il.id, il.transaction_date, il.transaction_type, il.reference_number, 
+                 il.source_destination, il.created_by_name, il.created_by, il.quantity_change,
+                 il.net_balance, il.created_at, s.sku_id
       `;
 
       const params = [skuId, companyId.toUpperCase()];
@@ -132,7 +136,7 @@ class ItemHistoryModel {
         paramIndex++;
       }
 
-      // Order by created_at DESC (most recent first), then id DESC
+      // Order by created_at DESC (most recent first), then id DESC for consistent sorting
       query += ` ORDER BY il.created_at DESC, il.id DESC`;
 
       if (filters.limit) {

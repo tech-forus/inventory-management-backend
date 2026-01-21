@@ -96,17 +96,33 @@ class ManufacturingModel {
             for (const component of components) {
                 const requiredQty = component.quantity_required * quantity;
 
-                // Update stock
-                const stockUpdateRes = await client.query(
-                    `UPDATE skus 
-           SET current_stock = current_stock - $1 
-           WHERE id = $2 AND company_id = $3 AND current_stock >= $1
-           RETURNING sku_id, item_name, current_stock`,
-                    [requiredQty, component.raw_material_sku_id, companyIdUpper]
+                // Verify stock availability - check latest ledger balance
+                const lastBalanceResult = await client.query(
+                    `SELECT net_balance 
+                     FROM inventory_ledgers 
+                     WHERE sku_id = $1 AND company_id = $2
+                     ORDER BY transaction_date DESC, created_at DESC, id DESC 
+                     LIMIT 1`,
+                    [component.raw_material_sku_id, companyIdUpper]
                 );
 
-                if (stockUpdateRes.rows.length === 0) {
-                    throw new Error(`Insufficient stock for ${component.item_name} (SKU: ${component.sku_id})`);
+                let availableStock = 0;
+                if (lastBalanceResult.rows.length > 0) {
+                    availableStock = parseInt(lastBalanceResult.rows[0].net_balance, 10);
+                } else {
+                    // Fallback: check skus.current_stock if no ledger entries exist
+                    const skuCheck = await client.query(
+                        'SELECT current_stock FROM skus WHERE id = $1 AND company_id = $2',
+                        [component.raw_material_sku_id, companyIdUpper]
+                    );
+                    if (skuCheck.rows.length === 0) {
+                        throw new Error(`SKU ${component.raw_material_sku_id} not found`);
+                    }
+                    availableStock = skuCheck.rows[0].current_stock;
+                }
+
+                if (availableStock < requiredQty) {
+                    throw new Error(`Insufficient stock for ${component.item_name} (SKU: ${component.sku_id}). Available: ${availableStock}, Required: ${requiredQty}`);
                 }
 
                 // Create outgoing item record
@@ -150,11 +166,7 @@ class ManufacturingModel {
             );
             const incomingId = incomingResult.rows[0].id;
 
-            // Update finished good stock
-            await client.query(
-                `UPDATE skus SET current_stock = current_stock + $1 WHERE id = $2 AND company_id = $3`,
-                [quantity, finishedGoodSkuId, companyIdUpper]
-            );
+            // Stock update is now handled by LedgerService (single source of truth)
 
             // Create incoming item record
             await client.query(
