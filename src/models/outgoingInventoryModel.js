@@ -11,6 +11,19 @@ class OutgoingInventoryModel {
    * Create a new outgoing inventory transaction with items
    */
   static async create(inventoryData, items, companyId) {
+    console.log('[OutgoingInventoryModel] create() called:', {
+      companyId: companyId,
+      companyIdUpper: companyId.toUpperCase(),
+      itemsCount: items?.length,
+      items: items?.map(item => ({
+        skuId: item.skuId,
+        skuIdType: typeof item.skuId,
+        outgoingQuantity: item.outgoingQuantity
+      })),
+      status: inventoryData?.status,
+      isRejectedCase: inventoryData?.deliveryChallanSubType === 'to_vendor' || inventoryData?.deliveryChallanSubType === 'replacement'
+    });
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -76,6 +89,14 @@ class OutgoingInventoryModel {
       // Insert items with GST calculations
       const insertedItems = [];
       for (const item of items) {
+        console.log('[OutgoingInventoryModel] Processing item:', {
+          skuId: item.skuId,
+          skuIdType: typeof item.skuId,
+          skuIdValue: String(item.skuId),
+          outgoingQuantity: item.outgoingQuantity,
+          companyId: companyId.toUpperCase()
+        });
+
         const quantity = item.outgoingQuantity || 0;
         const unitPrice = item.unitPrice || 0;
         const gstPercentage = item.gstPercentage || item.gstRate || 0;
@@ -84,21 +105,55 @@ class OutgoingInventoryModel {
 
         // First, resolve SKU ID string to integer ID
         // item.skuId can be either integer ID or SKU ID string (like "QVSTARYUMBPZW2")
-        const isNumericSkuId = /^\d+$/.test(String(item.skuId));
+        const skuIdString = String(item.skuId);
+        const isNumericSkuId = /^\d+$/.test(skuIdString);
         let skuIntegerId;
+        
+        console.log('[OutgoingInventoryModel] SKU ID resolution:', {
+          originalSkuId: item.skuId,
+          skuIdString: skuIdString,
+          isNumeric: isNumericSkuId,
+          companyId: companyId.toUpperCase()
+        });
         
         if (isNumericSkuId) {
           skuIntegerId = parseInt(item.skuId, 10);
+          console.log('[OutgoingInventoryModel] Using numeric SKU ID directly:', {
+            skuIntegerId: skuIntegerId,
+            type: typeof skuIntegerId
+          });
         } else {
           // Look up SKU by SKU ID string to get integer ID
+          console.log('[OutgoingInventoryModel] Looking up SKU by SKU ID string:', {
+            skuIdString: skuIdString,
+            companyId: companyId.toUpperCase()
+          });
+          
           const skuLookup = await client.query(
             'SELECT id FROM skus WHERE sku_id = $1 AND company_id = $2',
-            [item.skuId, companyId.toUpperCase()]
+            [skuIdString, companyId.toUpperCase()]
           );
+          
+          console.log('[OutgoingInventoryModel] SKU lookup result:', {
+            query: 'SELECT id FROM skus WHERE sku_id = $1 AND company_id = $2',
+            params: [skuIdString, companyId.toUpperCase()],
+            rowsFound: skuLookup.rows.length,
+            result: skuLookup.rows
+          });
+          
           if (skuLookup.rows.length === 0) {
+            console.error('[OutgoingInventoryModel] SKU not found:', {
+              skuId: skuIdString,
+              companyId: companyId.toUpperCase()
+            });
             throw new Error(`SKU ${item.skuId} not found`);
           }
           skuIntegerId = skuLookup.rows[0].id;
+          console.log('[OutgoingInventoryModel] Resolved SKU ID:', {
+            skuIdString: skuIdString,
+            skuIntegerId: skuIntegerId,
+            type: typeof skuIntegerId
+          });
         }
 
         // Calculate base value (excl GST)
@@ -107,6 +162,14 @@ class OutgoingInventoryModel {
         const gstAmount = totalValueExclGst * (gstPercentage / 100);
         // Total value including GST
         const totalValueInclGst = totalValueExclGst + gstAmount;
+
+        console.log('[OutgoingInventoryModel] Inserting outgoing inventory item:', {
+          outgoingInventoryId: outgoingInventoryId,
+          skuIntegerId: skuIntegerId,
+          skuIntegerIdType: typeof skuIntegerId,
+          outgoingQty: outgoingQty,
+          rejectedQty: rejectedQty
+        });
 
         const itemResult = await client.query(
           `INSERT INTO outgoing_inventory_items (
@@ -135,6 +198,12 @@ class OutgoingInventoryModel {
             item.finalTaxableAmount || totalValueExclGst,
           ]
         );
+        
+        console.log('[OutgoingInventoryModel] Item inserted successfully:', {
+          itemId: itemResult.rows[0]?.id,
+          skuId: itemResult.rows[0]?.sku_id
+        });
+        
         insertedItems.push(itemResult.rows[0]);
 
         // Verify stock availability before allowing outgoing (status is 'completed')
@@ -142,34 +211,103 @@ class OutgoingInventoryModel {
         // We still need to check availability before creating the ledger entry
         if (inventoryData.status === 'completed' && !isRejectedCase) {
           if (outgoingQty > 0) {
+            console.log('[OutgoingInventoryModel] Checking stock availability:', {
+              skuId: item.skuId,
+              skuIntegerId: skuIntegerId,
+              skuIntegerIdType: typeof skuIntegerId,
+              companyId: companyId.toUpperCase(),
+              outgoingQty: outgoingQty,
+              isRejectedCase: isRejectedCase
+            });
+
             // Verify stock availability - check latest ledger balance
-            const lastBalanceResult = await client.query(
-              `SELECT net_balance 
+            const ledgerQuery = `SELECT net_balance 
                FROM inventory_ledgers 
                WHERE sku_id = $1 AND company_id = $2
                ORDER BY transaction_date DESC, created_at DESC, id DESC 
-               LIMIT 1`,
-              [skuIntegerId, companyId.toUpperCase()] // Use integer ID
-            );
+               LIMIT 1`;
+            const ledgerParams = [skuIntegerId, companyId.toUpperCase()];
+            
+            console.log('[OutgoingInventoryModel] Executing ledger stock check query:', {
+              query: ledgerQuery,
+              params: ledgerParams,
+              paramTypes: ledgerParams.map(p => typeof p)
+            });
+
+            const lastBalanceResult = await client.query(ledgerQuery, ledgerParams);
+
+            console.log('[OutgoingInventoryModel] Ledger stock check result:', {
+              rowsFound: lastBalanceResult.rows.length,
+              result: lastBalanceResult.rows,
+              netBalance: lastBalanceResult.rows[0]?.net_balance
+            });
 
             let availableStock = 0;
             if (lastBalanceResult.rows.length > 0) {
               availableStock = parseInt(lastBalanceResult.rows[0].net_balance, 10);
+              console.log('[OutgoingInventoryModel] Using ledger balance:', {
+                availableStock: availableStock,
+                netBalance: lastBalanceResult.rows[0].net_balance
+              });
             } else {
+              console.log('[OutgoingInventoryModel] No ledger entries found, checking skus.current_stock:', {
+                skuIntegerId: skuIntegerId,
+                skuIntegerIdType: typeof skuIntegerId
+              });
+
               // Fallback: check skus.current_stock if no ledger entries exist
-              const skuCheck = await client.query(
-                'SELECT current_stock FROM skus WHERE id = $1',
-                [skuIntegerId] // Use integer ID
-              );
+              const skuCheckQuery = 'SELECT current_stock FROM skus WHERE id = $1';
+              const skuCheckParams = [skuIntegerId];
+              
+              console.log('[OutgoingInventoryModel] Executing SKU stock check query:', {
+                query: skuCheckQuery,
+                params: skuCheckParams,
+                paramTypes: skuCheckParams.map(p => typeof p)
+              });
+
+              const skuCheck = await client.query(skuCheckQuery, skuCheckParams);
+              
+              console.log('[OutgoingInventoryModel] SKU stock check result:', {
+                rowsFound: skuCheck.rows.length,
+                result: skuCheck.rows,
+                currentStock: skuCheck.rows[0]?.current_stock
+              });
+
               if (skuCheck.rows.length === 0) {
+                console.error('[OutgoingInventoryModel] SKU not found in skus table:', {
+                  skuId: item.skuId,
+                  skuIntegerId: skuIntegerId
+                });
                 throw new Error(`SKU ${item.skuId} not found`);
               }
               availableStock = skuCheck.rows[0].current_stock;
+              console.log('[OutgoingInventoryModel] Using skus.current_stock:', {
+                availableStock: availableStock
+              });
             }
 
+            console.log('[OutgoingInventoryModel] Stock validation:', {
+              availableStock: availableStock,
+              outgoingQty: outgoingQty,
+              isSufficient: availableStock >= outgoingQty
+            });
+
             if (availableStock < outgoingQty) {
+              console.error('[OutgoingInventoryModel] Insufficient stock:', {
+                skuId: item.skuId,
+                skuIntegerId: skuIntegerId,
+                availableStock: availableStock,
+                outgoingQty: outgoingQty
+              });
               throw new Error(`Insufficient stock for SKU ${item.skuId}. Available: ${availableStock}, Required: ${outgoingQty}`);
             }
+
+            console.log('[OutgoingInventoryModel] Stock check passed:', {
+              skuId: item.skuId,
+              skuIntegerId: skuIntegerId,
+              availableStock: availableStock,
+              outgoingQty: outgoingQty
+            });
 
             logger.debug({ skuId: item.skuId, skuIntegerId, availableStock, outgoingQty }, `Stock check passed for SKU ${item.skuId}, stock will be updated by ledger`);
           }
@@ -218,11 +356,35 @@ class OutgoingInventoryModel {
       }
 
       await client.query('COMMIT');
+      console.log('[OutgoingInventoryModel] Transaction committed successfully:', {
+        outgoingInventoryId: inventoryResult.rows[0]?.id,
+        itemsCount: insertedItems.length
+      });
       return {
         ...inventoryResult.rows[0],
         items: insertedItems,
       };
     } catch (error) {
+      console.error('[OutgoingInventoryModel] Error in create():', {
+        error: error.message,
+        stack: error.stack,
+        name: error.name,
+        code: error.code,
+        detail: error.detail,
+        hint: error.hint,
+        position: error.position,
+        internalPosition: error.internalPosition,
+        internalQuery: error.internalQuery,
+        where: error.where,
+        schema: error.schema,
+        table: error.table,
+        column: error.column,
+        dataType: error.dataType,
+        constraint: error.constraint,
+        file: error.file,
+        line: error.line,
+        routine: error.routine
+      });
       await client.query('ROLLBACK');
       throw error;
     } finally {
