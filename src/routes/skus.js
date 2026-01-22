@@ -937,7 +937,7 @@ router.get('/analytics/non-movable', async (req, res, next) => {
       LEFT JOIN sub_categories sc ON s.sub_category_id = sc.id
       LEFT JOIN brands b ON s.brand_id = b.id
       LEFT JOIN vendors v ON s.vendor_id = v.id
-      WHERE s.company_id = $1 AND s.is_active = true AND s.is_non_movable = true
+      WHERE s.company_id = $1 AND s.is_active = true AND s.is_non_movable = true AND s.current_stock > 0
       ORDER BY s.updated_at DESC
     `;
 

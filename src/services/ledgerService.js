@@ -83,8 +83,12 @@ class LedgerService {
             );
 
             // 4. Update skus.current_stock to match the ledger net_balance (single source of truth)
+            // Also remove non-movable status if stock becomes 0 (no dead stock if no stock exists)
             await client.query(
-                `UPDATE skus SET current_stock = $1 WHERE id = $2`,
+                `UPDATE skus 
+                 SET current_stock = $1, 
+                     is_non_movable = CASE WHEN $1 = 0 THEN false ELSE is_non_movable END
+                 WHERE id = $2`,
                 [newBalance, skuId]
             );
 
