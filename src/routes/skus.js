@@ -102,7 +102,10 @@ const transformSKU = (sku) => {
     rackNumber: sku.rack_number,
     gstRate: sku.gst_rate,
     customFields,
-    currentStock: sku.current_stock,
+    // Use ledger balance if available, otherwise fallback to skus.current_stock
+    currentStock: sku.current_stock_from_ledger !== undefined && sku.current_stock_from_ledger !== null 
+      ? parseInt(sku.current_stock_from_ledger, 10) 
+      : (sku.current_stock !== undefined && sku.current_stock !== null ? parseInt(sku.current_stock, 10) : 0),
     minStockLevel: sku.min_stock_level,
     reorderPoint: sku.reorder_point,
     defaultStorageLocation: sku.default_storage_location,
@@ -142,13 +145,21 @@ router.get('/', async (req, res, next) => {
         ic.name as item_category,
         sc.name as sub_category,
         b.name as brand,
-        v.name as vendor
+        v.name as vendor,
+        COALESCE(latest_ledger.net_balance, s.current_stock, 0) as current_stock_from_ledger
       FROM skus s
       LEFT JOIN product_categories pc ON s.product_category_id = pc.id
       LEFT JOIN item_categories ic ON s.item_category_id = ic.id
       LEFT JOIN sub_categories sc ON s.sub_category_id = sc.id
       LEFT JOIN brands b ON s.brand_id = b.id
       LEFT JOIN vendors v ON s.vendor_id = v.id
+      LEFT JOIN LATERAL (
+        SELECT net_balance
+        FROM inventory_ledgers il
+        WHERE il.sku_id = s.id AND il.company_id = $1
+        ORDER BY il.created_at DESC, il.id DESC
+        LIMIT 1
+      ) latest_ledger ON true
       WHERE s.company_id = $1 AND s.is_active = true
     `;
     const params = [companyId];
@@ -231,8 +242,8 @@ router.get('/', async (req, res, next) => {
       skuId: 's.sku_id',
       itemName: 's.item_name',
       brand: 'b.name',
-      currentStock: 's.current_stock',
-      usefulStocks: 's.current_stock',
+      currentStock: 'COALESCE(latest_ledger.net_balance, s.current_stock, 0)',
+      usefulStocks: 'COALESCE(latest_ledger.net_balance, s.current_stock, 0)',
       createdAt: 's.created_at'
     };
 
@@ -293,13 +304,21 @@ router.get('/:id', async (req, res, next) => {
         ic.name as item_category,
         sc.name as sub_category,
         b.name as brand,
-        v.name as vendor
+        v.name as vendor,
+        COALESCE(latest_ledger.net_balance, s.current_stock, 0) as current_stock_from_ledger
       FROM skus s
       LEFT JOIN product_categories pc ON s.product_category_id = pc.id
       LEFT JOIN item_categories ic ON s.item_category_id = ic.id
       LEFT JOIN sub_categories sc ON s.sub_category_id = sc.id
       LEFT JOIN brands b ON s.brand_id = b.id
       LEFT JOIN vendors v ON s.vendor_id = v.id
+      LEFT JOIN LATERAL (
+        SELECT net_balance
+        FROM inventory_ledgers il
+        WHERE il.sku_id = s.id AND il.company_id = $2
+        ORDER BY il.created_at DESC, il.id DESC
+        LIMIT 1
+      ) latest_ledger ON true
       WHERE ${whereClause} AND s.company_id = $2 AND s.is_active = true`,
       [isNumeric ? parseInt(idParam, 10) : idParam, companyId]
     );
