@@ -82,6 +82,25 @@ class OutgoingInventoryModel {
         const outgoingQty = quantity;
         const rejectedQty = isRejectedCase ? outgoingQty : 0;
 
+        // First, resolve SKU ID string to integer ID
+        // item.skuId can be either integer ID or SKU ID string (like "QVSTARYUMBPZW2")
+        const isNumericSkuId = /^\d+$/.test(String(item.skuId));
+        let skuIntegerId;
+        
+        if (isNumericSkuId) {
+          skuIntegerId = parseInt(item.skuId, 10);
+        } else {
+          // Look up SKU by SKU ID string to get integer ID
+          const skuLookup = await client.query(
+            'SELECT id FROM skus WHERE sku_id = $1 AND company_id = $2',
+            [item.skuId, companyId.toUpperCase()]
+          );
+          if (skuLookup.rows.length === 0) {
+            throw new Error(`SKU ${item.skuId} not found`);
+          }
+          skuIntegerId = skuLookup.rows[0].id;
+        }
+
         // Calculate base value (excl GST)
         const totalValueExclGst = quantity * unitPrice;
         // Calculate GST amount
@@ -100,7 +119,7 @@ class OutgoingInventoryModel {
           RETURNING *`,
           [
             outgoingInventoryId,
-            item.skuId,
+            skuIntegerId, // Use integer ID instead of item.skuId
             outgoingQty,
             rejectedQty,
             unitPrice,
@@ -130,7 +149,7 @@ class OutgoingInventoryModel {
                WHERE sku_id = $1 AND company_id = $2
                ORDER BY transaction_date DESC, created_at DESC, id DESC 
                LIMIT 1`,
-              [item.skuId, companyId.toUpperCase()]
+              [skuIntegerId, companyId.toUpperCase()] // Use integer ID
             );
 
             let availableStock = 0;
@@ -140,7 +159,7 @@ class OutgoingInventoryModel {
               // Fallback: check skus.current_stock if no ledger entries exist
               const skuCheck = await client.query(
                 'SELECT current_stock FROM skus WHERE id = $1',
-                [item.skuId]
+                [skuIntegerId] // Use integer ID
               );
               if (skuCheck.rows.length === 0) {
                 throw new Error(`SKU ${item.skuId} not found`);
@@ -152,7 +171,7 @@ class OutgoingInventoryModel {
               throw new Error(`Insufficient stock for SKU ${item.skuId}. Available: ${availableStock}, Required: ${outgoingQty}`);
             }
 
-            logger.debug({ skuId: item.skuId, availableStock, outgoingQty }, `Stock check passed for SKU ${item.skuId}, stock will be updated by ledger`);
+            logger.debug({ skuId: item.skuId, skuIntegerId, availableStock, outgoingQty }, `Stock check passed for SKU ${item.skuId}, stock will be updated by ledger`);
           }
         }
       }
