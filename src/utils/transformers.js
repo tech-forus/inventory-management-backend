@@ -261,10 +261,7 @@ const transformSKU = (sku) => {
     height: sku.height,
     heightUnit: sku.height_unit,
     customFields,
-    // Use ledger balance if available (from routes/skus.js query), otherwise fallback to skus.current_stock
-    currentStock: sku.current_stock_from_ledger !== undefined && sku.current_stock_from_ledger !== null 
-      ? parseInt(sku.current_stock_from_ledger, 10) 
-      : (sku.current_stock !== undefined && sku.current_stock !== null ? parseInt(sku.current_stock, 10) : 0),
+    currentStock: sku.current_stock,
     minStockLevel: sku.min_stock_level,
     reorderPoint: sku.reorder_point,
     defaultStorageLocation: sku.default_storage_location,

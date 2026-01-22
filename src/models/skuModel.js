@@ -21,8 +21,7 @@ class SKUModel {
         CASE 
           WHEN latest_incoming.receiving_date IS NOT NULL THEN 'IN'
           ELSE NULL
-        END as transaction_type,
-        COALESCE(latest_ledger.net_balance, s.current_stock, 0) as current_stock_from_ledger
+        END as transaction_type
       FROM skus s
       LEFT JOIN product_categories pc ON s.product_category_id = pc.id
       LEFT JOIN item_categories ic ON s.item_category_id = ic.id
@@ -40,13 +39,6 @@ class SKUModel {
         ORDER BY ii.receiving_date DESC, ii.id DESC
         LIMIT 1
       ) latest_incoming ON true
-      LEFT JOIN LATERAL (
-        SELECT net_balance
-        FROM inventory_ledgers il
-        WHERE il.sku_id = s.id AND il.company_id = $1
-        ORDER BY il.created_at DESC, il.id DESC
-        LIMIT 1
-      ) latest_ledger ON true
       WHERE s.company_id = $1 AND s.is_active = true
     `;
     const params = [companyId.toUpperCase()];
@@ -290,19 +282,6 @@ class SKUModel {
     const whereClause = isNumeric ? 's.id = $1' : 's.sku_id = $1';
     const idValue = isNumeric ? parseInt(idStr, 10) : idStr;
 
-    const params = [idValue];
-    let paramIndex = 2;
-
-    // Build company_id condition for LATERAL JOIN
-    let companyIdCondition = '';
-    if (companyId) {
-      companyIdCondition = `il.company_id = $${paramIndex}`;
-      params.push(companyId.toUpperCase());
-      paramIndex++;
-    } else {
-      companyIdCondition = 'il.company_id IS NOT NULL'; // Fallback if no companyId provided
-    }
-
     let query = `
       SELECT 
         s.*,
@@ -311,23 +290,16 @@ class SKUModel {
         ic.name as item_category,
         sc.name as sub_category,
         b.name as brand,
-        v.name as vendor,
-        COALESCE(latest_ledger.net_balance, s.current_stock, 0) as current_stock_from_ledger
+        v.name as vendor
       FROM skus s
       LEFT JOIN product_categories pc ON s.product_category_id = pc.id
       LEFT JOIN item_categories ic ON s.item_category_id = ic.id
       LEFT JOIN sub_categories sc ON s.sub_category_id = sc.id
       LEFT JOIN brands b ON s.brand_id = b.id
       LEFT JOIN vendors v ON s.vendor_id = v.id
-      LEFT JOIN LATERAL (
-        SELECT net_balance
-        FROM inventory_ledgers il
-        WHERE il.sku_id = s.id AND ${companyIdCondition}
-        ORDER BY il.created_at DESC, il.id DESC
-        LIMIT 1
-      ) latest_ledger ON true
       WHERE ${whereClause}
     `;
+    const params = [idValue];
 
     // Add company ID filter if provided
     if (companyId) {
