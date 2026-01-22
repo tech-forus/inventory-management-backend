@@ -615,10 +615,12 @@ router.put(
       } = req.body;
 
       // Fetch old SKU to get current stock before update
-      const oldSkuResult = await client.query(
-        `SELECT id, current_stock, opening_stock FROM skus WHERE ${whereClause} AND company_id = $1`,
-        [idValue, companyId]
-      );
+      // Use proper parameter numbering ($1, $2) instead of referencing UPDATE query parameters
+      const oldSkuQuery = isNumeric 
+        ? 'SELECT id, current_stock, opening_stock FROM skus WHERE id = $1 AND company_id = $2'
+        : 'SELECT id, current_stock, opening_stock FROM skus WHERE sku_id = $1 AND company_id = $2';
+      
+      const oldSkuResult = await client.query(oldSkuQuery, [idValue, companyId]);
 
       if (oldSkuResult.rows.length === 0) {
         await client.query('ROLLBACK');
