@@ -571,7 +571,7 @@ router.put(
     // Determine if ID is numeric or alphanumeric
     const idParam = req.params.id;
     const isNumeric = /^\d+$/.test(idParam);
-    const whereClause = isNumeric ? 'id = $35' : 'sku_id = $35';
+    const whereClause = isNumeric ? 'id = $34' : 'sku_id = $34'; // Updated from $35 to $34 since we removed current_stock parameter
     const idValue = isNumeric ? parseInt(idParam, 10) : idParam;
     const companyId = getCompanyId(req).toUpperCase();
 
@@ -606,12 +606,35 @@ router.put(
         height,
         heightUnit,
         openingStock,
+        currentStock, // Extract currentStock from request
         minStockLevel,
         reorderPoint,
         defaultStorageLocation,
         customFields,
         status,
       } = req.body;
+
+      // Fetch old SKU to get current stock before update
+      const oldSkuResult = await client.query(
+        `SELECT id, current_stock, opening_stock FROM skus WHERE ${whereClause} AND company_id = $1`,
+        [idValue, companyId]
+      );
+
+      if (oldSkuResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'SKU not found' });
+      }
+
+      const oldSku = oldSkuResult.rows[0];
+      const oldCurrentStock = parseInt(oldSku.current_stock || 0, 10);
+      
+      // Parse new current stock (use openingStock if currentStock not provided, for backward compatibility)
+      const newCurrentStock = currentStock !== undefined && currentStock !== null 
+        ? parseInt(String(currentStock).trim(), 10) 
+        : (openingStock !== undefined && openingStock !== null ? parseInt(String(openingStock).trim(), 10) : oldCurrentStock);
+      
+      // Calculate stock difference
+      const stockDifference = newCurrentStock - oldCurrentStock;
 
       // Parse custom_fields if it's a string
       let customFieldsParsed = null;
@@ -639,9 +662,9 @@ router.put(
         hsn_sac_code = $9, gst_rate = $10, rating_size = $11, model = $12, series = $13, unit = $14,
         material = $15, manufacture_or_import = $16, color = $17,
         weight = $18, weight_unit = $19, length = $20, length_unit = $21, width = $22, width_unit = $23, height = $24, height_unit = $25,
-        current_stock = $26, min_stock_level = $27, reorder_point = $28, default_storage_location = $29,
-        is_non_movable = $30, custom_fields = $31, status = $32, is_active = $33, opening_stock = $34, updated_at = CURRENT_TIMESTAMP
-      WHERE ${whereClause} AND company_id = $36 RETURNING *`,
+        min_stock_level = $26, reorder_point = $27, default_storage_location = $28,
+        is_non_movable = $29, custom_fields = $30, status = $31, is_active = $32, opening_stock = $33, updated_at = CURRENT_TIMESTAMP
+      WHERE ${whereClause} AND company_id = $35 RETURNING *`,
         [
           productCategoryId,
           itemCategoryId,
@@ -668,7 +691,6 @@ router.put(
           widthUnit || 'mm',
           height !== undefined && height !== null ? parseFloat(height) : null,
           heightUnit || 'mm',
-          openingStock !== undefined && openingStock !== null ? openingStock : 0, // Use openingStock for current_stock
           minStockLevel,
           reorderPoint || null,
           defaultStorageLocation || null,
@@ -685,6 +707,27 @@ router.put(
       if (result.rows.length === 0) {
         await client.query('ROLLBACK');
         return res.status(404).json({ error: 'SKU not found' });
+      }
+
+      // Create ledger entry if stock changed
+      if (stockDifference !== 0) {
+        const LedgerService = require('../services/ledgerService');
+        const user = req.user || {};
+        const createdByName = user.role && String(user.role).toLowerCase().includes('admin')
+          ? 'Super Admin'
+          : (user.email || 'System');
+
+        await LedgerService.addTransaction(client, {
+          skuId: oldSku.id,
+          transactionDate: new Date(),
+          transactionType: 'OPENING', // Use OPENING type for manual stock adjustments
+          referenceNumber: 'Stock Adjustment',
+          sourceDestination: 'Manual Stock Update',
+          createdBy: user.id || user.userId || null,
+          createdByName: createdByName,
+          quantityChange: stockDifference, // Positive for increase, negative for decrease
+          companyId: companyId
+        });
       }
 
       await client.query('COMMIT');
