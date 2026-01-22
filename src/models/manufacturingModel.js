@@ -97,11 +97,13 @@ class ManufacturingModel {
                 const requiredQty = component.quantity_required * quantity;
 
                 // Verify stock availability - check latest ledger balance
+                // Use same ORDER BY as LedgerService and Item History: created_at DESC, id DESC
+                // This ensures we get the most recently created transaction, not just the latest transaction_date
                 const lastBalanceResult = await client.query(
                     `SELECT net_balance 
                      FROM inventory_ledgers 
                      WHERE sku_id = $1 AND company_id = $2
-                     ORDER BY transaction_date DESC, created_at DESC, id DESC 
+                     ORDER BY created_at DESC, id DESC 
                      LIMIT 1`,
                     [component.raw_material_sku_id, companyIdUpper]
                 );
