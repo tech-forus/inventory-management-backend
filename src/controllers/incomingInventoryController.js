@@ -180,7 +180,8 @@ const getIncomingHistory = async (req, res, next) => {
       vendor: req.query.vendor,
       sku: req.query.sku,
       search: req.query.search,
-      limit: req.query.limit ? parseInt(req.query.limit) : 1000,
+      limit: req.query.limit ? parseInt(req.query.limit) : 100, // Reduced from 1000 to 100 for better performance
+      offset: req.query.offset ? parseInt(req.query.offset) : 0, // Add pagination support
     };
 
     const history = await IncomingInventoryModel.getHistory(companyId, filters);

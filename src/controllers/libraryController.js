@@ -987,10 +987,14 @@ const uploadCustomers = async (req, res, next) => {
 const getTransportors = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
+    console.log('[getTransportors] Fetching transporters for company:', companyId);
     const transportors = await TransportorModel.getAll(companyId);
+    console.log('[getTransportors] Found transporters:', transportors.length);
     const transformedData = transformArray(transportors, transformTransportor);
+    console.log('[getTransportors] Transformed data length:', transformedData?.length || 0);
     res.json({ success: true, data: transformedData });
   } catch (error) {
+    console.error('[getTransportors] Error:', error);
     next(error);
   }
 };
