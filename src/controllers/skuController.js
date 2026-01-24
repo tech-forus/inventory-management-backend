@@ -141,23 +141,28 @@ const createSKU = async (req, res, next) => {
   } catch (error) {
     await client.query('ROLLBACK');
     // Handle unique constraint violation as duplicate error
-    // Check for both the index name and generic constraint violations
-    if (error.code === '23505' && (
-      (error.constraint && (
-        error.constraint.includes('item_name_model') || 
-        error.constraint.includes('skus_item_name_model') ||
-        error.constraint.includes('idx_skus_unique_item_name_model') ||
-        error.constraint.startsWith('idx_s')
-      )) ||
-      (error.message && (
-        error.message.includes('idx_skus_unique_item_name_model') ||
-        error.message.includes('duplicate key value violates unique constraint')
-      ))
-    )) {
-      next(new ValidationError('This Item Already Exists'));
-    } else {
-      next(error);
+    // PostgreSQL error code 23505 = unique constraint violation
+    if (error.code === '23505') {
+      const errorMessage = error.message || '';
+      const errorConstraint = error.constraint || '';
+      
+      // Check if this is related to item_name + model duplicate constraint
+      // Check constraint name, error message, or if it's a generic duplicate on skus table
+      const isItemModelDuplicate = 
+        errorConstraint.includes('item_name_model') ||
+        errorConstraint.includes('idx_skus_unique') ||
+        errorConstraint.startsWith('idx_s') ||
+        errorMessage.includes('idx_skus_unique_item_name_model') ||
+        errorMessage.includes('item_name_model') ||
+        (errorMessage.includes('duplicate key') && 
+         (errorMessage.includes('skus') || errorMessage.includes('item') || errorMessage.includes('model')));
+      
+      if (isItemModelDuplicate) {
+        next(new ValidationError('This Item Already Exists'));
+        return;
+      }
     }
+    next(error);
   } finally {
     client.release();
   }
@@ -225,23 +230,28 @@ const updateSKU = async (req, res, next) => {
   } catch (error) {
     await client.query('ROLLBACK');
     // Handle unique constraint violation as duplicate error
-    // Check for both the index name and generic constraint violations
-    if (error.code === '23505' && (
-      (error.constraint && (
-        error.constraint.includes('item_name_model') || 
-        error.constraint.includes('skus_item_name_model') ||
-        error.constraint.includes('idx_skus_unique_item_name_model') ||
-        error.constraint.startsWith('idx_s')
-      )) ||
-      (error.message && (
-        error.message.includes('idx_skus_unique_item_name_model') ||
-        error.message.includes('duplicate key value violates unique constraint')
-      ))
-    )) {
-      next(new ValidationError('This Item Already Exists'));
-    } else {
-      next(error);
+    // PostgreSQL error code 23505 = unique constraint violation
+    if (error.code === '23505') {
+      const errorMessage = error.message || '';
+      const errorConstraint = error.constraint || '';
+      
+      // Check if this is related to item_name + model duplicate constraint
+      // Check constraint name, error message, or if it's a generic duplicate on skus table
+      const isItemModelDuplicate = 
+        errorConstraint.includes('item_name_model') ||
+        errorConstraint.includes('idx_skus_unique') ||
+        errorConstraint.startsWith('idx_s') ||
+        errorMessage.includes('idx_skus_unique_item_name_model') ||
+        errorMessage.includes('item_name_model') ||
+        (errorMessage.includes('duplicate key') && 
+         (errorMessage.includes('skus') || errorMessage.includes('item') || errorMessage.includes('model')));
+      
+      if (isItemModelDuplicate) {
+        next(new ValidationError('This Item Already Exists'));
+        return;
+      }
     }
+    next(error);
   } finally {
     client.release();
   }
