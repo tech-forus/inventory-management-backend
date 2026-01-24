@@ -598,12 +598,6 @@ class OutgoingInventoryModel {
       paramIndex++;
     }
 
-    if (filters.offset) {
-      query += ` OFFSET $${paramIndex}`;
-      queryParams.push(filters.offset);
-      paramIndex++;
-    }
-
     const result = await pool.query(query, queryParams);
     return result.rows;
   }
