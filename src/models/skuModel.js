@@ -536,16 +536,28 @@ class SKUModel {
    * @param {string} model - Model number (can be null, empty string, or value)
    * @param {string} companyId - Company ID
    * @param {number|string} excludeId - SKU ID to exclude from check (for updates)
+   * @param {object} client - Optional database client for transaction support (prevents race conditions)
    * @returns {Promise<boolean>} - True if duplicate exists
    */
-  static async itemNameModelExists(itemName, model, companyId, excludeId = null) {
+  static async itemNameModelExists(itemName, model, companyId, excludeId = null, client = null) {
     if (!itemName) {
       return false;
     }
 
-    // Normalize model: treat null, undefined, and empty string as equivalent
-    const normalizedModel = model ? String(model).trim() : '';
+    // Normalize model: treat null, undefined, empty string, and whitespace-only as equivalent
+    let normalizedModel = '';
+    if (model !== null && model !== undefined && model !== '') {
+      const modelStr = String(model).trim();
+      // Only set normalizedModel if it's not empty after trimming
+      if (modelStr !== '') {
+        normalizedModel = modelStr;
+      }
+    }
+    
     const normalizedItemName = String(itemName).trim();
+    if (!normalizedItemName) {
+      return false;
+    }
 
     // Build query - handle NULL and empty string for model
     let query = `
@@ -572,7 +584,9 @@ class SKUModel {
       params.push(excludeId);
     }
 
-    const result = await pool.query(query, params);
+    // Use transaction client if provided (prevents race conditions), otherwise use pool
+    const queryClient = client || pool;
+    const result = await queryClient.query(query, params);
     return result.rows.length > 0;
   }
 }

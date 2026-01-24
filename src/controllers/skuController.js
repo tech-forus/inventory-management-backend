@@ -101,11 +101,22 @@ const createSKU = async (req, res, next) => {
     // Check if SKU with same itemName and model already exists
     if (req.body.itemName) {
       // Check for duplicates even if model is empty string or null
-      const modelValue = req.body.model || '';
+      // Normalize model: treat null, undefined, empty string, and whitespace as equivalent
+      let modelValue = '';
+      if (req.body.model !== null && req.body.model !== undefined && req.body.model !== '') {
+        const modelStr = String(req.body.model).trim();
+        if (modelStr !== '') {
+          modelValue = modelStr;
+        }
+      }
+      
+      // Pass transaction client to prevent race conditions
       const duplicateExists = await SKUModel.itemNameModelExists(
         req.body.itemName,
         modelValue,
-        companyId
+        companyId,
+        null, // excludeId (not needed for create)
+        client // Pass transaction client
       );
       if (duplicateExists) {
         await client.query('ROLLBACK');
@@ -142,12 +153,22 @@ const updateSKU = async (req, res, next) => {
     // Check if SKU with same itemName and model already exists (excluding current SKU)
     if (req.body.itemName) {
       // Check for duplicates even if model is empty string or null
-      const modelValue = req.body.model || '';
+      // Normalize model: treat null, undefined, empty string, and whitespace as equivalent
+      let modelValue = '';
+      if (req.body.model !== null && req.body.model !== undefined && req.body.model !== '') {
+        const modelStr = String(req.body.model).trim();
+        if (modelStr !== '') {
+          modelValue = modelStr;
+        }
+      }
+      
+      // Pass transaction client to prevent race conditions
       const duplicateExists = await SKUModel.itemNameModelExists(
         req.body.itemName,
         modelValue,
         companyId,
-        req.params.id // Exclude current SKU from check
+        req.params.id, // Exclude current SKU from check
+        client // Pass transaction client
       );
       if (duplicateExists) {
         await client.query('ROLLBACK');
