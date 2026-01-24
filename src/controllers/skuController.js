@@ -125,7 +125,7 @@ const createSKU = async (req, res, next) => {
       );
       if (duplicateExists) {
         await client.query('ROLLBACK');
-        throw new ValidationError('An SKU with this Item Name and Model Number already exists');
+        throw new ValidationError('This Item Already Exists');
       }
     }
 
@@ -146,11 +146,15 @@ const createSKU = async (req, res, next) => {
       (error.constraint && (
         error.constraint.includes('item_name_model') || 
         error.constraint.includes('skus_item_name_model') ||
-        error.constraint.includes('idx_skus_unique_item_name_model')
+        error.constraint.includes('idx_skus_unique_item_name_model') ||
+        error.constraint.startsWith('idx_s')
       )) ||
-      (error.message && error.message.includes('idx_skus_unique_item_name_model'))
+      (error.message && (
+        error.message.includes('idx_skus_unique_item_name_model') ||
+        error.message.includes('duplicate key value violates unique constraint')
+      ))
     )) {
-      next(new ValidationError('An SKU with this Item Name and Model Number already exists'));
+      next(new ValidationError('This Item Already Exists'));
     } else {
       next(error);
     }
@@ -196,7 +200,7 @@ const updateSKU = async (req, res, next) => {
       );
       if (duplicateExists) {
         await client.query('ROLLBACK');
-        throw new ValidationError('An SKU with this Item Name and Model Number already exists');
+        throw new ValidationError('This Item Already Exists');
       }
     }
 
@@ -226,11 +230,15 @@ const updateSKU = async (req, res, next) => {
       (error.constraint && (
         error.constraint.includes('item_name_model') || 
         error.constraint.includes('skus_item_name_model') ||
-        error.constraint.includes('idx_skus_unique_item_name_model')
+        error.constraint.includes('idx_skus_unique_item_name_model') ||
+        error.constraint.startsWith('idx_s')
       )) ||
-      (error.message && error.message.includes('idx_skus_unique_item_name_model'))
+      (error.message && (
+        error.message.includes('idx_skus_unique_item_name_model') ||
+        error.message.includes('duplicate key value violates unique constraint')
+      ))
     )) {
-      next(new ValidationError('An SKU with this Item Name and Model Number already exists'));
+      next(new ValidationError('This Item Already Exists'));
     } else {
       next(error);
     }
