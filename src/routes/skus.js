@@ -523,6 +523,28 @@ router.post(
       res.json({ success: true, data: transformedData });
     } catch (error) {
       await client.query('ROLLBACK');
+
+      // Handle duplicate SKU (itemName + model) as a user-friendly validation error
+      // PostgreSQL error code 23505 = unique constraint violation
+      if (error && error.code === '23505') {
+        const errorMessage = error.message || '';
+        const errorConstraint = error.constraint || '';
+
+        const isItemModelDuplicate =
+          errorConstraint.includes('item_name_model') ||
+          errorConstraint.includes('idx_skus_unique_item_name_model') ||
+          errorConstraint.startsWith('idx_s') ||
+          errorMessage.includes('idx_skus_unique_item_name_model') ||
+          errorMessage.includes('item_name_model');
+
+        if (isItemModelDuplicate) {
+          return res.status(400).json({
+            success: false,
+            error: 'This Item Already Exists',
+          });
+        }
+      }
+
       next(error);
     } finally {
       client.release();
@@ -763,6 +785,27 @@ router.put(
       res.json({ success: true, data: transformedData });
     } catch (error) {
       await client.query('ROLLBACK');
+
+      // Handle duplicate SKU (itemName + model) as a user-friendly validation error
+      if (error && error.code === '23505') {
+        const errorMessage = error.message || '';
+        const errorConstraint = error.constraint || '';
+
+        const isItemModelDuplicate =
+          errorConstraint.includes('item_name_model') ||
+          errorConstraint.includes('idx_skus_unique_item_name_model') ||
+          errorConstraint.startsWith('idx_s') ||
+          errorMessage.includes('idx_skus_unique_item_name_model') ||
+          errorMessage.includes('item_name_model');
+
+        if (isItemModelDuplicate) {
+          return res.status(400).json({
+            success: false,
+            error: 'This Item Already Exists',
+          });
+        }
+      }
+
       next(error);
     } finally {
       client.release();
