@@ -531,6 +531,32 @@ class SKUModel {
   }
 
   /**
+   * Generate a unique lock key for advisory lock based on itemName + model + companyId
+   * Uses a simple hash to convert string combination to integer for pg_advisory_lock
+   */
+  static generateDuplicateLockKey(itemName, model, companyId) {
+    // Normalize inputs
+    const normalizedItemName = String(itemName || '').trim().toLowerCase();
+    const normalizedModel = model ? String(model).trim().toUpperCase() : '';
+    const normalizedCompanyId = String(companyId || '').toUpperCase();
+    
+    // Create a combined string
+    const combined = `${normalizedCompanyId}|${normalizedItemName}|${normalizedModel}`;
+    
+    // Simple hash function to convert string to integer (for advisory lock)
+    let hash = 0;
+    for (let i = 0; i < combined.length; i++) {
+      const char = combined.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    
+    // Use absolute value and ensure it's within PostgreSQL's int4 range
+    // PostgreSQL advisory locks use int8, but we'll use a safe range
+    return Math.abs(hash) % 2147483647; // Max safe int for PostgreSQL
+  }
+
+  /**
    * Check if SKU with same itemName and model already exists
    * @param {string} itemName - Item name
    * @param {string} model - Model number (can be null, empty string, or value)
@@ -560,6 +586,7 @@ class SKUModel {
     }
 
     // Build query - handle NULL and empty string for model
+    // Use SELECT FOR UPDATE to lock rows and prevent race conditions
     let query = `
       SELECT id FROM skus 
       WHERE company_id = $1 
@@ -582,6 +609,11 @@ class SKUModel {
       const excludeParamIndex = params.length + 1;
       query += ` AND id != $${excludeParamIndex}`;
       params.push(excludeId);
+    }
+
+    // Add FOR UPDATE lock to prevent concurrent inserts (only if using transaction client)
+    if (client) {
+      query += ` FOR UPDATE`;
     }
 
     // Use transaction client if provided (prevents race conditions), otherwise use pool

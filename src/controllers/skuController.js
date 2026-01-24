@@ -100,7 +100,6 @@ const createSKU = async (req, res, next) => {
 
     // Check if SKU with same itemName and model already exists
     if (req.body.itemName) {
-      // Check for duplicates even if model is empty string or null
       // Normalize model: treat null, undefined, empty string, and whitespace as equivalent
       let modelValue = '';
       if (req.body.model !== null && req.body.model !== undefined && req.body.model !== '') {
@@ -109,6 +108,12 @@ const createSKU = async (req, res, next) => {
           modelValue = modelStr;
         }
       }
+      
+      // Generate a lock key from itemName + model + companyId for advisory lock
+      const lockKey = SKUModel.generateDuplicateLockKey(req.body.itemName, modelValue, companyId);
+      
+      // Acquire advisory lock to prevent concurrent duplicate checks
+      await client.query('SELECT pg_advisory_xact_lock($1)', [lockKey]);
       
       // Pass transaction client to prevent race conditions
       const duplicateExists = await SKUModel.itemNameModelExists(
@@ -135,7 +140,20 @@ const createSKU = async (req, res, next) => {
     res.json({ success: true, data: transformedData });
   } catch (error) {
     await client.query('ROLLBACK');
-    next(error);
+    // Handle unique constraint violation as duplicate error
+    // Check for both the index name and generic constraint violations
+    if (error.code === '23505' && (
+      (error.constraint && (
+        error.constraint.includes('item_name_model') || 
+        error.constraint.includes('skus_item_name_model') ||
+        error.constraint.includes('idx_skus_unique_item_name_model')
+      )) ||
+      (error.message && error.message.includes('idx_skus_unique_item_name_model'))
+    )) {
+      next(new ValidationError('An SKU with this Item Name and Model Number already exists'));
+    } else {
+      next(error);
+    }
   } finally {
     client.release();
   }
@@ -161,6 +179,12 @@ const updateSKU = async (req, res, next) => {
           modelValue = modelStr;
         }
       }
+      
+      // Generate a lock key from itemName + model + companyId for advisory lock
+      const lockKey = SKUModel.generateDuplicateLockKey(req.body.itemName, modelValue, companyId);
+      
+      // Acquire advisory lock to prevent concurrent duplicate checks
+      await client.query('SELECT pg_advisory_xact_lock($1)', [lockKey]);
       
       // Pass transaction client to prevent race conditions
       const duplicateExists = await SKUModel.itemNameModelExists(
@@ -196,7 +220,20 @@ const updateSKU = async (req, res, next) => {
     res.json({ success: true, data: transformedData });
   } catch (error) {
     await client.query('ROLLBACK');
-    next(error);
+    // Handle unique constraint violation as duplicate error
+    // Check for both the index name and generic constraint violations
+    if (error.code === '23505' && (
+      (error.constraint && (
+        error.constraint.includes('item_name_model') || 
+        error.constraint.includes('skus_item_name_model') ||
+        error.constraint.includes('idx_skus_unique_item_name_model')
+      )) ||
+      (error.message && error.message.includes('idx_skus_unique_item_name_model'))
+    )) {
+      next(new ValidationError('An SKU with this Item Name and Model Number already exists'));
+    } else {
+      next(error);
+    }
   } finally {
     client.release();
   }
