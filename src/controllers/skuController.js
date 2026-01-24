@@ -99,10 +99,12 @@ const createSKU = async (req, res, next) => {
     }
 
     // Check if SKU with same itemName and model already exists
-    if (req.body.itemName && req.body.model) {
+    if (req.body.itemName) {
+      // Check for duplicates even if model is empty string or null
+      const modelValue = req.body.model || '';
       const duplicateExists = await SKUModel.itemNameModelExists(
         req.body.itemName,
-        req.body.model,
+        modelValue,
         companyId
       );
       if (duplicateExists) {
@@ -138,10 +140,12 @@ const updateSKU = async (req, res, next) => {
     const companyId = getCompanyId(req);
 
     // Check if SKU with same itemName and model already exists (excluding current SKU)
-    if (req.body.itemName && req.body.model) {
+    if (req.body.itemName) {
+      // Check for duplicates even if model is empty string or null
+      const modelValue = req.body.model || '';
       const duplicateExists = await SKUModel.itemNameModelExists(
         req.body.itemName,
-        req.body.model,
+        modelValue,
         companyId,
         req.params.id // Exclude current SKU from check
       );

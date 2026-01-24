@@ -533,27 +533,42 @@ class SKUModel {
   /**
    * Check if SKU with same itemName and model already exists
    * @param {string} itemName - Item name
-   * @param {string} model - Model number
+   * @param {string} model - Model number (can be null, empty string, or value)
    * @param {string} companyId - Company ID
    * @param {number|string} excludeId - SKU ID to exclude from check (for updates)
    * @returns {Promise<boolean>} - True if duplicate exists
    */
   static async itemNameModelExists(itemName, model, companyId, excludeId = null) {
-    if (!itemName || !model) {
+    if (!itemName) {
       return false;
     }
 
+    // Normalize model: treat null, undefined, and empty string as equivalent
+    const normalizedModel = model ? String(model).trim() : '';
+    const normalizedItemName = String(itemName).trim();
+
+    // Build query - handle NULL and empty string for model
     let query = `
       SELECT id FROM skus 
       WHERE company_id = $1 
         AND LOWER(TRIM(item_name)) = LOWER(TRIM($2))
-        AND UPPER(TRIM(model)) = UPPER(TRIM($3))
         AND is_active = true
     `;
-    const params = [companyId.toUpperCase(), itemName, model];
+    const params = [companyId.toUpperCase(), normalizedItemName];
+
+    // Handle model comparison: treat NULL and empty string as the same
+    if (normalizedModel === '') {
+      // Check for NULL or empty string (COALESCE converts NULL to empty string for comparison)
+      query += ` AND COALESCE(TRIM(model), '') = ''`;
+    } else {
+      // Check for exact match (case-insensitive, trimmed)
+      query += ` AND UPPER(TRIM(COALESCE(model, ''))) = UPPER(TRIM($3))`;
+      params.push(normalizedModel);
+    }
 
     if (excludeId) {
-      query += ` AND id != $4`;
+      const excludeParamIndex = params.length + 1;
+      query += ` AND id != $${excludeParamIndex}`;
       params.push(excludeId);
     }
 
