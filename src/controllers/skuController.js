@@ -29,6 +29,8 @@ const getAllSKUs = async (req, res, next) => {
       hsnCode: req.query.hsnCode,
       page: req.query.page || 1,
       limit: req.query.limit || 20,
+      sortBy: req.query.sortBy,
+      sortOrder: req.query.sortOrder,
     };
     const skus = await SKUModel.getAll(filters, companyId);
     const total = await SKUModel.getCount(filters, companyId);
@@ -261,13 +263,28 @@ const uploadSKUs = async (req, res, next) => {
           return row[camelKeyWithAsterisk];
         }
 
-        // Try case-insensitive match (strip asterisks and compare)
+        // Try case-insensitive match (strip asterisks, normalize spaces, handle forward slashes)
         for (const rowKey in row) {
-          const normalizedRowKey = rowKey.replace(/\s*\*\s*$/, '').trim();
-          const normalizedKey = key.replace(/_/g, ' ').trim();
-          if (normalizedRowKey.toLowerCase() === normalizedKey.toLowerCase()) {
-            if (row[rowKey] !== undefined && row[rowKey] !== null && row[rowKey] !== '') {
-              return row[rowKey];
+          // Normalize row key: remove asterisks, normalize spaces, handle forward slashes
+          const normalizedRowKey = rowKey
+            .replace(/\s*\*\s*$/, '') // Remove trailing asterisk
+            .replace(/\s+/g, ' ') // Normalize multiple spaces to single space
+            .replace(/\s*\/\s*/g, '/') // Normalize spaces around forward slashes
+            .trim()
+            .toLowerCase();
+          
+          // Normalize search key: replace underscores with spaces, normalize spaces
+          const normalizedKey = key
+            .replace(/_/g, ' ') // Replace underscores with spaces
+            .replace(/\s+/g, ' ') // Normalize multiple spaces to single space
+            .replace(/\s*\/\s*/g, '/') // Normalize spaces around forward slashes
+            .trim()
+            .toLowerCase();
+          
+          if (normalizedRowKey === normalizedKey) {
+            const value = row[rowKey];
+            if (value !== undefined && value !== null && value !== '') {
+              return value;
             }
           }
         }
@@ -363,14 +380,41 @@ const uploadSKUs = async (req, res, next) => {
         }
 
         // Validate Current Stock (required field from template)
-        const currentStockValue = getValue(row, 'current_stock', 'currentStock', 'Current Stock', 'Current/Opening Stocks', 'Current/Opening Stocks *', 'Current/Opening Stocks*');
-        if (currentStockValue === null || currentStockValue === undefined || currentStockValue === '') {
-          errors.push({ row: i + 2, error: 'Current/Opening Stocks is required' });
+        // Try multiple variations of the header name
+        const currentStockValue = getValue(
+          row, 
+          'current_stock', 
+          'currentStock', 
+          'Current Stock', 
+          'Current Stock *',
+          'Current/Opening Stocks', 
+          'Current/Opening Stocks *', 
+          'Current/Opening Stocks*',
+          'Current / Opening Stocks',
+          'Current / Opening Stocks *',
+          'Opening Stock',
+          'Opening Stock *',
+          'Opening Stocks',
+          'Opening Stocks *'
+        );
+        
+        // Check if value exists (0 is a valid value, so we need to check for null/undefined/empty string)
+        if (currentStockValue === null || currentStockValue === undefined || (typeof currentStockValue === 'string' && currentStockValue.trim() === '')) {
+          // Debug: log available keys to help diagnose header matching issues
+          const availableKeys = Object.keys(row).join(', ');
+          errors.push({ 
+            row: i + 2, 
+            error: `Current/Opening Stocks is required. Available columns: ${availableKeys.substring(0, 200)}` 
+          });
           continue;
         }
-        const parsedStock = parseInt(String(currentStockValue).trim());
+        
+        // Parse the value - handle both string and number types
+        const stockString = String(currentStockValue).trim();
+        const parsedStock = stockString === '' ? 0 : parseInt(stockString, 10);
+        
         if (isNaN(parsedStock) || parsedStock < 0) {
-          errors.push({ row: i + 2, error: 'Current/Opening Stocks must be a valid non-negative number' });
+          errors.push({ row: i + 2, error: `Current/Opening Stocks must be a valid non-negative number (found: "${currentStockValue}")` });
           continue;
         }
         const currentStock = parsedStock;
@@ -431,6 +475,7 @@ const uploadSKUs = async (req, res, next) => {
           width: getValue(row, 'width', 'Width') ? parseFloat(getValue(row, 'width', 'Width')) : null,
           height: getValue(row, 'height', 'Height') ? parseFloat(getValue(row, 'height', 'Height')) : null,
           currentStock: currentStock, // Use parsed current stock value
+          openingStock: currentStock, // Set openingStock same as currentStock for ledger entry
           minStockLevel: getValue(row, 'min_stock_level', 'minStockLevel', 'Min Stock', 'min_stock', 'Minimum Stock Level', 'Minimum Stock Level (MSQ)', 'MSQ') ? parseInt(getValue(row, 'min_stock_level', 'minStockLevel', 'Min Stock', 'min_stock', 'Minimum Stock Level', 'Minimum Stock Level (MSQ)', 'MSQ')) : 0,
           defaultStorageLocation: String(defaultStorageLocation).trim(),
           customFields: customFields,

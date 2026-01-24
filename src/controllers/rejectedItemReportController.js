@@ -15,7 +15,7 @@ const transformReport = (report) => {
   const netRejected = report.net_rejected !== undefined && report.net_rejected !== null
     ? parseInt(report.net_rejected, 10)
     : Math.max(0, quantity - sentToVendor - receivedBack - scrapped);
-  
+
   return {
     id: report.id,
     reportNumber: report.report_number,
@@ -36,6 +36,9 @@ const transformReport = (report) => {
     incomingInventoryItemId: report.incoming_inventory_item_id,
     vendorId: report.vendor_id ? report.vendor_id.toString() : null,
     brandId: report.brand_id ? report.brand_id.toString() : null,
+    vendorName: report.vendor_name || null,
+    brandName: report.brand_name || null,
+    originalUnitPrice: parseFloat(report.original_unit_price || 0),
   };
 };
 
@@ -160,6 +163,12 @@ const updateRejectedItemReport = async (req, res, next) => {
       inspectionDate,
     } = req.body;
 
+    // Read current state first so we can apply stock/ledger deltas for receivedBack
+    const current = await RejectedItemReportModel.getById(id, companyId);
+    if (!current) {
+      throw new NotFoundError('Rejected item report not found');
+    }
+
     // Validate that at least one field is being updated
     if (
       sentToVendor === undefined &&
@@ -201,6 +210,53 @@ const updateRejectedItemReport = async (req, res, next) => {
 
     if (!report) {
       throw new NotFoundError('Rejected item report not found');
+    }
+
+    // If receivedBack increased, add stock back and record a positive REJ ledger entry (green in UI)
+    // Note: stock was already reduced when the items were moved to rejected.
+    const oldReceivedBack = parseInt(current.receivedBack || current.received_back || 0, 10) || 0;
+    const newReceivedBack = parseInt(report.received_back || 0, 10) || 0;
+    const deltaReceivedBack = Math.max(0, newReceivedBack - oldReceivedBack);
+
+    if (deltaReceivedBack > 0) {
+      const pool = require('../models/database');
+      const LedgerService = require('../services/ledgerService');
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+
+        // Add stock back
+        await client.query(
+          'UPDATE skus SET current_stock = current_stock + $1 WHERE id = $2',
+          [deltaReceivedBack, current.sku_id]
+        );
+
+        // Determine creator display
+        const user = req.user || {};
+        const createdByName =
+          user.role && String(user.role).toLowerCase().includes('admin')
+            ? 'Super Admin'
+            : (user.email || 'System');
+
+        await LedgerService.addTransaction(client, {
+          skuId: current.sku_id,
+          transactionDate: new Date(),
+          transactionType: 'REJ',
+          referenceNumber: `REJ-RETURN / ${current.original_invoice_number || current.originalInvoiceNumber || 'N/A'}`,
+          sourceDestination: `Vendor: ${current.vendor_name || current.vendorName || 'Unknown'}`,
+          createdBy: user.id || user.userId || null,
+          createdByName,
+          quantityChange: deltaReceivedBack, // positive: add back to stock
+          companyId: companyId.toUpperCase(),
+        });
+
+        await client.query('COMMIT');
+      } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+      } finally {
+        client.release();
+      }
     }
 
     res.json({

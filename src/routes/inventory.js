@@ -4,6 +4,7 @@ const { authenticate, getCompanyId } = require('../middlewares/auth');
 const incomingInventoryController = require('../controllers/incomingInventoryController');
 const outgoingInventoryController = require('../controllers/outgoingInventoryController');
 const rejectedItemReportController = require('../controllers/rejectedItemReportController');
+const itemHistoryController = require('../controllers/itemHistoryController');
 const { validateRequired, validateArray, validateDate, validateNumeric, validateIncomingItems, validateIncomingInventorySupplier } = require('../middlewares/validation');
 const pool = require('../models/database');
 
@@ -81,12 +82,14 @@ router.get('/', async (req, res, next) => {
       paramIndex++;
     }
     if (stockStatus) {
-      if (stockStatus === 'low') {
-        query += ` AND s.current_stock <= s.min_stock_level`;
+      if (stockStatus === 'critical') {
+        query += ` AND s.current_stock = 0 AND s.min_stock_level > 0`;
       } else if (stockStatus === 'out') {
-        query += ` AND s.current_stock = 0`;
+        query += ` AND s.current_stock = 0 AND (s.min_stock_level <= 0 OR s.min_stock_level IS NULL)`;
+      } else if (stockStatus === 'low') {
+        query += ` AND s.current_stock > 0 AND s.current_stock < s.min_stock_level`;
       } else if (stockStatus === 'in') {
-        query += ` AND s.current_stock > s.min_stock_level`;
+        query += ` AND s.current_stock > 0 AND s.current_stock >= s.min_stock_level`;
       }
     }
 
@@ -227,6 +230,10 @@ router.delete('/rejected-item-reports/:id', rejectedItemReportController.deleteR
 const shortItemReportController = require('../controllers/shortItemReportController');
 router.get('/short-item-reports', shortItemReportController.getAllShortItemReports);
 router.get('/short-item-reports/:id', shortItemReportController.getShortItemReportById);
+
+// Item History Routes (Unified incoming + outgoing)
+router.get('/items/:skuId/history', itemHistoryController.getItemHistory);
+router.get('/items/:skuId/history/summary', itemHistoryController.getItemHistorySummary);
 
 /**
  * GET /api/inventory/outgoing/history

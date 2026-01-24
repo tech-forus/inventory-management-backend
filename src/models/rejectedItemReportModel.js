@@ -13,11 +13,11 @@ class RejectedItemReportModel {
     try {
       // Ensure invoiceNumber is treated as string for consistent matching
       const invoiceNumberStr = String(invoiceNumber || '');
-      
+
       if (!invoiceNumberStr) {
         throw new Error('Invoice number is required for generating report number');
       }
-      
+
       // Get the highest sequence number for this invoice number
       // Use TRIM and CAST to handle any type mismatches
       // Handle NULL values from SUBSTRING (when no reports exist yet)
@@ -38,21 +38,21 @@ class RejectedItemReportModel {
 
       const maxSequence = result.rows[0]?.max_sequence ?? 0;
       const nextSequence = maxSequence + 1;
-      
+
       // Format: REJ/<InvoiceNumber>/<sequence>
       const reportNumber = `REJ/${invoiceNumberStr}/${nextSequence.toString().padStart(3, '0')}`;
-      
-      logger.info({ 
-        invoiceNumber: invoiceNumberStr, 
-        maxSequence, 
-        nextSequence, 
+
+      logger.info({
+        invoiceNumber: invoiceNumberStr,
+        maxSequence,
+        nextSequence,
         reportNumber,
         companyId: companyId.toUpperCase()
       }, 'Generated report number');
-      
+
       return reportNumber;
     } catch (error) {
-      logger.error({ 
+      logger.error({
         error: error.message,
         stack: error.stack,
         invoiceNumber,
@@ -74,7 +74,7 @@ class RejectedItemReportModel {
           WHERE table_name = 'rejected_item_reports'
         )`
       );
-      
+
       if (!tableCheck.rows[0]?.exists) {
         logger.warn('rejected_item_reports table does not exist');
         return [];
@@ -89,23 +89,23 @@ class RejectedItemReportModel {
       );
       const hasStatusColumn = columnCheck.rows.length > 0;
 
-    // Check if tracking columns exist
-    const trackingColumnsCheck = await pool.query(
-      `SELECT column_name 
+      // Check if tracking columns exist
+      const trackingColumnsCheck = await pool.query(
+        `SELECT column_name 
        FROM information_schema.columns 
        WHERE table_name = 'rejected_item_reports' 
        AND column_name IN ('sent_to_vendor', 'received_back', 'scrapped', 'net_rejected')`
-    );
-    const hasTrackingColumns = trackingColumnsCheck.rows.length >= 4;
+      );
+      const hasTrackingColumns = trackingColumnsCheck.rows.length >= 4;
 
-    // Check if reason column exists
-    const reasonColumnCheck = await pool.query(
-      `SELECT column_name 
+      // Check if reason column exists
+      const reasonColumnCheck = await pool.query(
+        `SELECT column_name 
        FROM information_schema.columns 
        WHERE table_name = 'rejected_item_reports' 
        AND column_name = 'reason'`
-    );
-    const hasReasonColumn = reasonColumnCheck.rows.length > 0;
+      );
+      const hasReasonColumn = reasonColumnCheck.rows.length > 0;
 
       let query = `
         SELECT 
@@ -124,53 +124,59 @@ class RejectedItemReportModel {
           rir.incoming_inventory_item_id,
           s.sku_id as sku_code,
           ii.vendor_id,
-          ii.brand_id
+          ii.brand_id,
+          v.name as vendor_name,
+          b.name as brand_name,
+          iii.unit_price as original_unit_price
         FROM rejected_item_reports rir
         LEFT JOIN skus s ON rir.sku_id = s.id
         LEFT JOIN incoming_inventory ii ON rir.incoming_inventory_id = ii.id
+        LEFT JOIN incoming_inventory_items iii ON rir.incoming_inventory_item_id = iii.id
+        LEFT JOIN vendors v ON ii.vendor_id = v.id
+        LEFT JOIN brands b ON ii.brand_id = b.id
         WHERE rir.company_id = $1 AND rir.is_active = true
       `;
-    
-    const params = [companyId.toUpperCase()];
-    let paramIndex = 2;
 
-    if (filters.dateFrom) {
-      query += ` AND rir.inspection_date >= $${paramIndex}`;
-      params.push(filters.dateFrom);
-      paramIndex++;
-    }
+      const params = [companyId.toUpperCase()];
+      let paramIndex = 2;
 
-    if (filters.dateTo) {
-      query += ` AND rir.inspection_date <= $${paramIndex}`;
-      params.push(filters.dateTo);
-      paramIndex++;
-    }
+      if (filters.dateFrom) {
+        query += ` AND rir.inspection_date >= $${paramIndex}`;
+        params.push(filters.dateFrom);
+        paramIndex++;
+      }
 
-    if (filters.search && filters.search.trim()) {
-      const searchTrimmed = filters.search.trim();
-      query += ` AND (
+      if (filters.dateTo) {
+        query += ` AND rir.inspection_date <= $${paramIndex}`;
+        params.push(filters.dateTo);
+        paramIndex++;
+      }
+
+      if (filters.search && filters.search.trim()) {
+        const searchTrimmed = filters.search.trim();
+        query += ` AND (
         rir.report_number ILIKE $${paramIndex} OR
         rir.original_invoice_number ILIKE $${paramIndex} OR
         rir.item_name ILIKE $${paramIndex} OR
-        s.code ILIKE $${paramIndex}
+        s.sku_id ILIKE $${paramIndex}
       )`;
-      const searchTerm = `%${searchTrimmed}%`;
-      params.push(searchTerm, searchTerm, searchTerm, searchTerm);
-      paramIndex += 4;
-    }
+        const searchTerm = `%${searchTrimmed}%`;
+        params.push(searchTerm);
+        paramIndex++;
+      }
 
-    query += ` ORDER BY rir.created_at DESC, rir.inspection_date DESC`;
+      query += ` ORDER BY rir.created_at DESC, rir.inspection_date DESC`;
 
-    if (filters.limit) {
-      query += ` LIMIT $${paramIndex}`;
-      params.push(filters.limit);
-      paramIndex++;
-    }
+      if (filters.limit) {
+        query += ` LIMIT $${paramIndex}`;
+        params.push(filters.limit);
+        paramIndex++;
+      }
 
-    if (filters.offset) {
-      query += ` OFFSET $${paramIndex}`;
-      params.push(filters.offset);
-    }
+      if (filters.offset) {
+        query += ` OFFSET $${paramIndex}`;
+        params.push(filters.offset);
+      }
 
       const result = await pool.query(query, params);
       return result.rows;
@@ -211,7 +217,7 @@ class RejectedItemReportModel {
     );
     const hasReasonColumn = reasonColumnCheck.rows.length > 0;
 
-      const result = await pool.query(
+    const result = await pool.query(
       `SELECT 
         rir.id,
         rir.report_number,
@@ -228,10 +234,16 @@ class RejectedItemReportModel {
         rir.incoming_inventory_item_id,
         s.sku_id as sku_code,
         ii.vendor_id,
-        ii.brand_id
+        ii.brand_id,
+        v.name as vendor_name,
+        b.name as brand_name,
+        iii.unit_price as original_unit_price
       FROM rejected_item_reports rir
       LEFT JOIN skus s ON rir.sku_id = s.id
       LEFT JOIN incoming_inventory ii ON rir.incoming_inventory_id = ii.id
+      LEFT JOIN incoming_inventory_items iii ON rir.incoming_inventory_item_id = iii.id
+      LEFT JOIN vendors v ON ii.vendor_id = v.id
+      LEFT JOIN brands b ON ii.brand_id = b.id
       WHERE rir.id = $1 
         AND rir.company_id = $2 
         AND rir.is_active = true`,
@@ -272,12 +284,12 @@ class RejectedItemReportModel {
     }
 
     const invoiceNumber = invoiceResult.rows[0].invoice_number;
-    
+
     if (!invoiceNumber) {
       throw new Error(`Invoice number is NULL for incoming inventory id=${reportData.incomingInventoryId}`);
     }
 
-    logger.debug({ 
+    logger.debug({
       incomingInventoryId: reportData.incomingInventoryId,
       invoiceNumber,
       companyId: companyId.toUpperCase()
@@ -371,8 +383,8 @@ class RejectedItemReportModel {
       }
 
       logger.info(
-        { 
-          reportId: result.rows[0].id, 
+        {
+          reportId: result.rows[0].id,
           reportNumber,
           quantity: reportData.quantity,
           invoiceNumber,
@@ -386,7 +398,7 @@ class RejectedItemReportModel {
     } catch (dbError) {
       // Check for unique constraint violations
       if (dbError.code === '23505') { // PostgreSQL unique violation
-        logger.error({ 
+        logger.error({
           error: dbError.message,
           detail: dbError.detail,
           constraint: dbError.constraint,
@@ -395,10 +407,10 @@ class RejectedItemReportModel {
         }, 'Unique constraint violation when creating rejected item report');
         throw new Error(`Report already exists for this combination. Constraint: ${dbError.constraint || 'unknown'}`);
       }
-      
+
       // Check for foreign key violations
       if (dbError.code === '23503') { // PostgreSQL foreign key violation
-        logger.error({ 
+        logger.error({
           error: dbError.message,
           detail: dbError.detail,
           reportData,
@@ -406,9 +418,9 @@ class RejectedItemReportModel {
         }, 'Foreign key violation when creating rejected item report');
         throw new Error(`Invalid reference: ${dbError.detail || dbError.message}`);
       }
-      
+
       // Re-throw with more context
-      logger.error({ 
+      logger.error({
         error: dbError.message,
         code: dbError.code,
         detail: dbError.detail,
@@ -418,7 +430,7 @@ class RejectedItemReportModel {
         insertFields,
         insertParams
       }, 'Database error when creating rejected item report');
-      
+
       throw new Error(`Failed to create rejected item report: ${dbError.message}`);
     }
   }
@@ -481,7 +493,7 @@ class RejectedItemReportModel {
         const scrapped = updateData.scrapped !== undefined ? parseInt(updateData.scrapped, 10) : parseInt(currentReport.scrapped || 0, 10);
         const quantity = parseInt(currentReport.quantity || 0, 10);
         const netRejected = Math.max(0, quantity - sentToVendor - receivedBack - scrapped);
-        
+
         updateFields.push(`net_rejected = $${paramIndex}`);
         updateValues.push(netRejected);
         paramIndex++;
@@ -505,7 +517,7 @@ class RejectedItemReportModel {
     }
 
     updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
-    
+
     // Add WHERE clause parameters
     updateValues.push(id, companyId.toUpperCase());
     const whereParamIndex = paramIndex;

@@ -1,4 +1,5 @@
 const pool = require('./database');
+const LedgerService = require('../services/ledgerService');
 
 /**
  * SKU Model
@@ -46,7 +47,18 @@ class SKUModel {
     // Add filters
     if (filters.search && filters.search.trim()) {
       const searchTrimmed = filters.search.trim();
-      query += ` AND (s.sku_id ILIKE $${paramIndex} OR s.item_name ILIKE $${paramIndex} OR s.model ILIKE $${paramIndex} OR s.hsn_sac_code ILIKE $${paramIndex})`;
+      query += ` AND (
+        s.sku_id ILIKE $${paramIndex} 
+        OR s.item_name ILIKE $${paramIndex} 
+        OR s.model ILIKE $${paramIndex} 
+        OR s.hsn_sac_code ILIKE $${paramIndex}
+        OR s.series ILIKE $${paramIndex}
+        OR s.rating_size ILIKE $${paramIndex}
+        OR s.item_details ILIKE $${paramIndex}
+        OR s.vendor_item_code ILIKE $${paramIndex}
+        OR b.name ILIKE $${paramIndex}
+        OR sc.name ILIKE $${paramIndex}
+      )`;
       params.push(`%${searchTrimmed}%`);
       paramIndex++;
     }
@@ -93,12 +105,18 @@ class SKUModel {
       paramIndex++;
     }
     if (filters.stockStatus) {
-      if (filters.stockStatus === 'low') {
-        query += ` AND s.current_stock <= s.min_stock_level`;
+      if (filters.stockStatus === 'critical') {
+        query += ` AND s.current_stock = 0 AND s.min_stock_level > 0`;
       } else if (filters.stockStatus === 'out') {
-        query += ` AND s.current_stock = 0`;
+        query += ` AND s.current_stock = 0 AND (s.min_stock_level <= 0 OR s.min_stock_level IS NULL)`;
+      } else if (filters.stockStatus === 'low') {
+        query += ` AND s.current_stock > 0 AND s.current_stock < s.min_stock_level`;
       } else if (filters.stockStatus === 'in') {
-        query += ` AND s.current_stock > s.min_stock_level`;
+        query += ` AND s.current_stock > 0 AND s.current_stock >= s.min_stock_level`;
+      } else if (filters.stockStatus === 'alert') {
+        query += ` AND (s.current_stock < s.min_stock_level OR s.current_stock = 0)`;
+      } else if (filters.stockStatus === 'non-movable') {
+        query += ` AND s.is_non_movable = true`;
       }
     }
     if (filters.hsnCode) {
@@ -107,12 +125,36 @@ class SKUModel {
       paramIndex++;
     }
 
+
+    // Add dynamic sorting
+    let orderBy = 's.created_at DESC'; // default
+    if (filters.sortBy) {
+      const validSortFields = {
+        'productCategory': 'pc.name',
+        'itemCategory': 'ic.name',
+        'subCategory': 'sc.name',
+        'itemName': 's.item_name',
+        'brand': 'b.name',
+        'vendor': 'v.name',
+        'currentStock': 's.current_stock',
+        'skuId': 's.sku_id',
+        'model': 's.model',
+        'hsnSacCode': 's.hsn_sac_code'
+      };
+
+      if (validSortFields[filters.sortBy]) {
+        const direction = filters.sortOrder === 'desc' ? 'DESC' : 'ASC';
+        orderBy = `${validSortFields[filters.sortBy]} ${direction}`;
+      }
+    }
+
     // Add pagination (ensure valid values)
     const page = Math.max(1, parseInt(filters.page) || 1); // Ensure page >= 1
     const limit = Math.max(1, parseInt(filters.limit) || 20); // Ensure limit >= 1
     const offset = Math.max(0, (page - 1) * limit); // Ensure offset >= 0
-    query += ` ORDER BY s.created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    query += ` ORDER BY ${orderBy} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
     params.push(limit, offset);
+
 
     const result = await pool.query(query, params);
     return result.rows;
@@ -125,6 +167,8 @@ class SKUModel {
     let query = `
       SELECT COUNT(*) 
       FROM skus s
+      LEFT JOIN brands b ON s.brand_id = b.id
+      LEFT JOIN sub_categories sc ON s.sub_category_id = sc.id
       WHERE s.company_id = $1 AND s.is_active = true
     `;
     const params = [companyId.toUpperCase()];
@@ -133,7 +177,18 @@ class SKUModel {
     // Add same filters as getAll
     if (filters.search && filters.search.trim()) {
       const searchTrimmed = filters.search.trim();
-      query += ` AND (s.sku_id ILIKE $${paramIndex} OR s.item_name ILIKE $${paramIndex} OR s.model ILIKE $${paramIndex} OR s.hsn_sac_code ILIKE $${paramIndex})`;
+      query += ` AND (
+        s.sku_id ILIKE $${paramIndex} 
+        OR s.item_name ILIKE $${paramIndex} 
+        OR s.model ILIKE $${paramIndex} 
+        OR s.hsn_sac_code ILIKE $${paramIndex}
+        OR s.series ILIKE $${paramIndex}
+        OR s.rating_size ILIKE $${paramIndex}
+        OR s.item_details ILIKE $${paramIndex}
+        OR s.vendor_item_code ILIKE $${paramIndex}
+        OR b.name ILIKE $${paramIndex}
+        OR sc.name ILIKE $${paramIndex}
+      )`;
       params.push(`%${searchTrimmed}%`);
       paramIndex++;
     }
@@ -180,12 +235,18 @@ class SKUModel {
       paramIndex++;
     }
     if (filters.stockStatus) {
-      if (filters.stockStatus === 'low') {
-        query += ` AND s.current_stock <= s.min_stock_level`;
+      if (filters.stockStatus === 'critical') {
+        query += ` AND s.current_stock = 0 AND s.min_stock_level > 0`;
       } else if (filters.stockStatus === 'out') {
-        query += ` AND s.current_stock = 0`;
+        query += ` AND s.current_stock = 0 AND (s.min_stock_level <= 0 OR s.min_stock_level IS NULL)`;
+      } else if (filters.stockStatus === 'low') {
+        query += ` AND s.current_stock > 0 AND s.current_stock < s.min_stock_level`;
       } else if (filters.stockStatus === 'in') {
-        query += ` AND s.current_stock > s.min_stock_level`;
+        query += ` AND s.current_stock > 0 AND s.current_stock >= s.min_stock_level`;
+      } else if (filters.stockStatus === 'alert') {
+        query += ` AND (s.current_stock < s.min_stock_level OR s.current_stock = 0)`;
+      } else if (filters.stockStatus === 'non-movable') {
+        query += ` AND s.is_non_movable = true`;
       }
     }
     if (filters.hsnCode) {
@@ -224,6 +285,7 @@ class SKUModel {
     let query = `
       SELECT 
         s.*,
+        s.opening_stock,
         pc.name as product_category,
         ic.name as item_category,
         sc.name as sub_category,
@@ -253,74 +315,106 @@ class SKUModel {
   }
 
   /**
-   * Create a new SKU
-   */
+ * Create a new SKU
+ */
   static async create(skuData, companyId, skuId) {
-    // Parse custom_fields if it's a string
-    let customFields = null;
-    if (skuData.customFields) {
-      try {
-        customFields = typeof skuData.customFields === 'string'
-          ? JSON.parse(skuData.customFields)
-          : skuData.customFields;
-      } catch (e) {
-        console.error('Error parsing custom_fields:', e);
-        customFields = null;
-      }
-    }
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    const result = await pool.query(
-      `INSERT INTO skus (
-        company_id, sku_id, product_category_id, item_category_id, sub_category_id,
-        item_name, item_details, vendor_id, vendor_item_code, brand_id,
-        hsn_sac_code, gst_rate, rating_size, model, series, unit,
-        material, manufacture_or_import, color,
-        weight, weight_unit, length, length_unit, width, width_unit, height, height_unit,
-        min_stock_level, reorder_point, default_storage_location,
-        current_stock, custom_fields, status, is_active
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-        $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27,
-        $28, $29, $30, $31, $32, $33, $34
-      ) RETURNING *`,
-      [
-        companyId.toUpperCase(),
-        skuId,
-        skuData.productCategoryId,
-        skuData.itemCategoryId,
-        skuData.subCategoryId || null,
-        skuData.itemName,
-        skuData.itemDetails || null,
-        skuData.vendorId || null, // Now nullable
-        skuData.vendorItemCode || null,
-        skuData.brandId,
-        skuData.hsnSacCode || null,
-        skuData.gstRate || null,
-        skuData.ratingSize || null,
-        skuData.model || null,
-        skuData.series || null,
-        skuData.unit,
-        skuData.material || null,
-        skuData.manufactureOrImport || null,
-        skuData.color || null,
-        skuData.weight || null,
-        skuData.weightUnit || 'kg',
-        skuData.length || null,
-        skuData.lengthUnit || 'mm',
-        skuData.width || null,
-        skuData.widthUnit || 'mm',
-        skuData.height || null,
-        skuData.heightUnit || 'mm',
-        skuData.minStockLevel || 0,
-        skuData.reorderPoint || null,
-        skuData.defaultStorageLocation || null,
-        skuData.currentStock !== undefined && skuData.currentStock !== null ? skuData.currentStock : (skuData.minStockLevel || 0),
-        customFields ? JSON.stringify(customFields) : null,
-        skuData.status || 'active',
-        skuData.status === 'active',
-      ]
-    );
-    return result.rows[0];
+      // Parse custom_fields if it's a string
+      let customFields = null;
+      if (skuData.customFields) {
+        try {
+          customFields = typeof skuData.customFields === 'string'
+            ? JSON.parse(skuData.customFields)
+            : skuData.customFields;
+        } catch (e) {
+          console.error('Error parsing custom_fields:', e);
+          customFields = null;
+        }
+      }
+
+      const result = await client.query(
+        `INSERT INTO skus (
+          company_id, sku_id, product_category_id, item_category_id, sub_category_id,
+          item_name, item_details, vendor_id, vendor_item_code, brand_id,
+          hsn_sac_code, gst_rate, rating_size, model, series, unit,
+          material, manufacture_or_import, color,
+          weight, weight_unit, length, length_unit, width, width_unit, height, height_unit,
+          min_stock_level, reorder_point, default_storage_location,
+          current_stock, custom_fields, status, is_active, is_non_movable, opening_stock
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+          $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27,
+          $28, $29, $30, $31, $32, $33, $34, $35, $36
+        ) RETURNING *`,
+        [
+          companyId.toUpperCase(),
+          skuId,
+          skuData.productCategoryId,
+          skuData.itemCategoryId,
+          skuData.subCategoryId || null,
+          skuData.itemName,
+          skuData.itemDetails || null,
+          skuData.vendorId || null, // Now nullable
+          skuData.vendorItemCode || null,
+          skuData.brandId,
+          skuData.hsnSacCode || null,
+          skuData.gstRate || null,
+          skuData.ratingSize || null,
+          skuData.model || null,
+          skuData.series || null,
+          skuData.unit,
+          skuData.material || null,
+          skuData.manufactureOrImport || null,
+          skuData.color || null,
+          skuData.weight || null,
+          skuData.weightUnit || 'kg',
+          skuData.length || null,
+          skuData.lengthUnit || 'mm',
+          skuData.width || null,
+          skuData.widthUnit || 'mm',
+          skuData.height || null,
+          skuData.heightUnit || 'mm',
+          skuData.minStockLevel || 0,
+          skuData.reorderPoint || null,
+          skuData.defaultStorageLocation || null,
+          skuData.openingStock !== undefined && skuData.openingStock !== null ? skuData.openingStock : 0, // Use openingStock for current_stock initialization
+          customFields ? JSON.stringify(customFields) : null,
+          skuData.status || 'active',
+          skuData.status === 'active',
+          skuData.isNonMovable || false,
+          skuData.openingStock || 0, // opening_stock value
+        ]
+      );
+
+      const newSku = result.rows[0];
+
+      // Record Opening Stock in Ledger if > 0
+      if (newSku.opening_stock > 0) {
+        await LedgerService.addTransaction(client, {
+          skuId: newSku.id,
+          transactionDate: newSku.created_at,
+          transactionType: 'OPENING',
+          referenceNumber: 'Opening Stock',
+          sourceDestination: 'Opening Balance',
+          createdBy: null,
+          createdByName: 'System',
+          quantityChange: newSku.opening_stock,
+          companyId: companyId.toUpperCase()
+        });
+      }
+
+      await client.query('COMMIT');
+      return newSku;
+
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   /**
@@ -340,7 +434,7 @@ class SKUModel {
       }
     }
 
-    let paramIndex = 33;
+    let paramIndex = 35;
     let query = `
       UPDATE skus SET
         product_category_id = $1, item_category_id = $2, sub_category_id = $3,
@@ -350,7 +444,7 @@ class SKUModel {
         weight = $18, weight_unit = $19, length = $20, length_unit = $21, width = $22, width_unit = $23, height = $24, height_unit = $25,
         min_stock_level = $26, reorder_point = $27, default_storage_location = $28,
         current_stock = $29, custom_fields = $30,
-        status = $31, is_active = $32, updated_at = CURRENT_TIMESTAMP
+        status = $31, is_active = $32, is_non_movable = $33, opening_stock = $34, updated_at = CURRENT_TIMESTAMP
       WHERE id = $${paramIndex}
     `;
 
@@ -389,16 +483,17 @@ class SKUModel {
       skuData.minStockLevel || 0,
       skuData.reorderPoint || null,
       skuData.defaultStorageLocation || null,
-      skuData.currentStock !== undefined && skuData.currentStock !== null ? skuData.currentStock : (skuData.minStockLevel || 0),
+      skuData.openingStock !== undefined && skuData.openingStock !== null ? skuData.openingStock : 0, // Use openingStock for current_stock
       customFields ? JSON.stringify(customFields) : null,
       skuData.status || 'active',
       skuData.status === 'active',
+      skuData.isNonMovable !== undefined ? skuData.isNonMovable : false,
+      skuData.openingStock || 0, // opening_stock value
       id,
     ];
 
-    // Add company ID filter if provided
     if (companyId) {
-      query = query.replace('WHERE id = $33', `WHERE id = $33 AND company_id = $34`);
+      query = query.replace('WHERE id = $35', `WHERE id = $35 AND company_id = $36`);
       params.push(companyId.toUpperCase());
     }
 

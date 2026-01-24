@@ -1,11 +1,88 @@
 const pool = require('./database');
 const { logger } = require('../utils/logger');
+const LedgerService = require('../services/ledgerService');
 
 /**
  * Incoming Inventory Model
  * Handles all database operations for incoming inventory
  */
 class IncomingInventoryModel {
+  /**
+   * Validate that all items belong to the selected Brand and respect Vendor Catalog restrictions
+   * @param {Array} items - List of items with skuId
+   * @param {number|string} brandId - Selected Brand ID
+   * @param {number|string} vendorId - Selected Vendor ID
+   * @param {string} companyId - Company ID
+   */
+  static async validateItemsLineage(items, brandId, vendorId, companyId) {
+    if (!items || items.length === 0) return;
+
+    const client = await pool.connect();
+    try {
+      // 1. Fetch Vendor Catalog details from join tables
+      const productCatsRes = await client.query('SELECT product_category_id FROM vendor_product_categories WHERE vendor_id = $1', [vendorId]);
+      const itemCatsRes = await client.query('SELECT item_category_id FROM vendor_item_categories WHERE vendor_id = $1', [vendorId]);
+      const subCatsRes = await client.query('SELECT sub_category_id FROM vendor_sub_categories WHERE vendor_id = $1', [vendorId]);
+
+      const allowedProductCats = productCatsRes.rows.map(r => r.product_category_id);
+      const allowedItemCats = itemCatsRes.rows.map(r => r.item_category_id);
+      const allowedSubCats = subCatsRes.rows.map(r => r.sub_category_id);
+
+      const hasProductRestrictions = allowedProductCats.length > 0;
+      const hasItemRestrictions = allowedItemCats.length > 0;
+      const hasSubRestrictions = allowedSubCats.length > 0;
+
+      // 2. Fetch details for all SKUs in the invoice
+      const skuIds = [...new Set(items.map(i => i.skuId))]; // Unique IDs
+
+      const skusRes = await client.query(
+        `SELECT id, sku_id, item_name, brand_id, product_category_id, item_category_id, sub_category_id 
+         FROM skus 
+         WHERE id = ANY($1::int[]) AND company_id = $2`,
+        [skuIds, companyId.toUpperCase()]
+      );
+
+      const skusMap = new Map(skusRes.rows.map(s => [s.id, s]));
+
+      // 3. Iterate and Validate
+      for (const item of items) {
+        if (!item.skuId) continue;
+
+        const sku = skusMap.get(item.skuId);
+        if (!sku) {
+          throw new Error(`SKU ID ${item.skuId} not found in database or belongs to another company.`);
+        }
+
+        // A. Brand Integrity
+        if (brandId && sku.brand_id != brandId) {
+          throw new Error(`Integrity Violation: SKU '${sku.sku_id}' (Brand ID: ${sku.brand_id}) does not belong to the selected Brand (ID: ${brandId}).`);
+        }
+
+        // B. Vendor Catalog Integrity
+        if (hasProductRestrictions) {
+          if (!sku.product_category_id || !allowedProductCats.includes(sku.product_category_id)) {
+            throw new Error(`Integrity Violation: SKU '${sku.sku_id}' Product Category is not authorized for this Vendor.`);
+          }
+        }
+
+        if (hasItemRestrictions) {
+          if (!sku.item_category_id || !allowedItemCats.includes(sku.item_category_id)) {
+            throw new Error(`Integrity Violation: SKU '${sku.sku_id}' Item Category is not authorized for this Vendor.`);
+          }
+        }
+
+        if (hasSubRestrictions) {
+          if (!sku.sub_category_id || !allowedSubCats.includes(sku.sub_category_id)) {
+            throw new Error(`Integrity Violation: SKU '${sku.sku_id}' Sub Category is not authorized for this Vendor.`);
+          }
+        }
+      }
+
+    } finally {
+      client.release();
+    }
+  }
+
   /**
    * Create a new incoming inventory transaction with items
    */
@@ -81,16 +158,21 @@ class IncomingInventoryModel {
         const quantity = item.totalQuantity || 0;
         const unitPrice = item.unitPrice || 0;
         const gstPercentage = item.gstRate || item.gstPercentage || 0;
-        
+
+        // Calculate received and short quantities
+        const receivedQty = item.received || 0;
+        // Auto-calculate short quantity: short = total_quantity - received
+        const shortQty = item.short !== undefined ? item.short : Math.max(0, quantity - receivedQty);
+
         // Use frontend-calculated GST values (trust frontend calculations)
         const totalValueExclGst = item.totalExclGst !== undefined ? parseFloat(item.totalExclGst) : (quantity * unitPrice);
         const gstAmount = item.gstAmount !== undefined ? parseFloat(item.gstAmount) : (totalValueExclGst * (gstPercentage / 100));
         const totalValueInclGst = item.totalInclGst !== undefined ? parseFloat(item.totalInclGst) : (totalValueExclGst + gstAmount);
-        
+
         const itemResult = await client.query(
           `INSERT INTO incoming_inventory_items (
             incoming_inventory_id, sku_id, received, short,
-            total_quantity, unit_price, total_value, 
+            total_quantity, unit_price, total_value,
             gst_percentage, gst_amount, total_value_excl_gst, total_value_incl_gst,
             warranty,
             sku_discount, sku_discount_amount, amount_after_sku_discount,
@@ -100,8 +182,8 @@ class IncomingInventoryModel {
           [
             incomingInventoryId,
             item.skuId,
-            item.received || 0,
-            item.short || 0,
+            receivedQty,
+            shortQty,
             quantity,
             unitPrice,
             totalValueInclGst, // total_value stores incl GST for consistency
@@ -120,15 +202,49 @@ class IncomingInventoryModel {
         insertedItems.push(itemResult.rows[0]);
 
         // Update SKU stock if status is 'completed'
-        // IMPORTANT: Only add RECEIVED items to stock, not total quantity
+        // IMPORTANT: Stock is now managed by LedgerService (single source of truth)
+        // LedgerService.addTransaction() will update skus.current_stock from ledger net_balance
         if (inventoryData.status === 'completed') {
           const receivedQty = item.received || 0;
+
+          // Ledger Entry
+          let teamName = 'System';
+          if (inventoryData.receivedBy) {
+            const teamRes = await client.query('SELECT name FROM teams WHERE id = $1', [inventoryData.receivedBy]);
+            if (teamRes.rows.length > 0) teamName = teamRes.rows[0].name;
+          }
+
+          // IN Transaction (Received Quantity)
           if (receivedQty > 0) {
-            await client.query(
-              'UPDATE skus SET current_stock = current_stock + $1 WHERE id = $2',
-              [receivedQty, item.skuId]
-            );
-            logger.debug({ skuId: item.skuId, stockChange: receivedQty }, `Updated SKU ${item.skuId} stock: +${receivedQty} (received items only)`);
+            await LedgerService.addTransaction(client, {
+              skuId: item.skuId,
+              transactionDate: inventoryData.receivingDate,
+              transactionType: 'IN',
+              referenceNumber: `IN / ${inventoryData.invoiceNumber}`,
+              sourceDestination: `Vendor: ${inventoryData.vendorId}`, // ideally vendor name but ID is available here.
+              // To get Vendor Name, we need to query Vendor.
+              // We can fetch it once outside loop.
+              createdBy: inventoryData.receivedBy,
+              createdByName: teamName,
+              quantityChange: receivedQty,
+              companyId: companyId.toUpperCase()
+            });
+          }
+          // REJ Transaction (if any rejected immediately)
+          // Usually rejected is 0 on create, but if not:
+          const rejQty = item.rejected || 0; // Front end might perform this?
+          if (rejQty > 0) {
+            await LedgerService.addTransaction(client, {
+              skuId: item.skuId,
+              transactionDate: inventoryData.receivingDate,
+              transactionType: 'REJ',
+              referenceNumber: `REJ / ${inventoryData.invoiceNumber}`,
+              sourceDestination: `Vendor: ${inventoryData.vendorId}`,
+              createdBy: inventoryData.receivedBy,
+              createdByName: teamName,
+              quantityChange: -rejQty,
+              companyId: companyId.toUpperCase()
+            });
           }
         }
       }
@@ -140,8 +256,8 @@ class IncomingInventoryModel {
       };
     } catch (error) {
       await client.query('ROLLBACK');
-      logger.error({ 
-        error: error.message, 
+      logger.error({
+        error: error.message,
         stack: error.stack,
         code: error.code,
         detail: error.detail,
@@ -156,7 +272,7 @@ class IncomingInventoryModel {
           vendorId: inventoryData.vendorId,
           brandId: inventoryData.brandId,
         },
-        itemsCount: items?.length 
+        itemsCount: items?.length
       }, 'Error creating incoming inventory in model');
       throw error;
     } finally {
@@ -256,12 +372,16 @@ class IncomingInventoryModel {
    * Get incoming inventory history (for history tab) - grouped by invoice
    */
   static async getHistory(companyId, filters = {}) {
+    // Check if we need to join with skus (for search or sku filter)
+    const needsSkuJoin = filters.search || filters.sku;
+    
     let query = `
       SELECT 
         ii.id,
         ii.invoice_date,
         ii.invoice_number,
         ii.receiving_date,
+        ii.docket_number,
         v.name as vendor_name,
         c.customer_name,
         COALESCE(v.name, c.customer_name) as supplier_name,
@@ -271,8 +391,8 @@ class IncomingInventoryModel {
         COALESCE(SUM(iii.received), 0)::INTEGER as received_quantity,
         COALESCE(SUM(iii.short), 0)::INTEGER as total_short,
         COALESCE(SUM(iii.total_value_excl_gst), 0)::DECIMAL(15, 2) as total_value_excl_gst,
-        COALESCE(SUM(iii.total_value_incl_gst), 0)::DECIMAL(15, 2) as total_value_incl_gst,
         COALESCE(SUM(iii.gst_amount), 0)::DECIMAL(15, 2) as gst_amount,
+        COALESCE(SUM(iii.total_value_incl_gst), 0)::DECIMAL(15, 2) as total_value_incl_gst,
         CASE 
           WHEN COALESCE(SUM(iii.short), 0) > 0 THEN 'Pending'
           ELSE 'Complete'
@@ -283,6 +403,7 @@ class IncomingInventoryModel {
       LEFT JOIN vendors v ON ii.vendor_id = v.id
       LEFT JOIN customers c ON ii.destination_id = c.id AND ii.destination_type = 'customer'
       LEFT JOIN teams t ON ii.received_by = t.id
+      ${needsSkuJoin ? 'LEFT JOIN skus s ON iii.sku_id = s.id LEFT JOIN brands b ON s.brand_id = b.id LEFT JOIN sub_categories sc ON s.sub_category_id = sc.id' : ''}
       WHERE ii.company_id = $1 AND ii.is_active = true AND ii.status = 'completed'
     `;
     const params = [companyId.toUpperCase()];
@@ -306,46 +427,40 @@ class IncomingInventoryModel {
       paramIndex++;
     }
 
-    query += ` GROUP BY ii.id, ii.invoice_date, ii.invoice_number, ii.receiving_date, v.name, c.customer_name, t.name, ii.total_value`;
+    // General search across multiple fields (matching SKU Management search)
+    if (filters.search) {
+      const searchTerm = `%${filters.search}%`;
+      query += ` AND (
+        ii.invoice_number ILIKE $${paramIndex}
+        OR COALESCE(ii.docket_number, '') ILIKE $${paramIndex}
+        OR COALESCE(v.name, '') ILIKE $${paramIndex}
+        OR COALESCE(c.customer_name, '') ILIKE $${paramIndex}
+        OR COALESCE(t.name, '') ILIKE $${paramIndex}
+        OR COALESCE(iii.challan_number, '') ILIKE $${paramIndex}
+        OR COALESCE(s.sku_id, '') ILIKE $${paramIndex}
+        OR COALESCE(s.item_name, '') ILIKE $${paramIndex}
+        OR COALESCE(s.model, '') ILIKE $${paramIndex}
+        OR COALESCE(s.hsn_sac_code, '') ILIKE $${paramIndex}
+        OR COALESCE(s.series, '') ILIKE $${paramIndex}
+        OR COALESCE(s.rating_size, '') ILIKE $${paramIndex}
+        OR COALESCE(s.item_details, '') ILIKE $${paramIndex}
+        OR COALESCE(s.vendor_item_code, '') ILIKE $${paramIndex}
+        OR COALESCE(b.name, '') ILIKE $${paramIndex}
+        OR COALESCE(sc.name, '') ILIKE $${paramIndex}
+      )`;
+      params.push(searchTerm);
+      paramIndex++;
+    }
 
-    if (filters.sku) {
-      // Filter by SKU - need to add HAVING clause or subquery
-      query = `
-        SELECT DISTINCT
-          ii.id,
-          ii.invoice_date,
-          ii.invoice_number,
-          ii.receiving_date,
-          v.name as vendor_name,
-          c.customer_name,
-          COALESCE(v.name, c.customer_name) as supplier_name,
-          t.name as received_by_name,
-          ii.total_value,
-          COALESCE(SUM(iii.total_quantity), 0)::INTEGER as total_quantity,
-          COALESCE(SUM(iii.received), 0)::INTEGER as received_quantity,
-          COALESCE(SUM(iii.short), 0)::INTEGER as total_short,
-          COALESCE(SUM(iii.total_value_excl_gst), 0)::DECIMAL(15, 2) as total_value_excl_gst,
-          COALESCE(SUM(iii.total_value_incl_gst), 0)::DECIMAL(15, 2) as total_value_incl_gst,
-          COALESCE(SUM(iii.gst_amount), 0)::DECIMAL(15, 2) as gst_amount,
-          CASE 
-            WHEN COALESCE(SUM(iii.short), 0) > 0 THEN 'Pending'
-            ELSE 'Complete'
-          END as status,
-          COUNT(DISTINCT iii.id) as item_count
-        FROM incoming_inventory ii
-        LEFT JOIN incoming_inventory_items iii ON ii.id = iii.incoming_inventory_id
-        LEFT JOIN vendors v ON ii.vendor_id = v.id
-        LEFT JOIN customers c ON ii.destination_id = c.id AND ii.destination_type = 'customer'
-        LEFT JOIN teams t ON ii.received_by = t.id
-        LEFT JOIN skus s ON iii.sku_id = s.id
-        WHERE ii.company_id = $1 AND ii.is_active = true AND ii.status = 'completed'
-          AND (s.sku_id ILIKE $${paramIndex} OR s.item_name ILIKE $${paramIndex})
-      `;
+    // Legacy SKU filter (keep for backward compatibility)
+    if (filters.sku && !filters.search) {
       const skuSearch = `%${filters.sku}%`;
+      query += ` AND (s.sku_id ILIKE $${paramIndex} OR s.item_name ILIKE $${paramIndex})`;
       params.push(skuSearch);
       paramIndex++;
-      query += ` GROUP BY ii.id, ii.invoice_date, ii.invoice_number, ii.receiving_date, v.name, c.customer_name, t.name, ii.total_value`;
     }
+
+    query += ` GROUP BY ii.id, ii.invoice_date, ii.invoice_number, ii.receiving_date, ii.docket_number, v.name, c.customer_name, t.name, ii.total_value`;
 
     query += ` ORDER BY ii.receiving_date DESC, ii.id DESC`;
 
@@ -461,42 +576,59 @@ class IncomingInventoryModel {
         [status, id, companyId.toUpperCase()]
       );
 
-      // If changing from draft to completed, update SKU stock
-      // IMPORTANT: Only add RECEIVED items to stock, not total quantity
-      if (currentStatus === 'draft' && status === 'completed') {
-        const itemsResult = await client.query(
-          'SELECT sku_id, received FROM incoming_inventory_items WHERE incoming_inventory_id = $1',
+      // Stock updates are now handled by LedgerService (single source of truth)
+      // When changing from draft to completed, ledger entries are created below
+      // When changing from completed to draft, ledger entries are reversed below
+
+      const inventoryDetails = await client.query(`
+          SELECT ii.invoice_number, ii.receiving_date, ii.received_by, v.name as vendor_name, t.name as team_name
+          FROM incoming_inventory ii
+          LEFT JOIN vendors v ON ii.vendor_id = v.id
+          LEFT JOIN teams t ON ii.received_by = t.id
+          WHERE ii.id = $1
+      `, [id]);
+
+      const invInfo = inventoryDetails.rows[0];
+
+      if (currentStatus === 'draft' && status === 'completed' && invInfo) {
+        // Fetch all items to record them in Ledger
+        const itemsRes = await client.query(
+          'SELECT sku_id, received, total_quantity, rejected FROM incoming_inventory_items WHERE incoming_inventory_id = $1',
           [id]
         );
 
-        for (const item of itemsResult.rows) {
-          const receivedQty = item.received || 0;
-          if (receivedQty > 0) {
-            await client.query(
-              'UPDATE skus SET current_stock = current_stock + $1 WHERE id = $2',
-              [receivedQty, item.sku_id]
-            );
-            logger.debug({ skuId: item.sku_id, stockChange: receivedQty }, `Updated SKU ${item.sku_id} stock: +${receivedQty} (received items only)`);
+        for (const item of itemsRes.rows) {
+          const received = item.received || 0;
+
+          // IN (Received)
+          if (received > 0) {
+            await LedgerService.addTransaction(client, {
+              skuId: item.sku_id,
+              transactionDate: invInfo.receiving_date,
+              transactionType: 'IN',
+              referenceNumber: `IN / ${invInfo.invoice_number}`,
+              sourceDestination: `Vendor: ${invInfo.vendor_name || 'Unknown'}`,
+              createdBy: invInfo.received_by,
+              createdByName: invInfo.team_name || 'System',
+              quantityChange: received,
+              companyId: companyId.toUpperCase()
+            });
           }
-        }
-      }
 
-      // If changing from completed to draft, reverse SKU stock
-      // IMPORTANT: Only reverse RECEIVED items from stock, not total quantity
-      if (currentStatus === 'completed' && status === 'draft') {
-        const itemsResult = await client.query(
-          'SELECT sku_id, received FROM incoming_inventory_items WHERE incoming_inventory_id = $1',
-          [id]
-        );
-
-        for (const item of itemsResult.rows) {
-          const receivedQty = item.received || 0;
-          if (receivedQty > 0) {
-            await client.query(
-              'UPDATE skus SET current_stock = GREATEST(0, current_stock - $1) WHERE id = $2',
-              [receivedQty, item.sku_id]
-            );
-            logger.debug({ skuId: `Reversed SKU ${item.sku_id} stock: -${receivedQty} (received items only)` }, `Reversed SKU ${item.sku_id} stock: -${receivedQty} (received items only)`);
+          // REJ (Rejected)
+          const rejQty = item.rejected || 0;
+          if (rejQty > 0) {
+            await LedgerService.addTransaction(client, {
+              skuId: item.sku_id,
+              transactionDate: invInfo.receiving_date,
+              transactionType: 'REJ', // Rejection at time of receiving
+              referenceNumber: `REJ / ${invInfo.invoice_number}`,
+              sourceDestination: `Vendor: ${invInfo.vendor_name || 'Unknown'}`,
+              createdBy: invInfo.received_by,
+              createdByName: invInfo.team_name || 'System',
+              quantityChange: -rejQty,
+              companyId: companyId.toUpperCase()
+            });
           }
         }
       }
@@ -570,13 +702,42 @@ class IncomingInventoryModel {
         [newRejected, itemId, inventoryId]
       );
 
-      // Reduce stock by the quantity moved to rejected (rejected items are not in stock)
-      await client.query(
-        'UPDATE skus SET current_stock = GREATEST(0, current_stock - $1) WHERE id = $2',
-        [moveQty, currentItem.sku_id]
-      );
+      // Stock update is now handled by LedgerService (single source of truth)
+      logger.debug({ itemId, skuId: currentItem.sku_id, moveQty }, `Moved ${moveQty} to rejected for item ${itemId}, stock will be updated by ledger`);
 
-      logger.debug({ itemId, skuId: currentItem.sku_id, moveQty }, `Moved ${moveQty} to rejected for item ${itemId}, reduced stock by ${moveQty}`);
+      // Ledger Update for Rejection
+      // Fetch Inventory Details for Reference
+      const invDetailsRes = await client.query(`
+          SELECT ii.invoice_number, ii.receiving_date, ii.received_by, v.name as vendor_name, t.name as team_name
+          FROM incoming_inventory ii
+          LEFT JOIN vendors v ON ii.vendor_id = v.id
+          LEFT JOIN teams t ON ii.received_by = t.id
+          WHERE ii.id = $1
+      `, [inventoryId]);
+
+      if (invDetailsRes.rows.length > 0) {
+        const invInfo = invDetailsRes.rows[0];
+        await LedgerService.addTransaction(client, {
+          skuId: currentItem.sku_id,
+          transactionDate: invInfo.receiving_date || new Date(), // Rejection Date = Action Date? Or Receiving Date?
+          // Users usually want rejection logged on the day it happens.
+          // But User Request: "Date" in ledger matches old logic?
+          // History Page shows "Transaction Date".
+          // Migrated data used `receiving_date`.
+          // Real-time rejection happens LATER (inspection).
+          // `current_stock` is updated NOW.
+          // So `transactionDate` should be NOW (CURRENT_TIMESTAMP in DB, or Date passed).
+          // I'll use `new Date()` for Rejection Action Date.
+          transactionDate: new Date(),
+          transactionType: 'REJ',
+          referenceNumber: `REJ / ${invInfo.invoice_number}`,
+          sourceDestination: `Vendor: ${invInfo.vendor_name || 'Unknown'}`,
+          createdBy: invInfo.received_by,
+          createdByName: invInfo.team_name || 'System', // Or current user if verified?
+          quantityChange: -moveQty,
+          companyId: companyId.toUpperCase()
+        });
+      }
 
       await client.query('COMMIT');
 
@@ -782,11 +943,32 @@ class IncomingInventoryModel {
       if (shortDiff !== 0 && !skipStockUpdate) {
         // shortDiff is negative when short decreases (items arrived), so we subtract (which adds to stock)
         // shortDiff is positive when short increases (items become short), so we subtract (which removes from stock)
-        await client.query(
-          'UPDATE skus SET current_stock = GREATEST(0, current_stock - $1) WHERE id = $2',
-          [-shortDiff, currentItem.sku_id]
-        );
-        logger.debug({ skuId: currentItem.sku_id, stockChange: -shortDiff }, `Updated SKU ${currentItem.sku_id} stock: ${-shortDiff > 0 ? '+' : ''}${-shortDiff} (from short update - short directly affects available stock)`);
+        // Stock update is now handled by LedgerService (single source of truth)
+        logger.debug({ skuId: currentItem.sku_id, stockChange: -shortDiff }, `Short update for SKU ${currentItem.sku_id}: ${-shortDiff > 0 ? '+' : ''}${-shortDiff}, stock will be updated by ledger`);
+
+        // Ledger Update for Short Arrived / Adjusted
+        const invDetailsRes = await client.query(`
+            SELECT ii.invoice_number, ii.receiving_date, ii.received_by, v.name as vendor_name, t.name as team_name
+            FROM incoming_inventory ii
+            LEFT JOIN vendors v ON ii.vendor_id = v.id
+            LEFT JOIN teams t ON ii.received_by = t.id
+            WHERE ii.id = $1
+        `, [inventoryId]);
+
+        if (invDetailsRes.rows.length > 0) {
+          const invInfo = invDetailsRes.rows[0];
+          await LedgerService.addTransaction(client, {
+            skuId: currentItem.sku_id,
+            transactionDate: new Date(),
+            transactionType: 'IN', // Treating as additional arrival
+            referenceNumber: `IN (Short) / ${invInfo.invoice_number}`,
+            sourceDestination: `Vendor: ${invInfo.vendor_name || 'Unknown'}`,
+            createdBy: invInfo.received_by,
+            createdByName: invInfo.team_name || 'System',
+            quantityChange: -shortDiff, // If short decreases by 5, -(-5) = +5 stock. Correct.
+            companyId: companyId.toUpperCase()
+          });
+        }
       } else if (skipStockUpdate && shortDiff !== 0) {
         logger.debug({ skuId: currentItem.sku_id, shortDiff }, `Skipped stock update for SKU ${currentItem.sku_id} (items received via separate incoming inventory record)`);
       }
@@ -850,7 +1032,7 @@ class IncomingInventoryModel {
       const oldShort = currentItem.short || 0;
       const oldRejected = currentItem.rejected || 0;
       const totalQty = currentItem.total_quantity || 0;
-      
+
       // Get new values from updates (only what's provided)
       const newRejected = updates.rejected !== undefined ? parseInt(updates.rejected, 10) : oldRejected;
       const newShort = updates.short !== undefined ? parseInt(updates.short, 10) : oldShort;
@@ -918,7 +1100,7 @@ class IncomingInventoryModel {
       // When short increases: stock decreases (items moved to short, remove from stock)
       const rejectedDiff = newRejected - oldRejected;
       const shortDiff = newShort - oldShort;
-      
+
       // Rejected changes affect stock
       if (rejectedDiff !== 0) {
         await client.query(
@@ -927,7 +1109,7 @@ class IncomingInventoryModel {
         );
         logger.debug({ skuId: currentItem.sku_id, stockChange: -rejectedDiff }, `Updated SKU ${currentItem.sku_id} stock: ${rejectedDiff > 0 ? '-' : '+'}${Math.abs(rejectedDiff)} (from rejected update)`);
       }
-      
+
       // Short changes directly affect stock (short value directly updates available stock)
       // When short decreases (items arrive): stock increases
       // When short increases (items become short): stock decreases
@@ -939,6 +1121,56 @@ class IncomingInventoryModel {
           [-shortDiff, currentItem.sku_id]
         );
         logger.debug({ skuId: currentItem.sku_id, stockChange: -shortDiff }, `Updated SKU ${currentItem.sku_id} stock: ${-shortDiff > 0 ? '+' : ''}${-shortDiff} (from short update - short directly affects available stock)`);
+
+        // Ledger Update for Short change
+        const invDetailsRes = await client.query(`
+            SELECT ii.invoice_number, ii.receiving_date, ii.received_by, v.name as vendor_name, t.name as team_name
+            FROM incoming_inventory ii
+            LEFT JOIN vendors v ON ii.vendor_id = v.id
+            LEFT JOIN teams t ON ii.received_by = t.id
+            WHERE ii.id = $1
+        `, [id]);
+
+        if (invDetailsRes.rows.length > 0) {
+          const invInfo = invDetailsRes.rows[0];
+          await LedgerService.addTransaction(client, {
+            skuId: currentItem.sku_id,
+            transactionDate: new Date(),
+            transactionType: 'IN',
+            referenceNumber: `IN (Adj) / ${invInfo.invoice_number}`,
+            sourceDestination: `Vendor: ${invInfo.vendor_name || 'Unknown'}`,
+            createdBy: invInfo.received_by,
+            createdByName: invInfo.team_name || 'System',
+            quantityChange: -shortDiff,
+            companyId: companyId.toUpperCase()
+          });
+        }
+      }
+
+      // Ledger Update for Rejected change
+      if (rejectedDiff !== 0) {
+        const invDetailsRes = await client.query(`
+            SELECT ii.invoice_number, ii.receiving_date, ii.received_by, v.name as vendor_name, t.name as team_name
+            FROM incoming_inventory ii
+            LEFT JOIN vendors v ON ii.vendor_id = v.id
+            LEFT JOIN teams t ON ii.received_by = t.id
+            WHERE ii.id = $1
+        `, [id]);
+
+        if (invDetailsRes.rows.length > 0) {
+          const invInfo = invDetailsRes.rows[0];
+          await LedgerService.addTransaction(client, {
+            skuId: currentItem.sku_id,
+            transactionDate: new Date(),
+            transactionType: 'REJ',
+            referenceNumber: `REJ (Adj) / ${invInfo.invoice_number}`,
+            sourceDestination: `Vendor: ${invInfo.vendor_name || 'Unknown'}`,
+            createdBy: invInfo.received_by,
+            createdByName: invInfo.team_name || 'System',
+            quantityChange: -rejectedDiff, // If rejected increases by 2, -2 stock. Correct.
+            companyId: companyId.toUpperCase()
+          });
+        }
       }
 
       // Optionally update invoice/challan number and date if provided
@@ -1008,7 +1240,11 @@ class IncomingInventoryModel {
 
       // Get items to reverse stock if status is completed
       const inventoryResult = await client.query(
-        'SELECT status FROM incoming_inventory WHERE id = $1 AND company_id = $2',
+        `SELECT ii.status, ii.invoice_number, ii.receiving_date, ii.received_by, v.name as vendor_name, t.name as team_name
+         FROM incoming_inventory ii
+         LEFT JOIN vendors v ON ii.vendor_id = v.id
+         LEFT JOIN teams t ON ii.received_by = t.id
+         WHERE ii.id = $1 AND ii.company_id = $2`,
         [id, companyId.toUpperCase()]
       );
 
@@ -1016,7 +1252,9 @@ class IncomingInventoryModel {
         throw new Error('Incoming inventory record not found');
       }
 
-      if (inventoryResult.rows[0].status === 'completed') {
+      const invInfo = inventoryResult.rows[0];
+
+      if (invInfo.status === 'completed') {
         const itemsResult = await client.query(
           'SELECT sku_id, received FROM incoming_inventory_items WHERE incoming_inventory_id = $1',
           [id]
@@ -1031,6 +1269,19 @@ class IncomingInventoryModel {
               [receivedQty, item.sku_id]
             );
             logger.debug({ skuId: item.sku_id, stockChange: -receivedQty }, `Reversed SKU ${item.sku_id} stock on delete: -${receivedQty} (received items only)`);
+
+            // Ledger Entry for Deletion
+            await LedgerService.addTransaction(client, {
+              skuId: item.sku_id,
+              transactionDate: new Date(),
+              transactionType: 'OUT', // Removing stock
+              referenceNumber: `VOID / ${invInfo.invoice_number}`,
+              sourceDestination: `Transaction Deleted (Vendor: ${invInfo.vendor_name || 'Unknown'})`,
+              createdBy: invInfo.received_by,
+              createdByName: invInfo.team_name || 'System',
+              quantityChange: -receivedQty,
+              companyId: companyId.toUpperCase()
+            });
           }
         }
       }
@@ -1075,8 +1326,8 @@ class IncomingInventoryModel {
         v.id as vendor_id,
         b.name as brand_name,
         b.id as brand_id,
-        s.code as sku_code,
-        s.name as sku_name,
+        s.sku_id as sku_code,
+        s.item_name as sku_name,
         s.product_category,
         s.item_category,
         s.sub_category
@@ -1117,7 +1368,7 @@ class IncomingInventoryModel {
     }
 
     if (filters.sku) {
-      query += ` AND s.code ILIKE $${paramIndex}`;
+      query += ` AND s.sku_id ILIKE $${paramIndex}`;
       params.push(`%${filters.sku}%`);
       paramIndex++;
     }

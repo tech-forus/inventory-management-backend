@@ -23,15 +23,20 @@ class PriceHistoryModel {
           ii.invoice_date,
           ii.invoice_number,
           ii.receiving_date,
+          ii.remarks,
           v.name as vendor_name
         FROM incoming_inventory ii
         LEFT JOIN vendors v ON ii.vendor_id = v.id
-        WHERE ii.id = $1 AND ii.company_id = $2 AND ii.status = 'completed'`,
+        WHERE ii.id = $1 AND ii.company_id = $2 AND ii.status = 'completed'
+        AND (ii.remarks IS NULL OR ii.remarks NOT ILIKE '%Short items received back%')`,
         [inventoryId, companyId.toUpperCase()]
       );
 
       if (inventoryResult.rows.length === 0) {
-        throw new Error('Incoming inventory not found or not completed');
+        // If the inventory is a "Receive Back", inventoryResult.rows will be empty due to the remark check.
+        // We can safely skip updating price history in this case.
+        await client.query('COMMIT');
+        return;
       }
 
       const inventory = inventoryResult.rows[0];
@@ -40,9 +45,10 @@ class PriceHistoryModel {
       const itemsResult = await client.query(
         `SELECT 
           iii.sku_id,
-          iii.unit_price
+          iii.unit_price,
+          iii.received
         FROM incoming_inventory_items iii
-        WHERE iii.incoming_inventory_id = $1 AND iii.unit_price > 0`,
+        WHERE iii.incoming_inventory_id = $1 AND iii.unit_price > 0 AND iii.received > 0`,
         [inventoryId]
       );
 
@@ -64,7 +70,7 @@ class PriceHistoryModel {
         // If there's a current price, move it to previous
         if (currentHistory.rows.length > 0) {
           const oldCurrent = currentHistory.rows[0];
-          
+
           // Deactivate old current
           await client.query(
             `UPDATE price_history 
@@ -193,7 +199,7 @@ class PriceHistoryModel {
     `;
 
     const result = await pool.query(query, [skuId, companyId.toUpperCase()]);
-    
+
     const history = {
       current: null,
       previous: null,
@@ -244,4 +250,3 @@ class PriceHistoryModel {
 }
 
 module.exports = PriceHistoryModel;
-

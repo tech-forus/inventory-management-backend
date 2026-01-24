@@ -8,12 +8,12 @@
  */
 const transformVendor = (vendor) => {
   if (!vendor) return null;
-  
+
   // Extract IDs from JSON arrays or regular arrays
   // PostgreSQL jsonb/json_agg returns arrays directly when using pg library
   const extractIds = (ids) => {
     if (ids === null || ids === undefined) return [];
-    
+
     // PostgreSQL jsonb returns arrays directly
     if (Array.isArray(ids)) {
       return ids.map(id => {
@@ -25,7 +25,7 @@ const transformVendor = (vendor) => {
         return null;
       }).filter(id => id !== null && !isNaN(id));
     }
-    
+
     // Handle JSON string (fallback)
     if (typeof ids === 'string') {
       // Empty array string
@@ -46,15 +46,15 @@ const transformVendor = (vendor) => {
         // Not JSON
       }
     }
-    
+
     // Handle single number (shouldn't happen but handle it)
     if (typeof ids === 'number') {
       return [ids];
     }
-    
+
     return [];
   };
-  
+
   return {
     id: vendor.id,
     name: vendor.name,
@@ -200,15 +200,15 @@ const transformTransportor = (transportor) => {
  */
 const transformSKU = (sku) => {
   if (!sku) return null;
-  
+
   // Parse custom_fields if it exists - return empty array instead of null for consistency
   let customFields = null;
   if (sku.custom_fields) {
     try {
-      const parsed = typeof sku.custom_fields === 'string' 
-        ? JSON.parse(sku.custom_fields) 
+      const parsed = typeof sku.custom_fields === 'string'
+        ? JSON.parse(sku.custom_fields)
         : sku.custom_fields;
-      
+
       // Ensure it's an array format
       if (Array.isArray(parsed)) {
         customFields = parsed;
@@ -226,7 +226,7 @@ const transformSKU = (sku) => {
       customFields = null;
     }
   }
-  
+
   return {
     id: sku.id,
     skuId: sku.sku_id,
@@ -266,6 +266,7 @@ const transformSKU = (sku) => {
     reorderPoint: sku.reorder_point,
     defaultStorageLocation: sku.default_storage_location,
     isActive: sku.is_active,
+    isNonMovable: sku.is_non_movable,
     createdAt: sku.created_at,
     updatedAt: sku.updated_at,
   };

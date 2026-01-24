@@ -67,7 +67,7 @@ const corsOptions = {
     if (allowedOrigins.length === 0) {
       console.warn(
         '[CORS] allowedOrigins is empty. Allowing all origins. ' +
-          'Set CORS_ORIGINS in env for stricter control.'
+        'Set CORS_ORIGINS in env for stricter control.'
       );
       return callback(null, true);
     }
@@ -155,6 +155,7 @@ const inventoryRoutes = require('./routes/inventory');
 const usersRoutes = require('./routes/users');
 const rolesRoutes = require('./routes/roles');
 const emailRoutes = require('./routes/email');
+const manufacturingRoutes = require('./routes/manufacturingRoutes');
 
 // Apply conditional rate limiting to routes
 // Authenticated users get unlimited requests (JWT valid for 12 hours)
@@ -169,6 +170,7 @@ app.use('/api/inventory', strictRateLimiter, inventoryRoutes); // 50 requests/15
 app.use('/api/users', usersRoutes); // User management routes
 app.use('/api/roles', rolesRoutes); // Role management routes
 app.use('/api/email', emailRoutes); // Email routes
+app.use('/api/manufacturing', apiRateLimiter, manufacturingRoutes); // Manufacturing routes
 
 // New "your" prefixed routes (must be last to avoid catching other routes)
 app.use('/api', apiRateLimiter, libraryRoutes);
