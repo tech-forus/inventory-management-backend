@@ -434,6 +434,37 @@ class SKUModel {
     const result = await pool.query('SELECT id FROM skus WHERE sku_id = $1', [skuId]);
     return result.rows.length > 0;
   }
+
+  /**
+   * Check if SKU with same itemName and model already exists
+   * @param {string} itemName - Item name
+   * @param {string} model - Model number
+   * @param {string} companyId - Company ID
+   * @param {number|string} excludeId - SKU ID to exclude from check (for updates)
+   * @returns {Promise<boolean>} - True if duplicate exists
+   */
+  static async itemNameModelExists(itemName, model, companyId, excludeId = null) {
+    if (!itemName || !model) {
+      return false;
+    }
+
+    let query = `
+      SELECT id FROM skus 
+      WHERE company_id = $1 
+        AND LOWER(TRIM(item_name)) = LOWER(TRIM($2))
+        AND UPPER(TRIM(model)) = UPPER(TRIM($3))
+        AND is_active = true
+    `;
+    const params = [companyId.toUpperCase(), itemName, model];
+
+    if (excludeId) {
+      query += ` AND id != $4`;
+      params.push(excludeId);
+    }
+
+    const result = await pool.query(query, params);
+    return result.rows.length > 0;
+  }
 }
 
 module.exports = SKUModel;

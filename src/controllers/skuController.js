@@ -96,6 +96,19 @@ const createSKU = async (req, res, next) => {
       throw new ValidationError('SKU ID already exists');
     }
 
+    // Check if SKU with same itemName and model already exists
+    if (req.body.itemName && req.body.model) {
+      const duplicateExists = await SKUModel.itemNameModelExists(
+        req.body.itemName,
+        req.body.model,
+        companyId
+      );
+      if (duplicateExists) {
+        await client.query('ROLLBACK');
+        throw new ValidationError('An SKU with this Item Name and Model Number already exists');
+      }
+    }
+
     const sku = await SKUModel.create(req.body, companyId, skuId);
 
     // Fetch the created SKU with joins
@@ -121,6 +134,20 @@ const updateSKU = async (req, res, next) => {
   try {
     await client.query('BEGIN');
     const companyId = getCompanyId(req);
+
+    // Check if SKU with same itemName and model already exists (excluding current SKU)
+    if (req.body.itemName && req.body.model) {
+      const duplicateExists = await SKUModel.itemNameModelExists(
+        req.body.itemName,
+        req.body.model,
+        companyId,
+        req.params.id // Exclude current SKU from check
+      );
+      if (duplicateExists) {
+        await client.query('ROLLBACK');
+        throw new ValidationError('An SKU with this Item Name and Model Number already exists');
+      }
+    }
 
     const sku = await SKUModel.update(req.params.id, req.body, companyId);
 
