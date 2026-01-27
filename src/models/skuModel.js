@@ -46,18 +46,18 @@ class SKUModel {
 
     // Add filters
     if (filters.search && filters.search.trim()) {
-      const searchTrimmed = filters.search.trim();
+      const searchTrimmed = filters.search.trim().replace(/\s+/g, '');
       query += ` AND (
-        s.sku_id ILIKE $${paramIndex} 
-        OR s.item_name ILIKE $${paramIndex} 
-        OR s.model ILIKE $${paramIndex} 
-        OR s.hsn_sac_code ILIKE $${paramIndex}
-        OR s.series ILIKE $${paramIndex}
-        OR s.rating_size ILIKE $${paramIndex}
-        OR s.item_details ILIKE $${paramIndex}
-        OR s.vendor_item_code ILIKE $${paramIndex}
-        OR b.name ILIKE $${paramIndex}
-        OR sc.name ILIKE $${paramIndex}
+        REPLACE(s.sku_id, ' ', '') ILIKE $${paramIndex} 
+        OR REPLACE(s.item_name, ' ', '') ILIKE $${paramIndex} 
+        OR REPLACE(COALESCE(s.model, ''), ' ', '') ILIKE $${paramIndex} 
+        OR REPLACE(COALESCE(s.hsn_sac_code, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(s.series, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(s.rating_size, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(s.item_details, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(s.vendor_item_code, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(b.name, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(sc.name, ''), ' ', '') ILIKE $${paramIndex}
       )`;
       params.push(`%${searchTrimmed}%`);
       paramIndex++;

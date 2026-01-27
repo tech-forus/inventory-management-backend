@@ -85,11 +85,21 @@ const transformKeys = (obj) => {
   return obj;
 };
 
+/**
+ * Normalize search term by removing all spaces
+ * Used for space-insensitive search matching
+ */
+const normalizeSearchTerm = (searchTerm) => {
+  if (!searchTerm) return '';
+  return searchTerm.replace(/\s+/g, '').trim();
+};
+
 module.exports = {
   parseExcelFile,
   parseExcelFileAllSheets,
   toCamelCase,
   transformKeys,
+  normalizeSearchTerm,
 };
 
 

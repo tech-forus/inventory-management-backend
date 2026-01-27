@@ -57,8 +57,9 @@ router.get('/', async (req, res, next) => {
 
     // Add filters
     if (search) {
-      query += ` AND (s.sku_id ILIKE $${paramIndex} OR s.item_name ILIKE $${paramIndex})`;
-      params.push(`%${search}%`);
+      const searchTrimmed = search.trim().replace(/\s+/g, '');
+      query += ` AND (REPLACE(s.sku_id, ' ', '') ILIKE $${paramIndex} OR REPLACE(s.item_name, ' ', '') ILIKE $${paramIndex})`;
+      params.push(`%${searchTrimmed}%`);
       paramIndex++;
     }
     if (productCategory) {

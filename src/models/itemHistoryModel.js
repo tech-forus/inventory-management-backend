@@ -111,12 +111,13 @@ class ItemHistoryModel {
 
       // Add search filter (invoice, challan, vendor, destination)
       if (filters.search) {
+        const searchTerm = filters.search.trim().replace(/\s+/g, '');
         query += ` AND (
-          il.reference_number ILIKE $${paramIndex}
-          OR il.source_destination ILIKE $${paramIndex}
-          OR COALESCE(iii.challan_number, '') ILIKE $${paramIndex}
+          REPLACE(il.reference_number, ' ', '') ILIKE $${paramIndex}
+          OR REPLACE(il.source_destination, ' ', '') ILIKE $${paramIndex}
+          OR REPLACE(COALESCE(iii.challan_number, ''), ' ', '') ILIKE $${paramIndex}
         )`;
-        params.push(`%${filters.search}%`);
+        params.push(`%${searchTerm}%`);
         paramIndex++;
       }
 

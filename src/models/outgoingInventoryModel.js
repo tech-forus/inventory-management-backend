@@ -431,8 +431,9 @@ class OutgoingInventoryModel {
     }
 
     if (filters.destination) {
-      query += ` AND (c.customer_name ILIKE $${paramIndex} OR v.name ILIKE $${paramIndex})`;
-      queryParams.push(`%${filters.destination}%`);
+      const destSearch = filters.destination.trim().replace(/\s+/g, '');
+      query += ` AND (REPLACE(COALESCE(c.customer_name, ''), ' ', '') ILIKE $${paramIndex} OR REPLACE(COALESCE(v.name, ''), ' ', '') ILIKE $${paramIndex})`;
+      queryParams.push(`%${destSearch}%`);
       paramIndex++;
     }
 
@@ -554,39 +555,41 @@ class OutgoingInventoryModel {
 
     // General search across multiple fields (matching SKU Management search)
     if (filters.search) {
-      const searchTerm = `%${filters.search}%`;
+      const searchTerm = filters.search.trim().replace(/\s+/g, '');
       query += ` AND (
-        COALESCE(oi.invoice_challan_number, '') ILIKE $${paramIndex}
-        OR COALESCE(oi.docket_number, '') ILIKE $${paramIndex}
-        OR COALESCE(c.customer_name, '') ILIKE $${paramIndex}
-        OR COALESCE(v.name, '') ILIKE $${paramIndex}
-        OR COALESCE(ot.name, '') ILIKE $${paramIndex}
-        OR COALESCE(s.sku_id, '') ILIKE $${paramIndex}
-        OR COALESCE(s.item_name, '') ILIKE $${paramIndex}
-        OR COALESCE(s.model, '') ILIKE $${paramIndex}
-        OR COALESCE(s.hsn_sac_code, '') ILIKE $${paramIndex}
-        OR COALESCE(s.series, '') ILIKE $${paramIndex}
-        OR COALESCE(s.rating_size, '') ILIKE $${paramIndex}
-        OR COALESCE(s.item_details, '') ILIKE $${paramIndex}
-        OR COALESCE(s.vendor_item_code, '') ILIKE $${paramIndex}
-        OR COALESCE(b.name, '') ILIKE $${paramIndex}
-        OR COALESCE(sc.name, '') ILIKE $${paramIndex}
+        REPLACE(COALESCE(oi.invoice_challan_number, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(oi.docket_number, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(c.customer_name, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(v.name, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(ot.name, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(s.sku_id, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(s.item_name, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(s.model, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(s.hsn_sac_code, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(s.series, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(s.rating_size, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(s.item_details, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(s.vendor_item_code, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(b.name, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(sc.name, ''), ' ', '') ILIKE $${paramIndex}
       )`;
-      queryParams.push(searchTerm);
+      queryParams.push(`%${searchTerm}%`);
       paramIndex++;
     }
 
     // Legacy destination filter (keep for backward compatibility)
     if (filters.destination && !filters.search) {
-      query += ` AND (c.customer_name ILIKE $${paramIndex} OR v.name ILIKE $${paramIndex})`;
-      queryParams.push(`%${filters.destination}%`);
+      const destSearch = filters.destination.trim().replace(/\s+/g, '');
+      query += ` AND (REPLACE(COALESCE(c.customer_name, ''), ' ', '') ILIKE $${paramIndex} OR REPLACE(COALESCE(v.name, ''), ' ', '') ILIKE $${paramIndex})`;
+      queryParams.push(`%${destSearch}%`);
       paramIndex++;
     }
 
     // Legacy SKU filter (keep for backward compatibility)
     if (filters.sku && !filters.search) {
-      query += ` AND s.sku_id ILIKE $${paramIndex}`;
-      queryParams.push(`%${filters.sku}%`);
+      const skuSearch = filters.sku.trim().replace(/\s+/g, '');
+      query += ` AND REPLACE(s.sku_id, ' ', '') ILIKE $${paramIndex}`;
+      queryParams.push(`%${skuSearch}%`);
       paramIndex++;
     }
 

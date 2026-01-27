@@ -105,11 +105,11 @@ const getAllShortItemReports = async (req, res, next) => {
     }
 
     if (search && search.trim()) {
-      const searchTrimmed = search.trim();
+      const searchTrimmed = search.trim().replace(/\s+/g, '');
       query += ` AND (
-        ii.invoice_number ILIKE $${paramIndex} OR
-        s.sku_id ILIKE $${paramIndex} OR
-        s.item_name ILIKE $${paramIndex}
+        REPLACE(ii.invoice_number, ' ', '') ILIKE $${paramIndex} OR
+        REPLACE(s.sku_id, ' ', '') ILIKE $${paramIndex} OR
+        REPLACE(s.item_name, ' ', '') ILIKE $${paramIndex}
       )`;
       params.push(`%${searchTrimmed}%`);
       paramIndex++;
