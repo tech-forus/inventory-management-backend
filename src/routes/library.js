@@ -89,6 +89,7 @@ router.delete('/sub/:id', libraryController.deleteSubCategory);
  * SUB CATEGORY DEFAULTS ROUTES
  * Manage default SKU field values for sub-categories
  */
+router.get('/sub-categories/defaults', libraryController.getAllSubCategoryDefaults);
 router.get('/sub-categories/:subCategoryId/defaults', libraryController.getSubCategoryDefaults);
 router.get('/sub-categories/:subCategoryId/defaults/:defaultId', libraryController.getSubCategoryDefaultById);
 router.post('/sub-categories/:subCategoryId/defaults', libraryController.createSubCategoryDefault);

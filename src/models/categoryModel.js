@@ -265,6 +265,16 @@ class CategoryModel {
     return result.rows;
   }
 
+  static async getAllSubCategoryDefaults(companyId) {
+    const result = await pool.query(
+      `SELECT * FROM sub_category_defaults 
+       WHERE company_id = $1 AND is_active = true 
+       ORDER BY sub_category_id, name`,
+      [companyId.toUpperCase()]
+    );
+    return result.rows;
+  }
+
   static async getSubCategoryDefaultById(defaultId, companyId) {
     const result = await pool.query(
       `SELECT * FROM sub_category_defaults 

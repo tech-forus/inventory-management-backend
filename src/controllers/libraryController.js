@@ -855,6 +855,51 @@ const getSubCategoryDefaults = async (req, res, next) => {
   }
 };
 
+const getAllSubCategoryDefaults = async (req, res, next) => {
+  try {
+    const companyId = getCompanyId(req);
+    
+    const defaults = await CategoryModel.getAllSubCategoryDefaults(companyId);
+    
+    // Transform snake_case to camelCase
+    const transformedDefaults = defaults.map(defaultSet => ({
+      id: defaultSet.id,
+      subCategoryId: defaultSet.sub_category_id,
+      companyId: defaultSet.company_id,
+      name: defaultSet.name,
+      hsnCode: defaultSet.hsn_code,
+      gstRate: defaultSet.gst_rate,
+      defaultVendorId: defaultSet.default_vendor_id,
+      defaultBrandId: defaultSet.default_brand_id,
+      defaultUnit: defaultSet.default_unit,
+      defaultMaterial: defaultSet.default_material,
+      defaultColor: defaultSet.default_color,
+      defaultSeries: defaultSet.default_series,
+      defaultRatingSize: defaultSet.default_rating_size,
+      defaultManufactureOrImport: defaultSet.default_manufacture_or_import,
+      defaultWeight: defaultSet.default_weight,
+      defaultWeightUnit: defaultSet.default_weight_unit,
+      defaultLength: defaultSet.default_length,
+      defaultLengthUnit: defaultSet.default_length_unit,
+      defaultWidth: defaultSet.default_width,
+      defaultWidthUnit: defaultSet.default_width_unit,
+      defaultHeight: defaultSet.default_height,
+      defaultHeightUnit: defaultSet.default_height_unit,
+      defaultWarehouseId: defaultSet.default_warehouse_id,
+      defaultMinStockLevel: defaultSet.default_min_stock_level,
+      defaultItemDetails: defaultSet.default_item_details,
+      defaultCustomFields: defaultSet.default_custom_fields ? JSON.parse(defaultSet.default_custom_fields) : null,
+      isActive: defaultSet.is_active,
+      createdAt: defaultSet.created_at,
+      updatedAt: defaultSet.updated_at,
+    }));
+    
+    res.json({ success: true, data: transformedDefaults });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const getSubCategoryDefaultById = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
@@ -2396,6 +2441,7 @@ module.exports = {
   updateColour,
   deleteColour,
   // Sub Category Defaults
+  getAllSubCategoryDefaults,
   getSubCategoryDefaults,
   getSubCategoryDefaultById,
   createSubCategoryDefault,
