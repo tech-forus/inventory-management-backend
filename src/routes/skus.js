@@ -115,9 +115,163 @@ const transformSKU = (sku) => {
 
 /**
  * GET /api/skus
- * Get all SKUs with filters (uses fuzzy search via controller)
+ * Get all SKUs with filters
  */
-router.get('/', skuController.getAllSKUs);
+router.get('/', async (req, res, next) => {
+  try {
+    const companyId = getCompanyId(req).toUpperCase();
+    const user = req.user || {};
+    const {
+      search,
+      productCategory,
+      itemCategory,
+      subCategory,
+      brand,
+      stockStatus,
+      hsnCode,
+      sortBy,
+      sortOrder = 'asc',
+      page = 1,
+      limit = 20,
+      excludeNonMovable,
+    } = req.query;
+    let query = `
+      SELECT 
+        s.*,
+        pc.name as product_category,
+        ic.name as item_category,
+        sc.name as sub_category,
+        b.name as brand,
+        v.name as vendor
+      FROM skus s
+      LEFT JOIN product_categories pc ON s.product_category_id = pc.id
+      LEFT JOIN item_categories ic ON s.item_category_id = ic.id
+      LEFT JOIN sub_categories sc ON s.sub_category_id = sc.id
+      LEFT JOIN brands b ON s.brand_id = b.id
+      LEFT JOIN vendors v ON s.vendor_id = v.id
+      WHERE s.company_id = $1 AND s.is_active = true
+    `;
+    const params = [companyId];
+    let paramIndex = 2;
+
+    // Add filters
+    if (search && search.trim()) {
+      const searchTrimmed = search.trim().replace(/\s+/g, '');
+      query += ` AND (
+        REPLACE(s.sku_id, ' ', '') ILIKE $${paramIndex} 
+        OR REPLACE(s.item_name, ' ', '') ILIKE $${paramIndex} 
+        OR REPLACE(COALESCE(s.model, ''), ' ', '') ILIKE $${paramIndex} 
+        OR REPLACE(COALESCE(s.hsn_sac_code, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(s.series, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(s.rating_size, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(s.item_details, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(s.vendor_item_code, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(b.name, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(sc.name, ''), ' ', '') ILIKE $${paramIndex}
+      )`;
+      params.push(`%${searchTrimmed}%`);
+      paramIndex++;
+    }
+    if (productCategory) {
+      // Support comma-separated list of category IDs for "All" selection
+      if (productCategory.includes(',')) {
+        const categoryIds = productCategory.split(',').map(id => id.trim()).filter(id => id);
+        if (categoryIds.length > 0) {
+          query += ` AND s.product_category_id = ANY($${paramIndex}::int[])`;
+          params.push(categoryIds);
+          paramIndex++;
+        }
+      } else {
+        query += ` AND s.product_category_id = $${paramIndex}`;
+        params.push(productCategory);
+        paramIndex++;
+      }
+    }
+    if (itemCategory) {
+      query += ` AND s.item_category_id = $${paramIndex}`;
+      params.push(itemCategory);
+      paramIndex++;
+    }
+    if (subCategory) {
+      query += ` AND s.sub_category_id = $${paramIndex}`;
+      params.push(subCategory);
+      paramIndex++;
+    }
+    if (brand) {
+      query += ` AND s.brand_id = $${paramIndex}`;
+      params.push(brand);
+      paramIndex++;
+    }
+    if (stockStatus) {
+      if (stockStatus === 'critical') {
+        query += ` AND s.current_stock = 0 AND s.min_stock_level > 0`;
+      } else if (stockStatus === 'out') {
+        query += ` AND s.current_stock = 0 AND (s.min_stock_level <= 0 OR s.min_stock_level IS NULL)`;
+      } else if (stockStatus === 'low') {
+        query += ` AND s.current_stock > 0 AND s.current_stock < s.min_stock_level`;
+      } else if (stockStatus === 'in') {
+        query += ` AND s.current_stock > 0 AND s.current_stock >= s.min_stock_level`;
+      } else if (stockStatus === 'alert') {
+        query += ` AND (s.current_stock < s.min_stock_level OR s.current_stock = 0)`;
+      } else if (stockStatus === 'non-movable') {
+        query += ` AND s.is_non_movable = true`;
+      }
+    }
+    if (hsnCode) {
+      query += ` AND s.hsn_sac_code ILIKE $${paramIndex}`;
+      params.push(`%${hsnCode}%`);
+      paramIndex++;
+    }
+    if (excludeNonMovable === 'true') {
+      query += ` AND s.is_non_movable = false`;
+    }
+
+    // Add sorting
+    const validSortFields = {
+      skuId: 's.sku_id',
+      itemName: 's.item_name',
+      brand: 'b.name',
+      currentStock: 's.current_stock',
+      usefulStocks: 's.current_stock',
+      createdAt: 's.created_at'
+    };
+
+    const sortField = validSortFields[sortBy] || 's.created_at';
+    const sortDirection = sortOrder === 'desc' ? 'DESC' : 'ASC';
+
+    // Add pagination
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    query += ` ORDER BY ${sortField} ${sortDirection} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    params.push(parseInt(limit), offset);
+
+    const result = await pool.query(query, params);
+
+    // Get total count
+    const countQuery = query.replace(/SELECT[\s\S]*FROM/, 'SELECT COUNT(*) FROM').replace(/ORDER BY[\s\S]*$/, '');
+    const countResult = await pool.query(countQuery, params.slice(0, -2));
+
+    // Transform snake_case to camelCase
+    const transformedData = result.rows.map(transformSKU);
+    const totalCount = parseInt(countResult.rows[0].count);
+    if (productCategory && productCategory.includes(',')) {
+      const categoryIds = productCategory.split(',').map(id => id.trim());
+    }
+
+    res.json({
+      success: true,
+      data: transformedData,
+      total: totalCount,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: totalCount,
+        totalPages: Math.ceil(totalCount / parseInt(limit)),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
 /**
  * GET /api/skus/:id
