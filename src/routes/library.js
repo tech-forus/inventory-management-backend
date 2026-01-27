@@ -86,6 +86,16 @@ router.put('/sub/:id', libraryController.updateSubCategory);
 router.delete('/sub/:id', libraryController.deleteSubCategory);
 
 /**
+ * SUB CATEGORY DEFAULTS ROUTES
+ * Manage default SKU field values for sub-categories
+ */
+router.get('/sub-categories/:subCategoryId/defaults', libraryController.getSubCategoryDefaults);
+router.get('/sub-categories/:subCategoryId/defaults/:defaultId', libraryController.getSubCategoryDefaultById);
+router.post('/sub-categories/:subCategoryId/defaults', libraryController.createSubCategoryDefault);
+router.put('/sub-categories/:subCategoryId/defaults/:defaultId', libraryController.updateSubCategoryDefault);
+router.delete('/sub-categories/:subCategoryId/defaults/:defaultId', libraryController.deleteSubCategoryDefault);
+
+/**
  * UNIFIED CATEGORIES UPLOAD ROUTE
  * Uploads Product Categories, Item Categories, and Sub Categories from a single Excel file
  */

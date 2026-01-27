@@ -803,6 +803,266 @@ const deleteSubCategory = async (req, res, next) => {
   }
 };
 
+// ==================== SUB CATEGORY DEFAULTS ====================
+
+const getSubCategoryDefaults = async (req, res, next) => {
+  try {
+    const companyId = getCompanyId(req);
+    const subCategoryId = parseInt(req.params.subCategoryId);
+    
+    if (!subCategoryId || isNaN(subCategoryId)) {
+      throw new ValidationError('Invalid sub category ID');
+    }
+    
+    const defaults = await CategoryModel.getSubCategoryDefaults(subCategoryId, companyId);
+    
+    // Transform snake_case to camelCase
+    const transformedDefaults = defaults.map(defaultSet => ({
+      id: defaultSet.id,
+      subCategoryId: defaultSet.sub_category_id,
+      companyId: defaultSet.company_id,
+      name: defaultSet.name,
+      hsnCode: defaultSet.hsn_code,
+      gstRate: defaultSet.gst_rate,
+      defaultVendorId: defaultSet.default_vendor_id,
+      defaultBrandId: defaultSet.default_brand_id,
+      defaultUnit: defaultSet.default_unit,
+      defaultMaterial: defaultSet.default_material,
+      defaultColor: defaultSet.default_color,
+      defaultSeries: defaultSet.default_series,
+      defaultRatingSize: defaultSet.default_rating_size,
+      defaultManufactureOrImport: defaultSet.default_manufacture_or_import,
+      defaultWeight: defaultSet.default_weight,
+      defaultWeightUnit: defaultSet.default_weight_unit,
+      defaultLength: defaultSet.default_length,
+      defaultLengthUnit: defaultSet.default_length_unit,
+      defaultWidth: defaultSet.default_width,
+      defaultWidthUnit: defaultSet.default_width_unit,
+      defaultHeight: defaultSet.default_height,
+      defaultHeightUnit: defaultSet.default_height_unit,
+      defaultWarehouseId: defaultSet.default_warehouse_id,
+      defaultMinStockLevel: defaultSet.default_min_stock_level,
+      defaultItemDetails: defaultSet.default_item_details,
+      defaultCustomFields: defaultSet.default_custom_fields ? JSON.parse(defaultSet.default_custom_fields) : null,
+      isActive: defaultSet.is_active,
+      createdAt: defaultSet.created_at,
+      updatedAt: defaultSet.updated_at,
+    }));
+    
+    res.json({ success: true, data: transformedDefaults });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getSubCategoryDefaultById = async (req, res, next) => {
+  try {
+    const companyId = getCompanyId(req);
+    const defaultId = parseInt(req.params.defaultId);
+    
+    if (!defaultId || isNaN(defaultId)) {
+      throw new ValidationError('Invalid default ID');
+    }
+    
+    const defaultSet = await CategoryModel.getSubCategoryDefaultById(defaultId, companyId);
+    
+    if (!defaultSet) {
+      throw new NotFoundError('Default set not found');
+    }
+    
+    // Transform snake_case to camelCase
+    const transformedDefault = {
+      id: defaultSet.id,
+      subCategoryId: defaultSet.sub_category_id,
+      companyId: defaultSet.company_id,
+      name: defaultSet.name,
+      hsnCode: defaultSet.hsn_code,
+      gstRate: defaultSet.gst_rate,
+      defaultVendorId: defaultSet.default_vendor_id,
+      defaultBrandId: defaultSet.default_brand_id,
+      defaultUnit: defaultSet.default_unit,
+      defaultMaterial: defaultSet.default_material,
+      defaultColor: defaultSet.default_color,
+      defaultSeries: defaultSet.default_series,
+      defaultRatingSize: defaultSet.default_rating_size,
+      defaultManufactureOrImport: defaultSet.default_manufacture_or_import,
+      defaultWeight: defaultSet.default_weight,
+      defaultWeightUnit: defaultSet.default_weight_unit,
+      defaultLength: defaultSet.default_length,
+      defaultLengthUnit: defaultSet.default_length_unit,
+      defaultWidth: defaultSet.default_width,
+      defaultWidthUnit: defaultSet.default_width_unit,
+      defaultHeight: defaultSet.default_height,
+      defaultHeightUnit: defaultSet.default_height_unit,
+      defaultWarehouseId: defaultSet.default_warehouse_id,
+      defaultMinStockLevel: defaultSet.default_min_stock_level,
+      defaultItemDetails: defaultSet.default_item_details,
+      defaultCustomFields: defaultSet.default_custom_fields ? JSON.parse(defaultSet.default_custom_fields) : null,
+      isActive: defaultSet.is_active,
+      createdAt: defaultSet.created_at,
+      updatedAt: defaultSet.updated_at,
+    };
+    
+    res.json({ success: true, data: transformedDefault });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const createSubCategoryDefault = async (req, res, next) => {
+  const pool = require('../models/database');
+  const client = await pool.connect();
+  try {
+    const companyId = getCompanyId(req);
+    const subCategoryId = parseInt(req.params.subCategoryId);
+    
+    if (!subCategoryId || isNaN(subCategoryId)) {
+      throw new ValidationError('Invalid sub category ID');
+    }
+    
+    // Verify sub-category exists
+    const subCategory = await CategoryModel.getSubCategoryById(subCategoryId, companyId);
+    if (!subCategory) {
+      throw new NotFoundError('Sub category not found');
+    }
+    
+    await client.query('BEGIN');
+    
+    const defaultSet = await CategoryModel.createSubCategoryDefault(subCategoryId, req.body, companyId);
+    
+    await client.query('COMMIT');
+    
+    // Transform snake_case to camelCase
+    const transformedDefault = {
+      id: defaultSet.id,
+      subCategoryId: defaultSet.sub_category_id,
+      companyId: defaultSet.company_id,
+      name: defaultSet.name,
+      hsnCode: defaultSet.hsn_code,
+      gstRate: defaultSet.gst_rate,
+      defaultVendorId: defaultSet.default_vendor_id,
+      defaultBrandId: defaultSet.default_brand_id,
+      defaultUnit: defaultSet.default_unit,
+      defaultMaterial: defaultSet.default_material,
+      defaultColor: defaultSet.default_color,
+      defaultSeries: defaultSet.default_series,
+      defaultRatingSize: defaultSet.default_rating_size,
+      defaultManufactureOrImport: defaultSet.default_manufacture_or_import,
+      defaultWeight: defaultSet.default_weight,
+      defaultWeightUnit: defaultSet.default_weight_unit,
+      defaultLength: defaultSet.default_length,
+      defaultLengthUnit: defaultSet.default_length_unit,
+      defaultWidth: defaultSet.default_width,
+      defaultWidthUnit: defaultSet.default_width_unit,
+      defaultHeight: defaultSet.default_height,
+      defaultHeightUnit: defaultSet.default_height_unit,
+      defaultWarehouseId: defaultSet.default_warehouse_id,
+      defaultMinStockLevel: defaultSet.default_min_stock_level,
+      defaultItemDetails: defaultSet.default_item_details,
+      defaultCustomFields: defaultSet.default_custom_fields ? JSON.parse(defaultSet.default_custom_fields) : null,
+      isActive: defaultSet.is_active,
+      createdAt: defaultSet.created_at,
+      updatedAt: defaultSet.updated_at,
+    };
+    
+    res.json({ success: true, data: transformedDefault });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    next(error);
+  } finally {
+    client.release();
+  }
+};
+
+const updateSubCategoryDefault = async (req, res, next) => {
+  const pool = require('../models/database');
+  const client = await pool.connect();
+  try {
+    const companyId = getCompanyId(req);
+    const defaultId = parseInt(req.params.defaultId);
+    
+    if (!defaultId || isNaN(defaultId)) {
+      throw new ValidationError('Invalid default ID');
+    }
+    
+    await client.query('BEGIN');
+    
+    const defaultSet = await CategoryModel.updateSubCategoryDefault(defaultId, req.body, companyId);
+    
+    if (!defaultSet) {
+      await client.query('ROLLBACK');
+      throw new NotFoundError('Default set not found');
+    }
+    
+    await client.query('COMMIT');
+    
+    // Transform snake_case to camelCase
+    const transformedDefault = {
+      id: defaultSet.id,
+      subCategoryId: defaultSet.sub_category_id,
+      companyId: defaultSet.company_id,
+      name: defaultSet.name,
+      hsnCode: defaultSet.hsn_code,
+      gstRate: defaultSet.gst_rate,
+      defaultVendorId: defaultSet.default_vendor_id,
+      defaultBrandId: defaultSet.default_brand_id,
+      defaultUnit: defaultSet.default_unit,
+      defaultMaterial: defaultSet.default_material,
+      defaultColor: defaultSet.default_color,
+      defaultSeries: defaultSet.default_series,
+      defaultRatingSize: defaultSet.default_rating_size,
+      defaultManufactureOrImport: defaultSet.default_manufacture_or_import,
+      defaultWeight: defaultSet.default_weight,
+      defaultWeightUnit: defaultSet.default_weight_unit,
+      defaultLength: defaultSet.default_length,
+      defaultLengthUnit: defaultSet.default_length_unit,
+      defaultWidth: defaultSet.default_width,
+      defaultWidthUnit: defaultSet.default_width_unit,
+      defaultHeight: defaultSet.default_height,
+      defaultHeightUnit: defaultSet.default_height_unit,
+      defaultWarehouseId: defaultSet.default_warehouse_id,
+      defaultMinStockLevel: defaultSet.default_min_stock_level,
+      defaultItemDetails: defaultSet.default_item_details,
+      defaultCustomFields: defaultSet.default_custom_fields ? JSON.parse(defaultSet.default_custom_fields) : null,
+      isActive: defaultSet.is_active,
+      createdAt: defaultSet.created_at,
+      updatedAt: defaultSet.updated_at,
+    };
+    
+    res.json({ success: true, data: transformedDefault });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    next(error);
+  } finally {
+    client.release();
+  }
+};
+
+const deleteSubCategoryDefault = async (req, res, next) => {
+  try {
+    const companyId = getCompanyId(req);
+    const defaultId = parseInt(req.params.defaultId);
+    const hardDelete = req.query.force === 'true' || req.query.force === true;
+    
+    if (!defaultId || isNaN(defaultId)) {
+      throw new ValidationError('Invalid default ID');
+    }
+    
+    const result = await CategoryModel.deleteSubCategoryDefault(defaultId, companyId, hardDelete);
+    
+    if (!result) {
+      throw new NotFoundError('Default set not found');
+    }
+    
+    const message = hardDelete 
+      ? 'Default set permanently deleted from database' 
+      : 'Default set deleted successfully';
+    res.json({ success: true, message });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // ==================== YOUR VENDORS (Alias for vendors) ====================
 
 const getYourVendors = getVendors;
@@ -2135,6 +2395,12 @@ module.exports = {
   uploadColours,
   updateColour,
   deleteColour,
+  // Sub Category Defaults
+  getSubCategoryDefaults,
+  getSubCategoryDefaultById,
+  createSubCategoryDefault,
+  updateSubCategoryDefault,
+  deleteSubCategoryDefault,
 };
 
 
