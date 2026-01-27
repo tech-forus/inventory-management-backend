@@ -1,5 +1,6 @@
 const pool = require('./database');
 const LedgerService = require('../services/ledgerService');
+const { buildFuzzySearchQuery } = require('../utils/fuzzySearch');
 
 /**
  * SKU Model
@@ -44,23 +45,38 @@ class SKUModel {
     const params = [companyId.toUpperCase()];
     let paramIndex = 2;
 
-    // Add filters
+    // Add fuzzy search filter (exact match + fuzzy match with ranking)
+    let fuzzySearchOrderBy = '';
     if (filters.search && filters.search.trim()) {
-      const searchTrimmed = filters.search.trim().replace(/\s+/g, '');
-      query += ` AND (
-        REPLACE(s.sku_id, ' ', '') ILIKE $${paramIndex} 
-        OR REPLACE(s.item_name, ' ', '') ILIKE $${paramIndex} 
-        OR REPLACE(COALESCE(s.model, ''), ' ', '') ILIKE $${paramIndex} 
-        OR REPLACE(COALESCE(s.hsn_sac_code, ''), ' ', '') ILIKE $${paramIndex}
-        OR REPLACE(COALESCE(s.series, ''), ' ', '') ILIKE $${paramIndex}
-        OR REPLACE(COALESCE(s.rating_size, ''), ' ', '') ILIKE $${paramIndex}
-        OR REPLACE(COALESCE(s.item_details, ''), ' ', '') ILIKE $${paramIndex}
-        OR REPLACE(COALESCE(s.vendor_item_code, ''), ' ', '') ILIKE $${paramIndex}
-        OR REPLACE(COALESCE(b.name, ''), ' ', '') ILIKE $${paramIndex}
-        OR REPLACE(COALESCE(sc.name, ''), ' ', '') ILIKE $${paramIndex}
-      )`;
-      params.push(`%${searchTrimmed}%`);
-      paramIndex++;
+      const searchFields = [
+        { table: 's', column: 'sku_id', alias: 'sku_id' },
+        { table: 's', column: 'item_name', alias: 'item_name' },
+        { table: 's', column: 'model', alias: 'model' },
+        { table: 's', column: 'hsn_sac_code', alias: 'hsn_sac_code' },
+        { table: 's', column: 'series', alias: 'series' },
+        { table: 's', column: 'rating_size', alias: 'rating_size' },
+        { table: 's', column: 'vendor_item_code', alias: 'vendor_item_code' },
+        { table: 'b', column: 'name', alias: 'brand_name' },
+        { table: 'sc', column: 'name', alias: 'sub_category_name' }
+      ];
+      
+      // Use fuzzy search with similarity threshold of 0.3 (30% similarity)
+      // This allows for typos while maintaining quality results
+      const fuzzySearch = buildFuzzySearchQuery(
+        filters.search,
+        searchFields,
+        paramIndex,
+        { similarityThreshold: 0.3, exactMatchOnly: false }
+      );
+      
+      if (fuzzySearch.whereClause) {
+        query += fuzzySearch.whereClause;
+        params.push(...fuzzySearch.params);
+        paramIndex = fuzzySearch.paramIndex;
+        
+        // Store order by for later use (will override default sorting when search is active)
+        fuzzySearchOrderBy = fuzzySearch.orderByClause;
+      }
     }
     if (filters.productCategory) {
       // Support comma-separated list of category IDs for "All" selection
@@ -127,8 +143,12 @@ class SKUModel {
 
 
     // Add dynamic sorting
+    // If fuzzy search is active, use its ranking; otherwise use default or user-specified sorting
     let orderBy = 's.created_at DESC'; // default
-    if (filters.sortBy) {
+    if (fuzzySearchOrderBy) {
+      // Fuzzy search provides its own ranking (exact matches first, then by similarity)
+      orderBy = fuzzySearchOrderBy.trim();
+    } else if (filters.sortBy) {
       const validSortFields = {
         'productCategory': 'pc.name',
         'itemCategory': 'ic.name',
@@ -152,7 +172,7 @@ class SKUModel {
     const page = Math.max(1, parseInt(filters.page) || 1); // Ensure page >= 1
     const limit = Math.max(1, parseInt(filters.limit) || 20); // Ensure limit >= 1
     const offset = Math.max(0, (page - 1) * limit); // Ensure offset >= 0
-    query += ` ORDER BY ${orderBy} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    query += ` ${orderBy} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
     params.push(limit, offset);
 
 
