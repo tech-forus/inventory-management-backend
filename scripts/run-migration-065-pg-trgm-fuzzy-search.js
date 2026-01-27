@@ -120,11 +120,11 @@ async function runMigration065() {
         const indexSizes = await client.query(`
           SELECT
             schemaname,
-            tablename,
-            indexname,
+            relname AS tablename,
+            indexrelname AS indexname,
             pg_size_pretty(pg_relation_size(indexrelid)) AS index_size
           FROM pg_stat_user_indexes
-          WHERE indexname LIKE '%_trgm'
+          WHERE indexrelname LIKE '%_trgm'
           ORDER BY pg_relation_size(indexrelid) DESC;
         `);
 

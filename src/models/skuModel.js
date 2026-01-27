@@ -140,7 +140,19 @@ class SKUModel {
       params.push(`%${filters.hsnCode}%`);
       paramIndex++;
     }
-
+    if (filters.excludeNonMovable === 'true') {
+      query += ` AND s.is_non_movable = false`;
+    }
+    if (filters.dateFrom) {
+      query += ` AND s.created_at >= $${paramIndex}`;
+      params.push(filters.dateFrom);
+      paramIndex++;
+    }
+    if (filters.dateTo) {
+      query += ` AND s.created_at <= $${paramIndex}`;
+      params.push(filters.dateTo);
+      paramIndex++;
+    }
 
     // Add dynamic sorting
     // If fuzzy search is active, use its ranking; otherwise use default or user-specified sorting
@@ -157,9 +169,11 @@ class SKUModel {
         'brand': 'b.name',
         'vendor': 'v.name',
         'currentStock': 's.current_stock',
+        'usefulStocks': 's.current_stock', // Alias for currentStock (backward compatibility)
         'skuId': 's.sku_id',
         'model': 's.model',
-        'hsnSacCode': 's.hsn_sac_code'
+        'hsnSacCode': 's.hsn_sac_code',
+        'createdAt': 's.created_at' // Backward compatibility
       };
 
       if (validSortFields[filters.sortBy]) {
@@ -194,23 +208,33 @@ class SKUModel {
     const params = [companyId.toUpperCase()];
     let paramIndex = 2;
 
-    // Add same filters as getAll
+    // Add same filters as getAll (including fuzzy search)
     if (filters.search && filters.search.trim()) {
-      const searchTrimmed = filters.search.trim();
-      query += ` AND (
-        s.sku_id ILIKE $${paramIndex} 
-        OR s.item_name ILIKE $${paramIndex} 
-        OR s.model ILIKE $${paramIndex} 
-        OR s.hsn_sac_code ILIKE $${paramIndex}
-        OR s.series ILIKE $${paramIndex}
-        OR s.rating_size ILIKE $${paramIndex}
-        OR s.item_details ILIKE $${paramIndex}
-        OR s.vendor_item_code ILIKE $${paramIndex}
-        OR b.name ILIKE $${paramIndex}
-        OR sc.name ILIKE $${paramIndex}
-      )`;
-      params.push(`%${searchTrimmed}%`);
-      paramIndex++;
+      const searchFields = [
+        { table: 's', column: 'sku_id', alias: 'sku_id' },
+        { table: 's', column: 'item_name', alias: 'item_name' },
+        { table: 's', column: 'model', alias: 'model' },
+        { table: 's', column: 'hsn_sac_code', alias: 'hsn_sac_code' },
+        { table: 's', column: 'series', alias: 'series' },
+        { table: 's', column: 'rating_size', alias: 'rating_size' },
+        { table: 's', column: 'vendor_item_code', alias: 'vendor_item_code' },
+        { table: 'b', column: 'name', alias: 'brand_name' },
+        { table: 'sc', column: 'name', alias: 'sub_category_name' }
+      ];
+      
+      // Use fuzzy search with similarity threshold of 0.3 (30% similarity)
+      const fuzzySearch = buildFuzzySearchQuery(
+        filters.search,
+        searchFields,
+        paramIndex,
+        { similarityThreshold: 0.3, exactMatchOnly: false }
+      );
+      
+      if (fuzzySearch.whereClause) {
+        query += fuzzySearch.whereClause;
+        params.push(...fuzzySearch.params);
+        paramIndex = fuzzySearch.paramIndex;
+      }
     }
     if (filters.productCategory) {
       // Support comma-separated list of category IDs for "All" selection
@@ -273,6 +297,9 @@ class SKUModel {
       query += ` AND s.hsn_sac_code ILIKE $${paramIndex}`;
       params.push(`%${filters.hsnCode}%`);
       paramIndex++;
+    }
+    if (filters.excludeNonMovable === 'true') {
+      query += ` AND s.is_non_movable = false`;
     }
     if (filters.dateFrom) {
       query += ` AND s.created_at >= $${paramIndex}`;
