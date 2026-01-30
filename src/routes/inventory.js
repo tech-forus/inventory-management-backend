@@ -138,6 +138,9 @@ router.get('/incoming', incomingInventoryController.getAllIncomingInventory);
 router.get('/incoming/history', incomingInventoryController.getIncomingHistory);
 router.get('/incoming/price-history', incomingInventoryController.getPriceHistory);
 router.get('/incoming/has-price-history', incomingInventoryController.hasPriceHistory);
+router.get('/incoming/warranty-serial-items', incomingInventoryController.getAllWarrantySerialItems);
+router.get('/incoming/by-invoice/:invoiceNumber', incomingInventoryController.getItemsByInvoiceNumber);
+router.get('/incoming/search-invoices', incomingInventoryController.searchInvoices);
 router.get('/incoming/:id', incomingInventoryController.getIncomingInventoryById);
 router.get('/incoming/:id/items', incomingInventoryController.getIncomingInventoryItems);
 
@@ -204,9 +207,6 @@ router.get(
 router.delete('/incoming/:id', incomingInventoryController.deleteIncomingInventory);
 
 // Warranty and Serial Number Routes
-router.get('/incoming/by-invoice/:invoiceNumber', incomingInventoryController.getItemsByInvoiceNumber);
-router.get('/incoming/search-invoices', incomingInventoryController.searchInvoices);
-router.get('/incoming/warranty-serial-items', incomingInventoryController.getAllWarrantySerialItems);
 router.put('/incoming-items/:itemId', incomingInventoryController.updateWarrantyAndSerial);
 router.put('/incoming-items/bulk-update', incomingInventoryController.bulkUpdateWarrantyAndSerial);
 
