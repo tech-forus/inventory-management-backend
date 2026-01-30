@@ -606,6 +606,92 @@ class OutgoingInventoryModel {
   }
 
   /**
+   * Get all outgoing inventory items with warranty and serial number data
+   * @param {string} companyId - Company ID
+   * @param {Object} filters - Optional filters (dateFrom, dateTo, invoiceChallanNumber, search)
+   * @returns {Array} Array of items with warranty and serial number data
+   */
+  static async getAllWarrantySerialItems(companyId, filters = {}) {
+    let query = `
+      SELECT 
+        oii.id as item_id,
+        oii.sku_id,
+        s.sku_id as sku_code,
+        s.item_name,
+        s.warranty as sku_default_warranty,
+        oii.outgoing_quantity as received,
+        oii.unit_price,
+        COALESCE(oii.warranty, s.warranty, 0) as current_warranty,
+        oii.serial_number,
+        oi.invoice_challan_number as invoice_number,
+        oi.invoice_challan_date as invoice_date,
+        oi.invoice_challan_date as receiving_date,
+        COALESCE(c.customer_name, v.name, 'Store to Factory') as vendor_name,
+        b.name as brand_name
+      FROM outgoing_inventory_items oii
+      INNER JOIN outgoing_inventory oi ON oii.outgoing_inventory_id = oi.id
+      LEFT JOIN skus s ON oii.sku_id = s.id
+      LEFT JOIN customers c ON oi.destination_id = c.id AND oi.destination_type = 'customer'
+      LEFT JOIN vendors v ON oi.destination_id = v.id AND oi.destination_type = 'vendor'
+      LEFT JOIN brands b ON s.brand_id = b.id
+      WHERE oi.company_id = $1 
+        AND oi.is_active = true
+        AND oi.status = 'completed'
+    `;
+    
+    const params = [companyId.toUpperCase()];
+    let paramIndex = 2;
+
+    if (filters.dateFrom) {
+      query += ` AND oi.invoice_challan_date >= $${paramIndex}`;
+      params.push(filters.dateFrom);
+      paramIndex++;
+    }
+
+    if (filters.dateTo) {
+      query += ` AND oi.invoice_challan_date <= $${paramIndex}`;
+      params.push(filters.dateTo);
+      paramIndex++;
+    }
+
+    if (filters.invoiceChallanNumber) {
+      query += ` AND oi.invoice_challan_number ILIKE $${paramIndex}`;
+      params.push(`%${filters.invoiceChallanNumber}%`);
+      paramIndex++;
+    }
+
+    if (filters.search) {
+      const searchTerm = filters.search.trim();
+      query += ` AND (
+        oi.invoice_challan_number ILIKE $${paramIndex}
+        OR s.sku_id ILIKE $${paramIndex}
+        OR s.item_name ILIKE $${paramIndex}
+        OR COALESCE(c.customer_name, v.name, '') ILIKE $${paramIndex}
+        OR b.name ILIKE $${paramIndex}
+      )`;
+      params.push(`%${searchTerm}%`);
+      paramIndex++;
+    }
+
+    query += ` ORDER BY oi.invoice_challan_date DESC, oi.invoice_challan_number, oii.id`;
+
+    if (filters.limit) {
+      query += ` LIMIT $${paramIndex}`;
+      params.push(filters.limit);
+      paramIndex++;
+    }
+
+    if (filters.offset) {
+      query += ` OFFSET $${paramIndex}`;
+      params.push(filters.offset);
+      paramIndex++;
+    }
+
+    const result = await pool.query(query, params);
+    return result.rows;
+  }
+
+  /**
    * Delete outgoing inventory (soft delete)
    */
   static async delete(id, companyId) {

@@ -206,6 +206,7 @@ router.delete('/incoming/:id', incomingInventoryController.deleteIncomingInvento
 // Warranty and Serial Number Routes
 router.get('/incoming/by-invoice/:invoiceNumber', incomingInventoryController.getItemsByInvoiceNumber);
 router.get('/incoming/search-invoices', incomingInventoryController.searchInvoices);
+router.get('/incoming/warranty-serial-items', incomingInventoryController.getAllWarrantySerialItems);
 router.put('/incoming-items/:itemId', incomingInventoryController.updateWarrantyAndSerial);
 router.put('/incoming-items/bulk-update', incomingInventoryController.bulkUpdateWarrantyAndSerial);
 
@@ -252,6 +253,7 @@ router.get('/items/:skuId/history/summary', itemHistoryController.getItemHistory
 router.post('/outgoing', outgoingInventoryController.createOutgoing);
 router.get('/outgoing', outgoingInventoryController.getAllOutgoing);
 router.get('/outgoing/history', outgoingInventoryController.getOutgoingHistory);
+router.get('/outgoing/warranty-serial-items', outgoingInventoryController.getAllWarrantySerialItems);
 router.get('/outgoing/:id', outgoingInventoryController.getOutgoingById);
 router.delete('/outgoing/:id', outgoingInventoryController.deleteOutgoing);
 

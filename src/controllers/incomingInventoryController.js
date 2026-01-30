@@ -911,6 +911,51 @@ const searchInvoices = async (req, res, next) => {
   }
 };
 
+/**
+ * Get all incoming inventory items with warranty and serial numbers
+ */
+const getAllWarrantySerialItems = async (req, res, next) => {
+  try {
+    const companyId = getCompanyId(req);
+    const filters = {
+      dateFrom: req.query.dateFrom,
+      dateTo: req.query.dateTo,
+      invoiceNumber: req.query.invoiceNumber,
+      search: req.query.search,
+      limit: req.query.limit ? parseInt(req.query.limit) : undefined,
+      offset: req.query.offset ? parseInt(req.query.offset) : undefined,
+    };
+
+    const items = await IncomingInventoryModel.getAllWarrantySerialItems(companyId, filters);
+
+    // Transform items to match frontend expectations
+    const transformedItems = items.map(item => ({
+      id: item.item_id,
+      itemId: item.item_id,
+      skuId: item.sku_id,
+      skuCode: item.sku_code,
+      itemName: item.item_name,
+      received: parseInt(item.received || 0, 10),
+      totalQuantity: parseInt(item.total_quantity || 0, 10),
+      warranty: parseInt(item.current_warranty || 0, 10),
+      skuDefaultWarranty: parseInt(item.sku_default_warranty || 0, 10),
+      serialNumber: item.serial_number || '',
+      invoiceNumber: item.invoice_number,
+      invoiceDate: item.invoice_date,
+      receivingDate: item.receiving_date,
+      vendorName: item.vendor_name,
+      brandName: item.brand_name,
+    }));
+
+    res.json({
+      success: true,
+      data: transformedItems,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createIncomingInventory,
   getAllIncomingInventory,
@@ -932,6 +977,7 @@ module.exports = {
   updateWarrantyAndSerial,
   bulkUpdateWarrantyAndSerial,
   searchInvoices,
+  getAllWarrantySerialItems,
 };
 
 

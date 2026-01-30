@@ -549,6 +549,93 @@ class IncomingInventoryModel {
   }
 
   /**
+   * Get all incoming inventory items with warranty and serial number data
+   * @param {string} companyId - Company ID
+   * @param {Object} filters - Optional filters (dateFrom, dateTo, invoiceNumber, search)
+   * @returns {Array} Array of items with warranty and serial number data
+   */
+  static async getAllWarrantySerialItems(companyId, filters = {}) {
+    let query = `
+      SELECT 
+        iii.id as item_id,
+        iii.sku_id,
+        s.sku_id as sku_code,
+        s.item_name,
+        s.warranty as sku_default_warranty,
+        iii.received,
+        iii.short,
+        iii.total_quantity,
+        iii.unit_price,
+        COALESCE(iii.warranty, s.warranty, 0) as current_warranty,
+        iii.serial_number,
+        ii.invoice_number,
+        ii.invoice_date,
+        ii.receiving_date,
+        v.name as vendor_name,
+        b.name as brand_name
+      FROM incoming_inventory_items iii
+      INNER JOIN incoming_inventory ii ON iii.incoming_inventory_id = ii.id
+      LEFT JOIN skus s ON iii.sku_id = s.id
+      LEFT JOIN vendors v ON ii.vendor_id = v.id
+      LEFT JOIN brands b ON ii.brand_id = b.id
+      WHERE ii.company_id = $1 
+        AND ii.is_active = true
+        AND ii.status = 'completed'
+    `;
+    
+    const params = [companyId.toUpperCase()];
+    let paramIndex = 2;
+
+    if (filters.dateFrom) {
+      query += ` AND ii.invoice_date >= $${paramIndex}`;
+      params.push(filters.dateFrom);
+      paramIndex++;
+    }
+
+    if (filters.dateTo) {
+      query += ` AND ii.invoice_date <= $${paramIndex}`;
+      params.push(filters.dateTo);
+      paramIndex++;
+    }
+
+    if (filters.invoiceNumber) {
+      query += ` AND ii.invoice_number ILIKE $${paramIndex}`;
+      params.push(`%${filters.invoiceNumber}%`);
+      paramIndex++;
+    }
+
+    if (filters.search) {
+      const searchTerm = filters.search.trim();
+      query += ` AND (
+        ii.invoice_number ILIKE $${paramIndex}
+        OR s.sku_id ILIKE $${paramIndex}
+        OR s.item_name ILIKE $${paramIndex}
+        OR v.name ILIKE $${paramIndex}
+        OR b.name ILIKE $${paramIndex}
+      )`;
+      params.push(`%${searchTerm}%`);
+      paramIndex++;
+    }
+
+    query += ` ORDER BY ii.invoice_date DESC, ii.invoice_number, iii.id`;
+
+    if (filters.limit) {
+      query += ` LIMIT $${paramIndex}`;
+      params.push(filters.limit);
+      paramIndex++;
+    }
+
+    if (filters.offset) {
+      query += ` OFFSET $${paramIndex}`;
+      params.push(filters.offset);
+      paramIndex++;
+    }
+
+    const result = await pool.query(query, params);
+    return result.rows;
+  }
+
+  /**
    * Update warranty and serial number for a specific item
    * @param {number} itemId - Item ID to update
    * @param {number} warranty - Warranty period in months
