@@ -363,11 +363,11 @@ class SKUModel {
           material, manufacture_or_import, color,
           weight, weight_unit, length, length_unit, width, width_unit, height, height_unit,
           min_stock_level, reorder_point, default_storage_location,
-          current_stock, custom_fields, status, is_active, is_non_movable, opening_stock
+          current_stock, custom_fields, status, is_active, is_non_movable, opening_stock, warranty
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
           $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27,
-          $28, $29, $30, $31, $32, $33, $34, $35, $36
+          $28, $29, $30, $31, $32, $33, $34, $35, $36, $37
         ) RETURNING *`,
         [
           companyId.toUpperCase(),
@@ -406,6 +406,7 @@ class SKUModel {
           skuData.status === 'active',
           skuData.isNonMovable || false,
           skuData.openingStock || 0, // opening_stock value
+          skuData.warranty || 0, // warranty in months
         ]
       );
 
@@ -454,7 +455,7 @@ class SKUModel {
       }
     }
 
-    let paramIndex = 35;
+    let paramIndex = 36;
     let query = `
       UPDATE skus SET
         product_category_id = $1, item_category_id = $2, sub_category_id = $3,
@@ -464,7 +465,7 @@ class SKUModel {
         weight = $18, weight_unit = $19, length = $20, length_unit = $21, width = $22, width_unit = $23, height = $24, height_unit = $25,
         min_stock_level = $26, reorder_point = $27, default_storage_location = $28,
         current_stock = $29, custom_fields = $30,
-        status = $31, is_active = $32, is_non_movable = $33, opening_stock = $34, updated_at = CURRENT_TIMESTAMP
+        status = $31, is_active = $32, is_non_movable = $33, opening_stock = $34, warranty = $35, updated_at = CURRENT_TIMESTAMP
       WHERE id = $${paramIndex}
     `;
 
@@ -509,11 +510,12 @@ class SKUModel {
       skuData.status === 'active',
       skuData.isNonMovable !== undefined ? skuData.isNonMovable : false,
       skuData.openingStock || 0, // opening_stock value
+      skuData.warranty !== undefined ? skuData.warranty : 0, // warranty in months
       id,
     ];
 
     if (companyId) {
-      query = query.replace('WHERE id = $35', `WHERE id = $35 AND company_id = $36`);
+      query = query.replace('WHERE id = $36', `WHERE id = $36 AND company_id = $37`);
       params.push(companyId.toUpperCase());
     }
 

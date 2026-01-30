@@ -293,6 +293,7 @@ const transformItem = (item) => {
     totalInclGst: parseFloat(item.total_value_incl_gst || item.total_value || 0),
     totalValueInclGst: parseFloat(item.total_value_incl_gst || item.total_value || 0),
     warranty: parseInt(item.warranty || 0, 10),
+    serialNumber: item.serial_number || '',
     skuDiscount: parseFloat(item.sku_discount || 0),
     skuDiscountAmount: parseFloat(item.sku_discount_amount || 0),
     amountAfterSkuDiscount: parseFloat(item.amount_after_sku_discount || item.total_value_excl_gst || 0),
@@ -733,6 +734,183 @@ const hasPriceHistory = async (req, res, next) => {
   }
 };
 
+/**
+ * Get items by invoice number for warranty and serial number entry
+ */
+const getItemsByInvoiceNumber = async (req, res, next) => {
+  try {
+    const companyId = getCompanyId(req);
+    const { invoiceNumber } = req.params;
+
+    if (!invoiceNumber) {
+      throw new ValidationError('Invoice number is required');
+    }
+
+    const items = await IncomingInventoryModel.getItemsByInvoiceNumber(invoiceNumber, companyId);
+
+    if (items.length === 0) {
+      throw new NotFoundError('No items found for this invoice number');
+    }
+
+    // Transform items and calculate warranty valid till
+    const transformedItems = items.map(item => {
+      const invoiceDate = new Date(item.invoice_date);
+      const warrantyMonths = item.current_warranty || item.sku_default_warranty || 0;
+      const warrantyValidTill = new Date(invoiceDate);
+      warrantyValidTill.setMonth(warrantyValidTill.getMonth() + warrantyMonths);
+
+      return {
+        id: item.item_id,
+        itemId: item.item_id,
+        skuId: item.sku_id,
+        skuCode: item.sku_code,
+        itemName: item.item_name,
+        received: parseInt(item.received || 0, 10),
+        totalQuantity: parseInt(item.total_quantity || 0, 10),
+        warranty: parseInt(item.current_warranty || item.sku_default_warranty || 0, 10),
+        skuDefaultWarranty: parseInt(item.sku_default_warranty || 0, 10),
+        serialNumber: item.serial_number || '',
+        invoiceNumber: item.invoice_number,
+        invoiceDate: item.invoice_date,
+        receivingDate: item.receiving_date,
+        vendorName: item.vendor_name,
+        brandName: item.brand_name,
+        warrantyValidTill: warrantyValidTill.toISOString().split('T')[0],
+      };
+    });
+
+    res.json({
+      success: true,
+      data: {
+        invoiceNumber: items[0].invoice_number,
+        invoiceDate: items[0].invoice_date,
+        items: transformedItems,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Update warranty and serial number for an item
+ */
+const updateWarrantyAndSerial = async (req, res, next) => {
+  try {
+    const companyId = getCompanyId(req);
+    const { itemId } = req.params;
+    const { warranty, serialNumber } = req.body;
+
+    // Validate warranty
+    if (warranty !== undefined && warranty !== null) {
+      const warrantyNum = parseInt(warranty, 10);
+      if (isNaN(warrantyNum) || warrantyNum < 0) {
+        throw new ValidationError('Warranty must be a non-negative integer');
+      }
+    }
+
+    const updatedItem = await IncomingInventoryModel.updateWarrantyAndSerial(
+      itemId,
+      warranty !== undefined ? parseInt(warranty, 10) : null,
+      serialNumber || null,
+      companyId
+    );
+
+    res.json({
+      success: true,
+      data: {
+        id: updatedItem.id,
+        warranty: parseInt(updatedItem.warranty || 0, 10),
+        serialNumber: updatedItem.serial_number || '',
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Bulk update warranty and serial numbers for multiple items
+ */
+const bulkUpdateWarrantyAndSerial = async (req, res, next) => {
+  try {
+    const companyId = getCompanyId(req);
+    const { updates } = req.body;
+
+    if (!Array.isArray(updates) || updates.length === 0) {
+      throw new ValidationError('Updates array is required and must not be empty');
+    }
+
+    // Validate all updates
+    for (const update of updates) {
+      if (!update.itemId) {
+        throw new ValidationError('Each update must have an itemId');
+      }
+      if (update.warranty !== undefined && update.warranty !== null) {
+        const warrantyNum = parseInt(update.warranty, 10);
+        if (isNaN(warrantyNum) || warrantyNum < 0) {
+          throw new ValidationError('Warranty must be a non-negative integer');
+        }
+      }
+    }
+
+    const updatedItems = await IncomingInventoryModel.bulkUpdateWarrantyAndSerial(updates, companyId);
+
+    res.json({
+      success: true,
+      data: updatedItems.map(item => ({
+        id: item.id,
+        warranty: parseInt(item.warranty || 0, 10),
+        serialNumber: item.serial_number || '',
+      })),
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Search invoices by invoice number (for autocomplete)
+ */
+const searchInvoices = async (req, res, next) => {
+  try {
+    const companyId = getCompanyId(req);
+    const { q } = req.query;
+
+    if (!q || q.trim().length === 0) {
+      return res.json({ success: true, data: [] });
+    }
+
+    const pool = require('../models/database');
+    const result = await pool.query(
+      `SELECT DISTINCT
+        ii.invoice_number,
+        ii.invoice_date,
+        COALESCE(v.name, c.customer_name) as supplier_name
+      FROM incoming_inventory ii
+      LEFT JOIN vendors v ON ii.vendor_id = v.id
+      LEFT JOIN customers c ON ii.destination_id = c.id AND ii.destination_type = 'customer'
+      WHERE ii.company_id = $1 
+        AND ii.is_active = true
+        AND ii.invoice_number ILIKE $2
+      ORDER BY ii.invoice_date DESC, ii.invoice_number
+      LIMIT 20`,
+      [companyId.toUpperCase(), `%${q.trim()}%`]
+    );
+
+    res.json({
+      success: true,
+      data: result.rows.map(row => ({
+        invoiceNumber: row.invoice_number,
+        invoiceDate: row.invoice_date,
+        supplierName: row.supplier_name,
+      })),
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createIncomingInventory,
   getAllIncomingInventory,
@@ -750,6 +928,10 @@ module.exports = {
   deleteIncomingInventory,
   getPriceHistory,
   hasPriceHistory,
+  getItemsByInvoiceNumber,
+  updateWarrantyAndSerial,
+  bulkUpdateWarrantyAndSerial,
+  searchInvoices,
 };
 
 

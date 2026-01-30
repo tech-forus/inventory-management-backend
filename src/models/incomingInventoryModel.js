@@ -174,10 +174,10 @@ class IncomingInventoryModel {
             incoming_inventory_id, sku_id, received, short,
             total_quantity, unit_price, total_value,
             gst_percentage, gst_amount, total_value_excl_gst, total_value_incl_gst,
-            warranty,
+            warranty, serial_number,
             sku_discount, sku_discount_amount, amount_after_sku_discount,
             invoice_discount_share, final_taxable_amount
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
           RETURNING *`,
           [
             incomingInventoryId,
@@ -192,6 +192,7 @@ class IncomingInventoryModel {
             totalValueExclGst,
             totalValueInclGst,
             item.warranty || 0,
+            item.serialNumber || null,
             item.skuDiscount || 0,
             item.skuDiscountAmount || 0,
             item.amountAfterSkuDiscount || totalValueExclGst,
@@ -496,7 +497,8 @@ class IncomingInventoryModel {
         iii.gst_amount,
         iii.total_value_excl_gst,
         iii.total_value_incl_gst,
-        iii.warranty
+        iii.warranty,
+        iii.serial_number
       FROM incoming_inventory_items iii
       LEFT JOIN skus s ON iii.sku_id = s.id
       INNER JOIN incoming_inventory ii ON iii.incoming_inventory_id = ii.id
@@ -505,6 +507,142 @@ class IncomingInventoryModel {
       [inventoryId, companyId.toUpperCase()]
     );
     return result.rows;
+  }
+
+  /**
+   * Get all items for a specific invoice number
+   * @param {string} invoiceNumber - Invoice number to search for
+   * @param {string} companyId - Company ID
+   * @returns {Array} Array of items with invoice details, SKU info, warranty, and serial numbers
+   */
+  static async getItemsByInvoiceNumber(invoiceNumber, companyId) {
+    const result = await pool.query(
+      `SELECT 
+        iii.id as item_id,
+        iii.sku_id,
+        s.sku_id as sku_code,
+        s.item_name,
+        s.warranty as sku_default_warranty,
+        iii.received,
+        iii.short,
+        iii.total_quantity,
+        iii.unit_price,
+        iii.warranty as current_warranty,
+        iii.serial_number,
+        ii.invoice_number,
+        ii.invoice_date,
+        ii.receiving_date,
+        v.name as vendor_name,
+        b.name as brand_name
+      FROM incoming_inventory_items iii
+      INNER JOIN incoming_inventory ii ON iii.incoming_inventory_id = ii.id
+      LEFT JOIN skus s ON iii.sku_id = s.id
+      LEFT JOIN vendors v ON ii.vendor_id = v.id
+      LEFT JOIN brands b ON ii.brand_id = b.id
+      WHERE ii.invoice_number = $1 
+        AND ii.company_id = $2 
+        AND ii.is_active = true
+      ORDER BY iii.id`,
+      [invoiceNumber, companyId.toUpperCase()]
+    );
+    return result.rows;
+  }
+
+  /**
+   * Update warranty and serial number for a specific item
+   * @param {number} itemId - Item ID to update
+   * @param {number} warranty - Warranty period in months
+   * @param {string} serialNumber - Serial number(s) (comma-separated or single)
+   * @param {string} companyId - Company ID for validation
+   * @returns {Object} Updated item data
+   */
+  static async updateWarrantyAndSerial(itemId, warranty, serialNumber, companyId) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // First, verify the item belongs to the company
+      const verifyResult = await client.query(
+        `SELECT iii.id, ii.company_id
+         FROM incoming_inventory_items iii
+         INNER JOIN incoming_inventory ii ON iii.incoming_inventory_id = ii.id
+         WHERE iii.id = $1 AND ii.company_id = $2 AND ii.is_active = true`,
+        [itemId, companyId.toUpperCase()]
+      );
+
+      if (verifyResult.rows.length === 0) {
+        throw new Error('Item not found or does not belong to your company');
+      }
+
+      // Update warranty and serial number
+      const updateResult = await client.query(
+        `UPDATE incoming_inventory_items
+         SET warranty = $1,
+             serial_number = $2,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $3
+         RETURNING *`,
+        [warranty || 0, serialNumber || null, itemId]
+      );
+
+      await client.query('COMMIT');
+      return updateResult.rows[0];
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Bulk update warranty and serial numbers for multiple items
+   * @param {Array} updates - Array of {itemId, warranty, serialNumber}
+   * @param {string} companyId - Company ID for validation
+   * @returns {Array} Updated items
+   */
+  static async bulkUpdateWarrantyAndSerial(updates, companyId) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const updatedItems = [];
+      for (const update of updates) {
+        // Verify the item belongs to the company
+        const verifyResult = await client.query(
+          `SELECT iii.id, ii.company_id
+           FROM incoming_inventory_items iii
+           INNER JOIN incoming_inventory ii ON iii.incoming_inventory_id = ii.id
+           WHERE iii.id = $1 AND ii.company_id = $2 AND ii.is_active = true`,
+          [update.itemId, companyId.toUpperCase()]
+        );
+
+        if (verifyResult.rows.length === 0) {
+          throw new Error(`Item ${update.itemId} not found or does not belong to your company`);
+        }
+
+        // Update warranty and serial number
+        const updateResult = await client.query(
+          `UPDATE incoming_inventory_items
+           SET warranty = $1,
+               serial_number = $2,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = $3
+           RETURNING *`,
+          [update.warranty || 0, update.serialNumber || null, update.itemId]
+        );
+
+        updatedItems.push(updateResult.rows[0]);
+      }
+
+      await client.query('COMMIT');
+      return updatedItems;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   /**

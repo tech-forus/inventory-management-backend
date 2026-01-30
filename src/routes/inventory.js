@@ -203,6 +203,12 @@ router.get(
 
 router.delete('/incoming/:id', incomingInventoryController.deleteIncomingInventory);
 
+// Warranty and Serial Number Routes
+router.get('/incoming/by-invoice/:invoiceNumber', incomingInventoryController.getItemsByInvoiceNumber);
+router.get('/incoming/search-invoices', incomingInventoryController.searchInvoices);
+router.put('/incoming-items/:itemId', incomingInventoryController.updateWarrantyAndSerial);
+router.put('/incoming-items/bulk-update', incomingInventoryController.bulkUpdateWarrantyAndSerial);
+
 // Rejected Item Reports Routes
 router.get('/rejected-item-reports', rejectedItemReportController.getAllRejectedItemReports);
 router.get('/rejected-item-reports/:id', rejectedItemReportController.getRejectedItemReportById);
