@@ -207,8 +207,9 @@ router.get(
 router.delete('/incoming/:id', incomingInventoryController.deleteIncomingInventory);
 
 // Warranty and Serial Number Routes
-router.put('/incoming-items/:itemId', incomingInventoryController.updateWarrantyAndSerial);
+// IMPORTANT: More specific routes must come before parameterized routes
 router.put('/incoming-items/bulk-update', incomingInventoryController.bulkUpdateWarrantyAndSerial);
+router.put('/incoming-items/:itemId', incomingInventoryController.updateWarrantyAndSerial);
 
 // Rejected Item Reports Routes
 router.get('/rejected-item-reports', rejectedItemReportController.getAllRejectedItemReports);
