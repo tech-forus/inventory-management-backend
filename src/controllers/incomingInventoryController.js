@@ -935,6 +935,7 @@ const getAllWarrantySerialItems = async (req, res, next) => {
       skuId: item.sku_id,
       skuCode: item.sku_code,
       itemName: item.item_name,
+      unit: item.unit || '',
       received: parseInt(item.received || 0, 10),
       totalQuantity: parseInt(item.total_quantity || 0, 10),
       warranty: parseInt(item.current_warranty || 0, 10),

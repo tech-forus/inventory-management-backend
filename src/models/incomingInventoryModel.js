@@ -561,6 +561,7 @@ class IncomingInventoryModel {
         iii.sku_id,
         s.sku_id as sku_code,
         s.item_name,
+        s.unit,
         s.warranty as sku_default_warranty,
         iii.received,
         iii.short,

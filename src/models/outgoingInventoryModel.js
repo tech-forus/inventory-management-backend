@@ -618,6 +618,7 @@ class OutgoingInventoryModel {
         oii.sku_id,
         s.sku_id as sku_code,
         s.item_name,
+        s.unit,
         s.warranty as sku_default_warranty,
         oii.outgoing_quantity as received,
         oii.unit_price,
