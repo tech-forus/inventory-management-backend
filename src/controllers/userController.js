@@ -158,15 +158,31 @@ const inviteUser = async (req, res, next) => {
 
     await client.query('COMMIT');
 
+    // Get company name for the email
+    let companyName = 'Your Company';
+    try {
+      const companyResult = await pool.query(
+        'SELECT company_name FROM companies WHERE company_id = $1',
+        [companyId]
+      );
+      if (companyResult.rows.length > 0 && companyResult.rows[0].company_name) {
+        companyName = companyResult.rows[0].company_name;
+      }
+    } catch (companyErr) {
+      logger.warn({ error: companyErr.message }, 'Could not fetch company name for invitation email');
+    }
+
     // Send invitation email
     try {
-      await sendInvitationEmail(
-        normalizedEmail,
+      await sendInvitationEmail({
+        email: normalizedEmail,
         firstName,
-        lastNameValue || '', // Use lastNameValue or empty string
-        passwordResetToken,
-        companyId
-      );
+        lastName: lastNameValue || '',
+        token: passwordResetToken,
+        companyId,
+        companyName,
+        role: role === 'admin' ? 'Admin' : 'User',
+      });
     } catch (emailError) {
       logger.error({
         error: emailError.message,
