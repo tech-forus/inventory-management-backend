@@ -18,11 +18,12 @@ const getMe = async (req, res, next) => {
     // Get full user details including permissions
     const query = `
       SELECT 
-        u.id, u.company_id, u.company_name, u.email, u.full_name, u.phone, u.role, u.is_active,
+        u.id, u.company_id, c.company_name, u.email, u.full_name, u.phone, u.role, u.is_active,
         COALESCE(ud.permissions, u.permissions) as permissions,
         ud.module_access as "moduleAccess",
         ud.category_access as "categoryAccess"
       FROM users u
+      LEFT JOIN companies c ON u.company_id = c.company_id
       LEFT JOIN users_data ud ON u.id = ud.user_id
       WHERE u.id = $1
     `;
