@@ -154,30 +154,19 @@ router.get('/', async (req, res, next) => {
     const params = [companyId];
     let paramIndex = 2;
 
-    // Add filters: multi-token search — every token must appear in at least one searchable field
+    // Multi-token search: all tokens must appear in one normalized blob (space/underscore insensitive), then order by relevance
+    let searchBlobExpr = null;
+    let searchTokenCount = 0;
     if (search && search.trim()) {
-      const tokens = search.trim()
-        .split(/[\s,]+/)
-        .map(t => t.trim())
-        .filter(t => t.length > 0);
+      const rawTokens = search.trim().split(/[\s,]+/).map(t => t.trim()).filter(t => t.length > 0);
+      const tokens = rawTokens.map(t => t.toLowerCase().replace(/\s+/g, ''));
       if (tokens.length > 0) {
+        searchTokenCount = tokens.length;
+        // Single normalized blob: item_name + sku_id + brand + model (no spaces, no underscores, lower case)
+        searchBlobExpr = `REPLACE(REPLACE(LOWER(COALESCE(s.item_name,'')||' '||COALESCE(s.sku_id,'')||' '||COALESCE(b.name,'')||' '||COALESCE(s.model,'')||' '||COALESCE(pc.name,'')||' '||COALESCE(ic.name,'')||' '||COALESCE(sc.name,'')), ' ', ''), '_', '')`;
         for (const token of tokens) {
           const likePattern = `%${String(token).replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')}%`;
-          query += ` AND (
-            REPLACE(COALESCE(pc.name, ''), ' ', '') ILIKE $${paramIndex}
-            OR REPLACE(COALESCE(ic.name, ''), ' ', '') ILIKE $${paramIndex}
-            OR REPLACE(COALESCE(sc.name, ''), ' ', '') ILIKE $${paramIndex}
-            OR REPLACE(s.sku_id, ' ', '') ILIKE $${paramIndex}
-            OR REPLACE(s.item_name, ' ', '') ILIKE $${paramIndex}
-            OR REPLACE(COALESCE(b.name, ''), ' ', '') ILIKE $${paramIndex}
-            OR REPLACE(COALESCE(s.model, ''), ' ', '') ILIKE $${paramIndex}
-            OR REPLACE(COALESCE(s.hsn_sac_code, ''), ' ', '') ILIKE $${paramIndex}
-            OR REPLACE(COALESCE(s.series, ''), ' ', '') ILIKE $${paramIndex}
-            OR REPLACE(COALESCE(s.rating_size, ''), ' ', '') ILIKE $${paramIndex}
-            OR REPLACE(COALESCE(s.item_details, ''), ' ', '') ILIKE $${paramIndex}
-            OR REPLACE(COALESCE(s.vendor_item_code, ''), ' ', '') ILIKE $${paramIndex}
-            OR REPLACE(COALESCE(v.name, ''), ' ', '') ILIKE $${paramIndex}
-          )`;
+          query += ` AND (${searchBlobExpr} ILIKE $${paramIndex})`;
           params.push(likePattern);
           paramIndex++;
         }
@@ -237,7 +226,7 @@ router.get('/', async (req, res, next) => {
       query += ` AND s.is_non_movable = false`;
     }
 
-    // Add sorting
+    // Add sorting (when search active, order by relevance first)
     const validSortFields = {
       skuId: 's.sku_id',
       itemName: 's.item_name',
@@ -250,9 +239,13 @@ router.get('/', async (req, res, next) => {
     const sortField = validSortFields[sortBy] || 's.created_at';
     const sortDirection = sortOrder === 'desc' ? 'DESC' : 'ASC';
 
-    // Add pagination
     const offset = (parseInt(page) - 1) * parseInt(limit);
-    query += ` ORDER BY ${sortField} ${sortDirection} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    if (searchTokenCount > 0 && searchBlobExpr) {
+      const relevanceSum = Array.from({ length: searchTokenCount }, (_, i) => `(${searchBlobExpr} ILIKE $${2 + i})::int`).join(' + ');
+      query += ` ORDER BY (${relevanceSum}) DESC, ${sortField} ${sortDirection} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    } else {
+      query += ` ORDER BY ${sortField} ${sortDirection} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    }
     params.push(parseInt(limit), offset);
 
     const result = await pool.query(query, params);
