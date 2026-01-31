@@ -613,6 +613,7 @@ class IncomingInventoryModel {
         OR s.item_name ILIKE $${paramIndex}
         OR v.name ILIKE $${paramIndex}
         OR b.name ILIKE $${paramIndex}
+        OR iii.serial_number ILIKE $${paramIndex}
       )`;
       params.push(`%${searchTerm}%`);
       paramIndex++;

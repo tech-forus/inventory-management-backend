@@ -669,6 +669,7 @@ class OutgoingInventoryModel {
         OR s.item_name ILIKE $${paramIndex}
         OR COALESCE(c.customer_name, v.name, '') ILIKE $${paramIndex}
         OR b.name ILIKE $${paramIndex}
+        OR oii.serial_number ILIKE $${paramIndex}
       )`;
       params.push(`%${searchTerm}%`);
       paramIndex++;
