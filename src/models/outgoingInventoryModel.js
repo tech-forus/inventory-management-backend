@@ -430,7 +430,24 @@ class OutgoingInventoryModel {
       paramIndex++;
     }
 
-    if (filters.destination) {
+    if (filters.search && filters.search.trim()) {
+      const searchTerm = filters.search.trim().replace(/\s+/g, '');
+      query += ` AND (
+        REPLACE(COALESCE(oi.invoice_challan_number, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(oi.docket_number, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(c.customer_name, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(c.company_name, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(v.name, ''), ' ', '') ILIKE $${paramIndex}
+        OR oi.id IN (
+          SELECT oii2.outgoing_inventory_id FROM outgoing_inventory_items oii2
+          JOIN skus s2 ON oii2.sku_id = s2.id
+          WHERE REPLACE(COALESCE(s2.sku_id, ''), ' ', '') ILIKE $${paramIndex}
+          OR REPLACE(COALESCE(s2.item_name, ''), ' ', '') ILIKE $${paramIndex}
+        )
+      )`;
+      queryParams.push(`%${searchTerm}%`);
+      paramIndex++;
+    } else if (filters.destination) {
       const destSearch = filters.destination.trim().replace(/\s+/g, '');
       query += ` AND (REPLACE(COALESCE(c.customer_name, ''), ' ', '') ILIKE $${paramIndex} OR REPLACE(COALESCE(v.name, ''), ' ', '') ILIKE $${paramIndex})`;
       queryParams.push(`%${destSearch}%`);

@@ -160,6 +160,7 @@ const getAllIncomingInventory = async (req, res, next) => {
       dateTo: req.query.dateTo,
       vendor: req.query.vendor,
       status: req.query.status,
+      search: req.query.search ? req.query.search.trim() : undefined,
       limit: req.query.limit ? parseInt(req.query.limit) : undefined,
       offset: req.query.offset ? parseInt(req.query.offset) : undefined,
     };

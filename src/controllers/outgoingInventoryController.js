@@ -108,6 +108,7 @@ const getAllOutgoing = async (req, res, next) => {
     const filters = {
       dateFrom: req.query.dateFrom,
       dateTo: req.query.dateTo,
+      search: req.query.search ? req.query.search.trim() : undefined,
       destination: req.query.destination,
       status: req.query.status,
       limit: req.query.limit ? parseInt(req.query.limit) : undefined,

@@ -158,16 +158,19 @@ router.get('/', async (req, res, next) => {
     if (search && search.trim()) {
       const searchTrimmed = search.trim().replace(/\s+/g, '');
       query += ` AND (
-        REPLACE(s.sku_id, ' ', '') ILIKE $${paramIndex} 
+        REPLACE(COALESCE(pc.name, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(ic.name, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(sc.name, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(s.sku_id, ' ', '') ILIKE $${paramIndex} 
         OR REPLACE(s.item_name, ' ', '') ILIKE $${paramIndex} 
+        OR REPLACE(COALESCE(b.name, ''), ' ', '') ILIKE $${paramIndex}
         OR REPLACE(COALESCE(s.model, ''), ' ', '') ILIKE $${paramIndex} 
         OR REPLACE(COALESCE(s.hsn_sac_code, ''), ' ', '') ILIKE $${paramIndex}
         OR REPLACE(COALESCE(s.series, ''), ' ', '') ILIKE $${paramIndex}
         OR REPLACE(COALESCE(s.rating_size, ''), ' ', '') ILIKE $${paramIndex}
         OR REPLACE(COALESCE(s.item_details, ''), ' ', '') ILIKE $${paramIndex}
         OR REPLACE(COALESCE(s.vendor_item_code, ''), ' ', '') ILIKE $${paramIndex}
-        OR REPLACE(COALESCE(b.name, ''), ' ', '') ILIKE $${paramIndex}
-        OR REPLACE(COALESCE(sc.name, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(v.name, ''), ' ', '') ILIKE $${paramIndex}
       )`;
       params.push(`%${searchTrimmed}%`);
       paramIndex++;

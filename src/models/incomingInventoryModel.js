@@ -308,6 +308,26 @@ class IncomingInventoryModel {
     const params = [companyId.toUpperCase()];
     let paramIndex = 2;
 
+    if (filters.search && filters.search.trim()) {
+      const searchTerm = filters.search.trim().replace(/\s+/g, '');
+      query += ` AND (
+        REPLACE(COALESCE(ii.invoice_number, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(ii.docket_number, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(TO_CHAR(ii.invoice_date, 'YYYY-MM-DD'), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(TO_CHAR(ii.receiving_date, 'YYYY-MM-DD'), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(v.name, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(COALESCE(c.customer_name, ''), ' ', '') ILIKE $${paramIndex}
+        OR ii.id IN (
+          SELECT iii2.incoming_inventory_id FROM incoming_inventory_items iii2
+          JOIN skus s2 ON iii2.sku_id = s2.id
+          WHERE REPLACE(COALESCE(s2.sku_id, ''), ' ', '') ILIKE $${paramIndex}
+          OR REPLACE(COALESCE(s2.item_name, ''), ' ', '') ILIKE $${paramIndex}
+        )
+      )`;
+      params.push(`%${searchTerm}%`);
+      paramIndex++;
+    }
+
     if (filters.dateFrom) {
       query += ` AND ii.receiving_date >= $${paramIndex}`;
       params.push(filters.dateFrom);
@@ -428,12 +448,14 @@ class IncomingInventoryModel {
       paramIndex++;
     }
 
-    // General search across multiple fields (matching SKU Management search)
+    // General search across multiple fields (Invoice Number, Invoice Date, Receiving Date, Item Name, SKU ID, Supplier)
     if (filters.search) {
       const searchTerm = filters.search.trim().replace(/\s+/g, '');
       query += ` AND (
         REPLACE(ii.invoice_number, ' ', '') ILIKE $${paramIndex}
         OR REPLACE(COALESCE(ii.docket_number, ''), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(TO_CHAR(ii.invoice_date, 'YYYY-MM-DD'), ' ', '') ILIKE $${paramIndex}
+        OR REPLACE(TO_CHAR(ii.receiving_date, 'YYYY-MM-DD'), ' ', '') ILIKE $${paramIndex}
         OR REPLACE(COALESCE(v.name, ''), ' ', '') ILIKE $${paramIndex}
         OR REPLACE(COALESCE(c.customer_name, ''), ' ', '') ILIKE $${paramIndex}
         OR REPLACE(COALESCE(t.name, ''), ' ', '') ILIKE $${paramIndex}
