@@ -198,23 +198,41 @@ router.get('/', async (req, res, next) => {
       paramIndex++;
     }
     if (brand) {
-      query += ` AND s.brand_id = $${paramIndex}`;
-      params.push(brand);
-      paramIndex++;
+      if (typeof brand === 'string' && brand.includes(',')) {
+        const brandIds = brand.split(',').map(id => id.trim()).filter(id => id);
+        if (brandIds.length > 0) {
+          query += ` AND s.brand_id = ANY($${paramIndex}::int[])`;
+          params.push(brandIds.map(id => parseInt(id, 10)).filter(n => !isNaN(n)));
+          paramIndex++;
+        }
+      } else {
+        query += ` AND s.brand_id = $${paramIndex}`;
+        params.push(brand);
+        paramIndex++;
+      }
     }
     if (stockStatus) {
-      if (stockStatus === 'critical') {
-        query += ` AND s.current_stock = 0 AND s.min_stock_level > 0`;
-      } else if (stockStatus === 'out') {
-        query += ` AND s.current_stock = 0 AND (s.min_stock_level <= 0 OR s.min_stock_level IS NULL)`;
-      } else if (stockStatus === 'low') {
-        query += ` AND s.current_stock > 0 AND s.current_stock < s.min_stock_level`;
-      } else if (stockStatus === 'in') {
-        query += ` AND s.current_stock > 0 AND s.current_stock >= s.min_stock_level`;
-      } else if (stockStatus === 'alert') {
-        query += ` AND (s.current_stock < s.min_stock_level OR s.current_stock = 0)`;
-      } else if (stockStatus === 'non-movable') {
-        query += ` AND s.is_non_movable = true`;
+      const statuses = typeof stockStatus === 'string' ? stockStatus.split(',').map(s => s.trim()).filter(s => s) : [stockStatus];
+      if (statuses.length > 0) {
+        const statusConditions = [];
+        for (const st of statuses) {
+          if (st === 'critical') {
+            statusConditions.push('(s.current_stock = 0 AND s.min_stock_level > 0)');
+          } else if (st === 'out') {
+            statusConditions.push('(s.current_stock = 0 AND (s.min_stock_level <= 0 OR s.min_stock_level IS NULL))');
+          } else if (st === 'low') {
+            statusConditions.push('(s.current_stock > 0 AND s.current_stock < s.min_stock_level)');
+          } else if (st === 'in') {
+            statusConditions.push('(s.current_stock > 0 AND s.current_stock >= s.min_stock_level)');
+          } else if (st === 'alert') {
+            statusConditions.push('(s.current_stock < s.min_stock_level OR s.current_stock = 0)');
+          } else if (st === 'non-movable') {
+            statusConditions.push('(s.is_non_movable = true)');
+          }
+        }
+        if (statusConditions.length > 0) {
+          query += ` AND (${statusConditions.join(' OR ')})`;
+        }
       }
     }
     if (hsnCode) {
