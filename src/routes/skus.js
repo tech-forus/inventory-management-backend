@@ -154,26 +154,34 @@ router.get('/', async (req, res, next) => {
     const params = [companyId];
     let paramIndex = 2;
 
-    // Add filters
+    // Add filters: multi-token search — every token must appear in at least one searchable field
     if (search && search.trim()) {
-      const searchTrimmed = search.trim().replace(/\s+/g, '');
-      query += ` AND (
-        REPLACE(COALESCE(pc.name, ''), ' ', '') ILIKE $${paramIndex}
-        OR REPLACE(COALESCE(ic.name, ''), ' ', '') ILIKE $${paramIndex}
-        OR REPLACE(COALESCE(sc.name, ''), ' ', '') ILIKE $${paramIndex}
-        OR REPLACE(s.sku_id, ' ', '') ILIKE $${paramIndex} 
-        OR REPLACE(s.item_name, ' ', '') ILIKE $${paramIndex} 
-        OR REPLACE(COALESCE(b.name, ''), ' ', '') ILIKE $${paramIndex}
-        OR REPLACE(COALESCE(s.model, ''), ' ', '') ILIKE $${paramIndex} 
-        OR REPLACE(COALESCE(s.hsn_sac_code, ''), ' ', '') ILIKE $${paramIndex}
-        OR REPLACE(COALESCE(s.series, ''), ' ', '') ILIKE $${paramIndex}
-        OR REPLACE(COALESCE(s.rating_size, ''), ' ', '') ILIKE $${paramIndex}
-        OR REPLACE(COALESCE(s.item_details, ''), ' ', '') ILIKE $${paramIndex}
-        OR REPLACE(COALESCE(s.vendor_item_code, ''), ' ', '') ILIKE $${paramIndex}
-        OR REPLACE(COALESCE(v.name, ''), ' ', '') ILIKE $${paramIndex}
-      )`;
-      params.push(`%${searchTrimmed}%`);
-      paramIndex++;
+      const tokens = search.trim()
+        .split(/[\s,]+/)
+        .map(t => t.trim())
+        .filter(t => t.length > 0);
+      if (tokens.length > 0) {
+        for (const token of tokens) {
+          const likePattern = `%${String(token).replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')}%`;
+          query += ` AND (
+            REPLACE(COALESCE(pc.name, ''), ' ', '') ILIKE $${paramIndex}
+            OR REPLACE(COALESCE(ic.name, ''), ' ', '') ILIKE $${paramIndex}
+            OR REPLACE(COALESCE(sc.name, ''), ' ', '') ILIKE $${paramIndex}
+            OR REPLACE(s.sku_id, ' ', '') ILIKE $${paramIndex}
+            OR REPLACE(s.item_name, ' ', '') ILIKE $${paramIndex}
+            OR REPLACE(COALESCE(b.name, ''), ' ', '') ILIKE $${paramIndex}
+            OR REPLACE(COALESCE(s.model, ''), ' ', '') ILIKE $${paramIndex}
+            OR REPLACE(COALESCE(s.hsn_sac_code, ''), ' ', '') ILIKE $${paramIndex}
+            OR REPLACE(COALESCE(s.series, ''), ' ', '') ILIKE $${paramIndex}
+            OR REPLACE(COALESCE(s.rating_size, ''), ' ', '') ILIKE $${paramIndex}
+            OR REPLACE(COALESCE(s.item_details, ''), ' ', '') ILIKE $${paramIndex}
+            OR REPLACE(COALESCE(s.vendor_item_code, ''), ' ', '') ILIKE $${paramIndex}
+            OR REPLACE(COALESCE(v.name, ''), ' ', '') ILIKE $${paramIndex}
+          )`;
+          params.push(likePattern);
+          paramIndex++;
+        }
+      }
     }
     if (productCategory) {
       // Support comma-separated list of category IDs for "All" selection
