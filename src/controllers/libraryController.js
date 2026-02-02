@@ -10,153 +10,13 @@ const ColourModel = require('../models/colourModel');
 const { getCompanyId } = require('../middlewares/auth');
 const { parseExcelFile, parseExcelFileAllSheets } = require('../utils/helpers');
 const { transformVendor, transformBrand, transformCategory, transformTeam, transformCustomer, transformTransportor, transformWarehouse, transformMaterial, transformColour, transformArray } = require('../utils/transformers');
-const { NotFoundError, ValidationError, UnauthorizedError } = require('../middlewares/errorHandler');
+const { NotFoundError, ValidationError } = require('../middlewares/errorHandler');
 const xlsx = require('xlsx');
 
 /**
  * Library Controller
  * Handles all library-related operations (vendors, brands, categories, teams)
  */
-
-/**
- * Helper function to get categoryAccess from user (JWT or database)
- * @param {Object} user - User object from req.user
- * @param {String} companyId - Company ID
- * @returns {Promise<Array>} categoryAccess array
- */
-const getUserCategoryAccess = async (user, companyId) => {
-  // If categoryAccess is already in user object (from JWT), use it
-  // Check if it exists as a property (even if empty array - that's valid data)
-  if (user.hasOwnProperty('categoryAccess') && Array.isArray(user.categoryAccess)) {
-    return user.categoryAccess;
-  }
-  
-  // Otherwise, fetch from database (for old JWT tokens that don't have categoryAccess)
-  try {
-    const pool = require('../models/database');
-    const userId = user.id || user.userId;
-    const role = user.role;
-    
-    if (!userId || !role) {
-      return [];
-    }
-    
-    const table = role === 'admin' || role === 'super_admin' ? 'admins' : 'users_data';
-    const result = await pool.query(
-      `SELECT category_access FROM ${table} WHERE user_id = $1 AND company_id = $2`,
-      [userId, companyId]
-    );
-    
-    if (result.rows.length > 0 && result.rows[0].category_access) {
-      const categoryAccess = result.rows[0].category_access;
-      // Parse if it's a string
-      return typeof categoryAccess === 'string' ? JSON.parse(categoryAccess) : categoryAccess;
-    }
-    
-    return [];
-  } catch (error) {
-    return [];
-  }
-};
-
-/**
- * Helper function to filter categories based on user access
- * @param {Array} categories - Array of category objects
- * @param {Object} user - User object with role and categoryAccess
- * @param {String} categoryType - 'productCategoryIds', 'itemCategoryIds', or 'subCategoryIds'
- * @param {String} companyId - Company ID (for database fallback)
- * @returns {Promise<Array>} Filtered categories
- */
-const filterCategoriesByUserAccess = async (categories, user, categoryType, companyId) => {
-  const userRole = user.role;
-  let categoryAccess = user.categoryAccess || [];
-  
-  // If categoryAccess is empty or not in JWT, fetch from database
-  if (!categoryAccess || categoryAccess.length === 0) {
-    categoryAccess = await getUserCategoryAccess(user, companyId);
-  }
-  
-  // Admin and super_admin get all categories
-  if (userRole === 'admin' || userRole === 'super_admin') {
-    return categories;
-  }
-  
-  // For sales/user roles, filter by categoryAccess
-  if (userRole === 'sales' || userRole === 'user') {
-    if (!categoryAccess || categoryAccess.length === 0) {
-      // No access granted - return empty array
-      return [];
-    }
-    
-    // Collect all allowed category IDs from all access entries
-    const allowedIds = new Set();
-    categoryAccess.forEach(access => {
-      if (access[categoryType] && Array.isArray(access[categoryType])) {
-        access[categoryType].forEach(id => {
-          // Convert to string for consistent comparison
-          allowedIds.add(String(id));
-        });
-      }
-    });
-    
-    if (allowedIds.size === 0) {
-      // No allowed IDs found - return empty array
-      return [];
-    }
-    
-    // Filter categories to only include those with IDs in allowedIds
-    const filtered = categories.filter(cat => {
-      const catId = String(cat.id);
-      return allowedIds.has(catId);
-    });
-    
-    return filtered;
-  }
-  
-  // Unknown role - return empty array for safety
-  return [];
-};
-
-/**
- * Helper function to check if user has access to a specific category
- * @param {String|Number} categoryId - Category ID to check
- * @param {Object} user - User object with role and categoryAccess
- * @param {String} categoryType - 'productCategoryIds', 'itemCategoryIds', or 'subCategoryIds'
- * @param {String} companyId - Company ID (for database fallback)
- * @returns {Promise<Boolean>} True if user has access
- */
-const hasCategoryAccess = async (categoryId, user, categoryType, companyId) => {
-  const userRole = user.role;
-  let categoryAccess = user.categoryAccess || [];
-  
-  // If categoryAccess is empty or not in JWT, fetch from database
-  if (!categoryAccess || categoryAccess.length === 0) {
-    categoryAccess = await getUserCategoryAccess(user, companyId);
-  }
-  
-  // Admin and super_admin have access to all
-  if (userRole === 'admin' || userRole === 'super_admin') {
-    return true;
-  }
-  
-  // For sales/user roles, check categoryAccess
-  if (userRole === 'sales' || userRole === 'user') {
-    if (!categoryAccess || categoryAccess.length === 0) {
-      return false;
-    }
-    
-    const categoryIdStr = String(categoryId);
-    return categoryAccess.some(access => {
-      if (access[categoryType] && Array.isArray(access[categoryType])) {
-        return access[categoryType].some(id => String(id) === categoryIdStr);
-      }
-      return false;
-    });
-  }
-  
-  // Unknown role - no access
-  return false;
-};
 
 // ==================== VENDORS ====================
 
@@ -491,33 +351,19 @@ const deleteBrand = async (req, res, next) => {
 const getProductCategories = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
-    const user = req.user || {};
 
-    // If ID is provided, get single category
     if (req.params.id) {
       const category = await CategoryModel.getProductCategoryById(req.params.id, companyId);
       if (!category) {
         throw new NotFoundError('Product category not found');
       }
-      
-      // Check if user has access to this specific category
-      const hasAccess = await hasCategoryAccess(req.params.id, user, 'productCategoryIds', companyId);
-      if (!hasAccess) {
-        throw new UnauthorizedError('You do not have access to this product category');
-      }
-      
       const transformedData = transformCategory(category);
       return res.json({ success: true, data: transformedData });
     }
 
-    // Otherwise get all categories
     const categories = await CategoryModel.getProductCategories(companyId);
     const transformedData = transformArray(categories, transformCategory);
-    
-    // Filter categories based on user access
-    const filteredData = await filterCategoriesByUserAccess(transformedData, user, 'productCategoryIds', companyId);
-    
-    res.json({ success: true, data: filteredData });
+    res.json({ success: true, data: transformedData });
   } catch (error) {
     next(error);
   }
@@ -592,40 +438,20 @@ const deleteProductCategory = async (req, res, next) => {
 const getItemCategories = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
-    const user = req.user || {};
-    // If ID is provided, get single category
+
     if (req.params.id) {
       const category = await CategoryModel.getItemCategoryById(req.params.id, companyId);
       if (!category) {
         throw new NotFoundError('Item category not found');
       }
-      
-      // Check if user has access to this specific category
-      const hasAccess = await hasCategoryAccess(req.params.id, user, 'itemCategoryIds', companyId);
-      if (!hasAccess) {
-
-        throw new UnauthorizedError('You do not have access to this item category');
-      }
-      
       const transformedData = transformCategory(category);
       return res.json({ success: true, data: transformedData });
     }
 
-    // Otherwise get all categories (with optional productCategoryId filter)
     const productCategoryId = req.query.productCategoryId || null;
     const categories = await CategoryModel.getItemCategories(companyId, productCategoryId);
     const transformedData = transformArray(categories, transformCategory);
-    
-    // Filter categories based on user access
-    const filteredData = await filterCategoriesByUserAccess(transformedData, user, 'itemCategoryIds', companyId);
-    if (user.role === 'admin' || user.role === 'super_admin') {
-
-    } else {
-
-
-    }
-    
-    res.json({ success: true, data: filteredData });
+    res.json({ success: true, data: transformedData });
   } catch (error) {
     next(error);
   }
@@ -700,40 +526,20 @@ const deleteItemCategory = async (req, res, next) => {
 const getSubCategories = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
-    const user = req.user || {};
-    // If ID is provided, get single category
+
     if (req.params.id) {
       const category = await CategoryModel.getSubCategoryById(req.params.id, companyId);
       if (!category) {
         throw new NotFoundError('Sub category not found');
       }
-      
-      // Check if user has access to this specific category
-      const hasAccess = await hasCategoryAccess(req.params.id, user, 'subCategoryIds', companyId);
-      if (!hasAccess) {
-
-        throw new UnauthorizedError('You do not have access to this sub category');
-      }
-      
       const transformedData = transformCategory(category);
       return res.json({ success: true, data: transformedData });
     }
 
-    // Otherwise get all categories (with optional itemCategoryId filter)
     const itemCategoryId = req.query.itemCategoryId || null;
     const categories = await CategoryModel.getSubCategories(companyId, itemCategoryId);
     const transformedData = transformArray(categories, transformCategory);
-    
-    // Filter categories based on user access
-    const filteredData = await filterCategoriesByUserAccess(transformedData, user, 'subCategoryIds', companyId);
-    if (user.role === 'admin' || user.role === 'super_admin') {
-
-    } else {
-
-
-    }
-    
-    res.json({ success: true, data: filteredData });
+    res.json({ success: true, data: transformedData });
   } catch (error) {
     next(error);
   }

@@ -7,28 +7,22 @@ const { sendInvitationEmail } = require('../utils/emailService');
 const { logger } = require('../utils/logger');
 const { NotFoundError, BadRequestError, ConflictError } = require('../middlewares/errorHandler');
 const { getCompanyId } = require('../middlewares/auth');
+const { getUserPermissions } = require('../utils/rbac');
 
 /**
- * Get current user details
+ * Get current user details (RBAC permissions)
  */
 const getMe = async (req, res, next) => {
   try {
     const userId = req.user.userId;
 
-    // Get full user details including permissions
-    const query = `
-      SELECT 
-        u.id, u.company_id, c.company_name, u.email, u.full_name, u.phone, u.role, u.is_active,
-        COALESCE(ud.permissions, u.permissions) as permissions,
-        ud.module_access as "moduleAccess",
-        ud.category_access as "categoryAccess"
-      FROM users u
-      LEFT JOIN companies c ON u.company_id = c.company_id
-      LEFT JOIN users_data ud ON u.id = ud.user_id
-      WHERE u.id = $1
-    `;
-
-    const result = await pool.query(query, [userId]);
+    const result = await pool.query(
+      `SELECT u.id, u.company_id, c.company_name, u.email, u.full_name, u.phone, u.role, u.is_active
+       FROM users u
+       LEFT JOIN companies c ON u.company_id = c.company_id
+       WHERE u.id = $1`,
+      [userId]
+    );
 
     if (result.rows.length === 0) {
       return res.status(404).json({
@@ -37,9 +31,18 @@ const getMe = async (req, res, next) => {
       });
     }
 
+    const user = result.rows[0];
+    let permissions = await getUserPermissions(userId, user.company_id);
+    if ((user.role === 'super_admin' || user.role === 'admin') && permissions.length === 0) {
+      permissions = ['*'];
+    }
+
     res.json({
       success: true,
-      data: result.rows[0]
+      data: {
+        ...user,
+        permissions: Array.isArray(permissions) ? permissions : [],
+      }
     });
   } catch (error) {
     next(error);
@@ -62,8 +65,7 @@ const inviteUser = async (req, res, next) => {
       employeeId,
       role,
       department,
-      moduleAccess,
-      categoryAccess,
+      roleIds = [],
     } = req.body;
 
     // Get company_id from authenticated user or request
@@ -139,8 +141,8 @@ const inviteUser = async (req, res, next) => {
     await client.query(
       `INSERT INTO ${dataTable} (
         user_id, company_id, first_name, last_name, employee_id,
-        email, department, permissions, module_access, category_access, is_active
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        email, department, is_active
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [
         user.id,
         companyId,
@@ -149,12 +151,25 @@ const inviteUser = async (req, res, next) => {
         employeeId || null,
         normalizedEmail,
         department || null,
-        JSON.stringify({}), // permissions
-        JSON.stringify(moduleAccess || {}),
-        JSON.stringify(categoryAccess || []),
         true
       ]
     );
+
+    // RBAC: assign roles to user
+    const roleIdArray = Array.isArray(roleIds) ? roleIds : [];
+    for (const roleId of roleIdArray) {
+      const roleCheck = await client.query(
+        'SELECT id FROM roles WHERE id = $1 AND company_id = $2',
+        [roleId, companyId]
+      );
+      if (roleCheck.rows.length > 0) {
+        await client.query(
+          `INSERT INTO user_roles (user_id, role_id, company_id)
+           VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+          [user.id, roleId, companyId]
+        );
+      }
+    }
 
     await client.query('COMMIT');
 
@@ -291,7 +306,7 @@ const setPassword = async (req, res, next) => {
 
     // Find user by token
     const result = await client.query(
-      `SELECT id, email, company_id, password_reset_expires, is_active
+      `SELECT id, email, company_id, role, password_reset_expires, is_active
        FROM users
        WHERE password_reset_token = $1`,
       [token]
@@ -332,72 +347,21 @@ const setPassword = async (req, res, next) => {
       [hashedPassword, user.id]
     );
 
-    // Get user details with permissions for JWT token
-    // Fetch permissions from admins or users_data table based on role
-    let userDetails;
-    if (user.role === 'admin' || user.role === 'super_admin') {
-      userDetails = await client.query(
-        `SELECT u.id, u.email, u.full_name, u.role, u.company_id, c.company_name,
-                a.permissions, a.module_access
-         FROM users u
-         INNER JOIN companies c ON u.company_id = c.company_id
-         LEFT JOIN admins a ON u.id = a.user_id
-         WHERE u.id = $1`,
-        [user.id]
-      );
-    } else {
-      userDetails = await client.query(
-        `SELECT u.id, u.email, u.full_name, u.role, u.company_id, c.company_name,
-                ud.permissions, ud.module_access
-         FROM users u
-         INNER JOIN companies c ON u.company_id = c.company_id
-         LEFT JOIN users_data ud ON u.id = ud.user_id
-         WHERE u.id = $1`,
-        [user.id]
-      );
-    }
+    const userDetails = await client.query(
+      `SELECT u.id, u.email, u.full_name, u.role, u.company_id, c.company_name
+       FROM users u
+       INNER JOIN companies c ON u.company_id = c.company_id
+       WHERE u.id = $1`,
+      [user.id]
+    );
 
     await client.query('COMMIT');
 
     const userData = userDetails.rows[0];
-
-    // Parse permissions and module_access from JSON
-    let permissions = [];
-    let moduleAccess = {};
-    try {
-      if (userData.permissions) {
-        const parsedPermissions = typeof userData.permissions === 'string'
-          ? JSON.parse(userData.permissions)
-          : userData.permissions;
-        // Convert permissions object to array format expected by frontend
-        if (typeof parsedPermissions === 'object' && !Array.isArray(parsedPermissions)) {
-          // If permissions is an object, convert moduleAccess to permissions array
-          permissions = [];
-        } else if (Array.isArray(parsedPermissions)) {
-          permissions = parsedPermissions;
-        }
-      }
-      if (userData.module_access) {
-        moduleAccess = typeof userData.module_access === 'string'
-          ? JSON.parse(userData.module_access)
-          : userData.module_access;
-
-        // Convert moduleAccess object to permissions array format (e.g., "sku.view", "inventory.create")
-        if (moduleAccess && typeof moduleAccess === 'object') {
-          permissions = [];
-          for (const [module, actions] of Object.entries(moduleAccess)) {
-            if (actions && typeof actions === 'object') {
-              for (const [action, allowed] of Object.entries(actions)) {
-                if (allowed) {
-                  permissions.push(`${module}.${action}`);
-                }
-              }
-            }
-          }
-        }
-      }
-    } catch (parseError) {
-      logger.warn({ error: parseError.message, userId: userData.id }, 'Failed to parse permissions');
+    const { getUserPermissions } = require('../utils/rbac');
+    let permissions = await getUserPermissions(user.id, user.company_id);
+    if ((userData.role === 'super_admin' || userData.role === 'admin') && permissions.length === 0) {
+      permissions = ['*'];
     }
 
     // Generate JWT token so user can login immediately without going to login page
@@ -425,7 +389,6 @@ const setPassword = async (req, res, next) => {
           fullName: userData.full_name,
           role: userData.role,
           permissions: Array.isArray(permissions) ? permissions : [],
-          moduleAccess: moduleAccess || {}
         }
       }
     });
@@ -670,6 +633,51 @@ const suspendUser = async (req, res, next) => {
   }
 };
 
+/**
+ * Assign roles to a user
+ * Body: { roleIds: number[] }
+ */
+const assignUserRoles = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { roleIds = [] } = req.body;
+    const companyId = getCompanyId(req);
+
+    const userCheck = await pool.query(
+      'SELECT id FROM users WHERE id = $1 AND company_id = $2',
+      [id, companyId]
+    );
+    if (userCheck.rows.length === 0) {
+      throw new NotFoundError('User not found');
+    }
+
+    await pool.query('DELETE FROM user_roles WHERE user_id = $1 AND company_id = $2', [id, companyId]);
+
+    const roleIdArray = Array.isArray(roleIds) ? roleIds : [];
+    for (const roleId of roleIdArray) {
+      const roleCheck = await pool.query(
+        'SELECT id FROM roles WHERE id = $1 AND company_id = $2',
+        [roleId, companyId]
+      );
+      if (roleCheck.rows.length > 0) {
+        await pool.query(
+          `INSERT INTO user_roles (user_id, role_id, company_id)
+           VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+          [id, roleId, companyId]
+        );
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Roles assigned successfully',
+      data: { roleIds: roleIdArray },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   inviteUser,
   verifyToken,
@@ -679,5 +687,6 @@ module.exports = {
   deleteUser,
   suspendUser,
   getMe,
+  assignUserRoles,
 };
 
