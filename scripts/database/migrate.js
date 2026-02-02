@@ -5,37 +5,26 @@ const dbConfig = require('./config');
 
 /**
  * Migration Runner
- * Runs all migration files in the migrations directory in order
+ * Runs all migration files in the migrations directory in order.
+ * Stores schema_migrations in the TARGET database so that when the DB is dropped
+ * and recreated (e.g. CI test DB), all migrations are re-applied.
  */
 async function runMigrations() {
-  // Connect to postgres database first to create migration tracking table
-  const postgresClient = new Client({
-    host: dbConfig.host,
-    port: dbConfig.port,
-    user: dbConfig.user,
-    password: dbConfig.password,
-    database: 'postgres',
-    ssl: dbConfig.ssl || false, // Include SSL config
-  });
-
-  // Connect to target database for running migrations
-  const targetClient = new Client(dbConfig);
+  const client = new Client(dbConfig);
 
   try {
-    await postgresClient.connect();
-    console.log('✅ Connected to PostgreSQL server');
+    await client.connect();
+    console.log(`✅ Connected to database: ${dbConfig.database || 'inventory_db'}`);
 
-    // Create migrations tracking table in postgres database
-    await postgresClient.query(`
+    // Create migrations tracking table in TARGET database (not postgres)
+    // This ensures that when the DB is dropped/recreated, we re-run all migrations
+    await client.query(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
         id SERIAL PRIMARY KEY,
         filename VARCHAR(255) UNIQUE NOT NULL,
         executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
-
-    await targetClient.connect();
-    console.log(`✅ Connected to database: ${dbConfig.database || 'inventory_db'}`);
 
     // Get all migration files
     const migrationsDir = path.join(__dirname, 'migrations');
@@ -51,8 +40,8 @@ async function runMigrations() {
     console.log(`\n📦 Found ${files.length} migration file(s)\n`);
 
     for (const file of files) {
-      // Check if migration already ran
-      const checkResult = await postgresClient.query(
+      // Check if migration already ran (in target DB)
+      const checkResult = await client.query(
         'SELECT filename FROM schema_migrations WHERE filename = $1',
         [file]
       );
@@ -68,30 +57,28 @@ async function runMigrations() {
       const sql = fs.readFileSync(filePath, 'utf8');
 
       try {
-        await targetClient.query('BEGIN');
-        await targetClient.query(sql);
-        await targetClient.query('COMMIT');
+        await client.query('BEGIN');
+        await client.query(sql);
+        await client.query('COMMIT');
 
-        // Record migration
-        await postgresClient.query(
+        // Record migration in target DB
+        await client.query(
           'INSERT INTO schema_migrations (filename) VALUES ($1)',
           [file]
         );
 
         console.log(`✅ Completed: ${file}\n`);
       } catch (error) {
-        await targetClient.query('ROLLBACK');
+        await client.query('ROLLBACK');
         throw error;
       }
     }
 
-    await targetClient.end();
-    await postgresClient.end();
+    await client.end();
     console.log('✅ All migrations completed successfully!');
   } catch (error) {
     console.error('❌ Migration error:', error.message);
-    if (targetClient) await targetClient.end().catch(() => {});
-    if (postgresClient) await postgresClient.end().catch(() => {});
+    if (client) await client.end().catch(() => {});
     process.exit(1);
   }
 }
