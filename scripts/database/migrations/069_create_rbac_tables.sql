@@ -83,20 +83,16 @@ BEGIN
       ON CONFLICT (role_id, permission_id) DO NOTHING;
     END LOOP;
     
-    -- Create User role (limited)
+    -- Create User role (SKU view only + Profile via RequireAuth)
     INSERT INTO roles (company_id, name, description, is_system)
-    VALUES (comp.company_id, 'User', 'Limited access - view SKU, inventory, reports', true)
+    VALUES (comp.company_id, 'User', 'SKU Management view only, Profile access', true)
     ON CONFLICT (company_id, name) DO NOTHING;
     
     SELECT id INTO user_role_id FROM roles WHERE company_id = comp.company_id AND name = 'User';
     
     INSERT INTO role_permissions (role_id, permission_id)
     SELECT user_role_id, p.id FROM permissions p
-    WHERE (p.module = 'dashboard' AND p.action = 'view')
-       OR (p.module = 'sku' AND p.action = 'view')
-       OR (p.module = 'inventory' AND p.action IN ('view', 'create'))
-       OR (p.module = 'reports' AND p.action = 'view')
-       OR (p.module = 'library' AND p.action = 'view');
+    WHERE p.module = 'sku' AND p.action = 'view';
     
     -- Bootstrap: assign Admin role to existing admin/super_admin users so they can assign others
     FOR admin_user IN 
