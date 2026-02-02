@@ -103,6 +103,22 @@ const inviteUser = async (req, res, next) => {
     const tempPassword = crypto.randomBytes(16).toString('hex');
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
+    // Derive users.role from RBAC roleIds (not legacy role dropdown)
+    // If any assigned role is Admin, use admin; otherwise user
+    let derivedRole = 'user';
+    const roleIdArray = Array.isArray(roleIds) ? roleIds : [];
+    if (roleIdArray.length > 0) {
+      const placeholders = roleIdArray.map((_, i) => `$${i + 1}`).join(',');
+      const roleNamesResult = await client.query(
+        `SELECT name FROM roles WHERE id IN (${placeholders}) AND company_id = $${roleIdArray.length + 1}`,
+        [...roleIdArray, companyId]
+      );
+      const hasAdminRole = roleNamesResult.rows.some((r) => r.name && String(r.name).toLowerCase() === 'admin');
+      if (hasAdminRole) derivedRole = 'admin';
+    } else if (role === 'admin') {
+      derivedRole = 'admin'; // Fallback if no roleIds (legacy)
+    }
+
     // Insert user into users table
     // Combine firstName and lastName (lastName is optional)
     const fullName = lastName && lastName.trim()
@@ -121,7 +137,7 @@ const inviteUser = async (req, res, next) => {
         hashedPassword,
         fullName,
         null, // phone can be added later
-        role === 'admin' ? 'admin' : 'user',
+        derivedRole,
         passwordResetToken,
         passwordResetExpires,
         true
@@ -130,8 +146,8 @@ const inviteUser = async (req, res, next) => {
 
     const user = userResult.rows[0];
 
-    // Determine which table to insert into based on role
-    const isAdmin = role === 'admin';
+    // Determine which table to insert into based on derived role
+    const isAdmin = derivedRole === 'admin';
     const dataTable = isAdmin ? 'admins' : 'users_data';
 
     // Insert into admins or users_data table
@@ -156,7 +172,6 @@ const inviteUser = async (req, res, next) => {
     );
 
     // RBAC: assign roles to user
-    const roleIdArray = Array.isArray(roleIds) ? roleIds : [];
     for (const roleId of roleIdArray) {
       const roleCheck = await client.query(
         'SELECT id FROM roles WHERE id = $1 AND company_id = $2',
@@ -196,7 +211,7 @@ const inviteUser = async (req, res, next) => {
         token: passwordResetToken,
         companyId,
         companyName,
-        role: role === 'admin' ? 'Admin' : 'User',
+        role: derivedRole === 'admin' ? 'Admin' : 'User',
       });
     } catch (emailError) {
       logger.error({
@@ -667,6 +682,22 @@ const assignUserRoles = async (req, res, next) => {
         );
       }
     }
+
+    // Sync users.role with RBAC: admin if any role is Admin, else user
+    let newUsersRole = 'user';
+    if (roleIdArray.length > 0) {
+      const placeholders = roleIdArray.map((_, i) => `$${i + 1}`).join(',');
+      const roleNamesResult = await pool.query(
+        `SELECT name FROM roles WHERE id IN (${placeholders}) AND company_id = $${roleIdArray.length + 1}`,
+        [...roleIdArray, companyId]
+      );
+      const hasAdminRole = roleNamesResult.rows.some((r) => r.name && String(r.name).toLowerCase() === 'admin');
+      if (hasAdminRole) newUsersRole = 'admin';
+    }
+    await pool.query(
+      'UPDATE users SET role = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND company_id = $3',
+      [newUsersRole, id, companyId]
+    );
 
     res.json({
       success: true,

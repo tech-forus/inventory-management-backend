@@ -49,11 +49,13 @@ async function hasPermission(userId, companyId, userRole, requiredPermission) {
 
 /**
  * Get category access for a user (from their roles' role_category_access)
- * Admin/super_admin: returns null (full access, no filtering)
+ * Super_admin: returns null (full access, no filtering)
  * User with no role_category_access rows: returns null (full access)
  * User with role_category_access: returns { productCategoryIds, itemCategoryIds, subCategoryIds }
- *   - Empty array at a level = no restriction (all) at that level
+ *   - Empty array at a level = no restriction from that role
  *   - Non-empty array = restrict to those IDs only
+ * For multiple roles: apply union of non-empty restrictions. Only roles with non-empty arrays
+ * contribute; a role with empty arrays does NOT grant full access (avoids Admin+User bypass).
  * @param {number} userId
  * @param {string} companyId
  * @param {string} userRole - from users.role (admin, super_admin, user, sales)
@@ -62,8 +64,8 @@ async function hasPermission(userId, companyId, userRole, requiredPermission) {
 async function getUserCategoryAccess(userId, companyId, userRole) {
   if (!userId || !companyId) return null;
 
-  // Admin and super_admin have full category access
-  if (userRole === 'super_admin' || userRole === 'admin') return null;
+  // Only super_admin bypasses (system-wide full access)
+  if (userRole === 'super_admin') return null;
 
   const result = await pool.query(
     `SELECT rca.product_category_ids, rca.item_category_ids, rca.sub_category_ids
@@ -73,26 +75,23 @@ async function getUserCategoryAccess(userId, companyId, userRole) {
     [userId, companyId]
   );
 
-  if (result.rows.length === 0) return null; // No restrictions
+  if (result.rows.length === 0) return null; // No role_category_access = full access
 
-  // Empty array at a level = "all" (no filter). Non-empty = restrict to those IDs.
-  // For multiple roles: if ANY role has empty at a level → no filter. Else union of all.
-  const hasAllProducts = result.rows.some((r) => !r.product_category_ids || r.product_category_ids.length === 0);
-  const hasAllItems = result.rows.some((r) => !r.item_category_ids || r.item_category_ids.length === 0);
-  const hasAllSubs = result.rows.some((r) => !r.sub_category_ids || r.sub_category_ids.length === 0);
-
+  // Only roles with non-empty arrays contribute to restrictions.
+  // If ANY role has non-empty at a level → apply union of those IDs.
+  // If ALL roles have empty at a level → no filter (full access at that level).
   const productIds = new Set();
   const itemIds = new Set();
   const subIds = new Set();
   for (const row of result.rows) {
-    (row.product_category_ids || []).forEach((id) => productIds.add(id));
-    (row.item_category_ids || []).forEach((id) => itemIds.add(id));
-    (row.sub_category_ids || []).forEach((id) => subIds.add(id));
+    if (row.product_category_ids?.length) row.product_category_ids.forEach((id) => productIds.add(id));
+    if (row.item_category_ids?.length) row.item_category_ids.forEach((id) => itemIds.add(id));
+    if (row.sub_category_ids?.length) row.sub_category_ids.forEach((id) => subIds.add(id));
   }
 
-  const productCategoryIds = hasAllProducts ? null : Array.from(productIds);
-  const itemCategoryIds = hasAllItems ? null : Array.from(itemIds);
-  const subCategoryIds = hasAllSubs ? null : Array.from(subIds);
+  const productCategoryIds = productIds.size > 0 ? Array.from(productIds) : null;
+  const itemCategoryIds = itemIds.size > 0 ? Array.from(itemIds) : null;
+  const subCategoryIds = subIds.size > 0 ? Array.from(subIds) : null;
 
   if (!productCategoryIds && !itemCategoryIds && !subCategoryIds) return null;
 
