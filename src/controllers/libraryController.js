@@ -8,6 +8,7 @@ const WarehouseModel = require('../models/warehouseModel');
 const MaterialModel = require('../models/materialModel');
 const ColourModel = require('../models/colourModel');
 const { getCompanyId } = require('../middlewares/auth');
+const { getUserCategoryAccess } = require('../utils/rbac');
 const { parseExcelFile, parseExcelFileAllSheets } = require('../utils/helpers');
 const { transformVendor, transformBrand, transformCategory, transformTeam, transformCustomer, transformTransportor, transformWarehouse, transformMaterial, transformColour, transformArray } = require('../utils/transformers');
 const { NotFoundError, ValidationError } = require('../middlewares/errorHandler');
@@ -351,17 +352,27 @@ const deleteBrand = async (req, res, next) => {
 const getProductCategories = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
+    const user = req.user || {};
 
     if (req.params.id) {
       const category = await CategoryModel.getProductCategoryById(req.params.id, companyId);
       if (!category) {
         throw new NotFoundError('Product category not found');
       }
+      const categoryAccess = await getUserCategoryAccess(user.userId, companyId, user.role);
+      if (categoryAccess?.productCategoryIds?.length && !categoryAccess.productCategoryIds.includes(category.id)) {
+        throw new NotFoundError('Product category not found');
+      }
       const transformedData = transformCategory(category);
       return res.json({ success: true, data: transformedData });
     }
 
-    const categories = await CategoryModel.getProductCategories(companyId);
+    let categories = await CategoryModel.getProductCategories(companyId);
+    const categoryAccess = await getUserCategoryAccess(user.userId, companyId, user.role);
+    if (categoryAccess?.productCategoryIds?.length) {
+      const allowed = new Set(categoryAccess.productCategoryIds);
+      categories = categories.filter((c) => allowed.has(c.id));
+    }
     const transformedData = transformArray(categories, transformCategory);
     res.json({ success: true, data: transformedData });
   } catch (error) {
@@ -438,10 +449,15 @@ const deleteProductCategory = async (req, res, next) => {
 const getItemCategories = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
+    const user = req.user || {};
 
     if (req.params.id) {
       const category = await CategoryModel.getItemCategoryById(req.params.id, companyId);
       if (!category) {
+        throw new NotFoundError('Item category not found');
+      }
+      const categoryAccess = await getUserCategoryAccess(user.userId, companyId, user.role);
+      if (categoryAccess?.itemCategoryIds?.length && !categoryAccess.itemCategoryIds.includes(category.id)) {
         throw new NotFoundError('Item category not found');
       }
       const transformedData = transformCategory(category);
@@ -449,7 +465,12 @@ const getItemCategories = async (req, res, next) => {
     }
 
     const productCategoryId = req.query.productCategoryId || null;
-    const categories = await CategoryModel.getItemCategories(companyId, productCategoryId);
+    let categories = await CategoryModel.getItemCategories(companyId, productCategoryId);
+    const categoryAccess = await getUserCategoryAccess(user.userId, companyId, user.role);
+    if (categoryAccess?.itemCategoryIds?.length) {
+      const allowed = new Set(categoryAccess.itemCategoryIds);
+      categories = categories.filter((c) => allowed.has(c.id));
+    }
     const transformedData = transformArray(categories, transformCategory);
     res.json({ success: true, data: transformedData });
   } catch (error) {
@@ -526,10 +547,15 @@ const deleteItemCategory = async (req, res, next) => {
 const getSubCategories = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
+    const user = req.user || {};
 
     if (req.params.id) {
       const category = await CategoryModel.getSubCategoryById(req.params.id, companyId);
       if (!category) {
+        throw new NotFoundError('Sub category not found');
+      }
+      const categoryAccess = await getUserCategoryAccess(user.userId, companyId, user.role);
+      if (categoryAccess?.subCategoryIds?.length && !categoryAccess.subCategoryIds.includes(category.id)) {
         throw new NotFoundError('Sub category not found');
       }
       const transformedData = transformCategory(category);
@@ -537,7 +563,12 @@ const getSubCategories = async (req, res, next) => {
     }
 
     const itemCategoryId = req.query.itemCategoryId || null;
-    const categories = await CategoryModel.getSubCategories(companyId, itemCategoryId);
+    let categories = await CategoryModel.getSubCategories(companyId, itemCategoryId);
+    const categoryAccess = await getUserCategoryAccess(user.userId, companyId, user.role);
+    if (categoryAccess?.subCategoryIds?.length) {
+      const allowed = new Set(categoryAccess.subCategoryIds);
+      categories = categories.filter((c) => allowed.has(c.id));
+    }
     const transformedData = transformArray(categories, transformCategory);
     res.json({ success: true, data: transformedData });
   } catch (error) {

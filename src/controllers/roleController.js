@@ -44,12 +44,27 @@ const getRoles = async (req, res, next) => {
         [row.id]
       );
       const permissions = permsResult.rows.map((p) => `${p.module}.${p.action}`);
+
+      const rcaResult = await pool.query(
+        'SELECT product_category_ids, item_category_ids, sub_category_ids FROM role_category_access WHERE role_id = $1',
+        [row.id]
+      );
+      const rca = rcaResult.rows[0];
+      const categoryAccess = rca
+        ? {
+            productCategoryIds: rca.product_category_ids || [],
+            itemCategoryIds: rca.item_category_ids || [],
+            subCategoryIds: rca.sub_category_ids || [],
+          }
+        : null;
+
       roles.push({
         id: row.id,
         name: row.name,
         description: row.description,
         isSystem: row.is_system,
         permissions,
+        categoryAccess,
         createdAt: row.created_at,
       });
     }
@@ -62,11 +77,11 @@ const getRoles = async (req, res, next) => {
 
 /**
  * Create a new role
- * Body: { name, description?, permissions: string[] } e.g. permissions: ["sku.view", "inventory.create"]
+ * Body: { name, description?, permissions: string[], categoryAccess?: { productCategoryIds, itemCategoryIds, subCategoryIds } }
  */
 const createRole = async (req, res, next) => {
   try {
-    const { name, description, permissions } = req.body;
+    const { name, description, permissions, categoryAccess } = req.body;
     const companyId = getCompanyId(req);
 
     if (!name || !name.trim()) {
@@ -113,6 +128,30 @@ const createRole = async (req, res, next) => {
     );
     const rolePermissions = permsResult.rows.map((p) => `${p.module}.${p.action}`);
 
+    if (categoryAccess && typeof categoryAccess === 'object') {
+      const pcIds = Array.isArray(categoryAccess.productCategoryIds) ? categoryAccess.productCategoryIds : [];
+      const icIds = Array.isArray(categoryAccess.itemCategoryIds) ? categoryAccess.itemCategoryIds : [];
+      const scIds = Array.isArray(categoryAccess.subCategoryIds) ? categoryAccess.subCategoryIds : [];
+      await pool.query(
+        `INSERT INTO role_category_access (role_id, product_category_ids, item_category_ids, sub_category_ids, view, create, edit, delete)
+         VALUES ($1, $2, $3, $4, true, false, false, false)`,
+        [role.id, pcIds, icIds, scIds]
+      );
+    }
+
+    const rcaResult = await pool.query(
+      'SELECT product_category_ids, item_category_ids, sub_category_ids FROM role_category_access WHERE role_id = $1',
+      [role.id]
+    );
+    const rca = rcaResult.rows[0];
+    const catAccess = rca
+      ? {
+          productCategoryIds: rca.product_category_ids || [],
+          itemCategoryIds: rca.item_category_ids || [],
+          subCategoryIds: rca.sub_category_ids || [],
+        }
+      : null;
+
     res.status(201).json({
       success: true,
       message: 'Role created successfully',
@@ -121,6 +160,7 @@ const createRole = async (req, res, next) => {
         name: role.name,
         description: role.description,
         permissions: rolePermissions,
+        categoryAccess: catAccess,
         createdAt: role.created_at,
       },
     });
@@ -135,7 +175,7 @@ const createRole = async (req, res, next) => {
 const updateRole = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { name, description, permissions } = req.body;
+    const { name, description, permissions, categoryAccess } = req.body;
     const companyId = getCompanyId(req);
 
     const roleCheck = await pool.query(
@@ -184,6 +224,25 @@ const updateRole = async (req, res, next) => {
       }
     }
 
+    if (categoryAccess !== undefined) {
+      if (categoryAccess && typeof categoryAccess === 'object') {
+        const pcIds = Array.isArray(categoryAccess.productCategoryIds) ? categoryAccess.productCategoryIds : [];
+        const icIds = Array.isArray(categoryAccess.itemCategoryIds) ? categoryAccess.itemCategoryIds : [];
+        const scIds = Array.isArray(categoryAccess.subCategoryIds) ? categoryAccess.subCategoryIds : [];
+        await pool.query(
+          `INSERT INTO role_category_access (role_id, product_category_ids, item_category_ids, sub_category_ids, view, create, edit, delete)
+           VALUES ($1, $2, $3, $4, true, false, false, false)
+           ON CONFLICT (role_id) DO UPDATE SET
+             product_category_ids = EXCLUDED.product_category_ids,
+             item_category_ids = EXCLUDED.item_category_ids,
+             sub_category_ids = EXCLUDED.sub_category_ids`,
+          [id, pcIds, icIds, scIds]
+        );
+      } else {
+        await pool.query('DELETE FROM role_category_access WHERE role_id = $1', [id]);
+      }
+    }
+
     const roleResult = await pool.query(
       'SELECT id, name, description, updated_at FROM roles WHERE id = $1',
       [id]
@@ -194,6 +253,18 @@ const updateRole = async (req, res, next) => {
        WHERE rp.role_id = $1`,
       [id]
     );
+    const rcaResult = await pool.query(
+      'SELECT product_category_ids, item_category_ids, sub_category_ids FROM role_category_access WHERE role_id = $1',
+      [id]
+    );
+    const rca = rcaResult.rows[0];
+    const catAccess = rca
+      ? {
+          productCategoryIds: rca.product_category_ids || [],
+          itemCategoryIds: rca.item_category_ids || [],
+          subCategoryIds: rca.sub_category_ids || [],
+        }
+      : null;
 
     res.json({
       success: true,
@@ -203,6 +274,7 @@ const updateRole = async (req, res, next) => {
         name: roleResult.rows[0].name,
         description: roleResult.rows[0].description,
         permissions: permsResult.rows.map((p) => `${p.module}.${p.action}`),
+        categoryAccess: catAccess,
         updatedAt: roleResult.rows[0].updated_at,
       },
     });

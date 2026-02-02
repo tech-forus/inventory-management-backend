@@ -1,5 +1,6 @@
 const SKUModel = require('../models/skuModel');
 const { getCompanyId } = require('../middlewares/auth');
+const { getUserCategoryAccess } = require('../utils/rbac');
 const { generateUniqueSKUId, generateBulkUniqueSKUIds } = require('../utils/skuIdGenerator');
 const { transformSKU } = require('../utils/transformers');
 const { parseExcelFile } = require('../utils/helpers');
@@ -18,10 +19,12 @@ const getAllSKUs = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
     const user = req.user || {};
+    const categoryAccess = await getUserCategoryAccess(user.userId, companyId, user.role);
+
     const filters = {
       search: req.query.search ? req.query.search.trim() : undefined,
       productCategory: req.query.productCategory,
-      productCategories: req.query.productCategories, // Multiple category IDs (comma-separated)
+      productCategories: req.query.productCategories,
       itemCategory: req.query.itemCategory,
       subCategory: req.query.subCategory,
       brand: req.query.brand,
@@ -31,6 +34,9 @@ const getAllSKUs = async (req, res, next) => {
       limit: req.query.limit || 20,
       sortBy: req.query.sortBy,
       sortOrder: req.query.sortOrder,
+      allowedProductCategoryIds: categoryAccess?.productCategoryIds || null,
+      allowedItemCategoryIds: categoryAccess?.itemCategoryIds || null,
+      allowedSubCategoryIds: categoryAccess?.subCategoryIds || null,
     };
     const skus = await SKUModel.getAll(filters, companyId);
     const total = await SKUModel.getCount(filters, companyId);

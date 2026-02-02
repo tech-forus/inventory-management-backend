@@ -115,6 +115,21 @@ class SKUModel {
       params.push(filters.subCategory);
       paramIndex++;
     }
+    if (filters.allowedProductCategoryIds && filters.allowedProductCategoryIds.length > 0) {
+      query += ` AND s.product_category_id = ANY($${paramIndex}::integer[])`;
+      params.push(filters.allowedProductCategoryIds);
+      paramIndex++;
+    }
+    if (filters.allowedItemCategoryIds && filters.allowedItemCategoryIds.length > 0) {
+      query += ` AND s.item_category_id = ANY($${paramIndex}::integer[])`;
+      params.push(filters.allowedItemCategoryIds);
+      paramIndex++;
+    }
+    if (filters.allowedSubCategoryIds && filters.allowedSubCategoryIds.length > 0) {
+      query += ` AND s.sub_category_id = ANY($${paramIndex}::integer[])`;
+      params.push(filters.allowedSubCategoryIds);
+      paramIndex++;
+    }
     if (filters.brand) {
       query += ` AND s.brand_id = $${paramIndex}`;
       params.push(filters.brand);
@@ -247,6 +262,21 @@ class SKUModel {
     if (filters.subCategory) {
       query += ` AND s.sub_category_id = $${paramIndex}`;
       params.push(filters.subCategory);
+      paramIndex++;
+    }
+    if (filters.allowedProductCategoryIds && filters.allowedProductCategoryIds.length > 0) {
+      query += ` AND s.product_category_id = ANY($${paramIndex}::integer[])`;
+      params.push(filters.allowedProductCategoryIds);
+      paramIndex++;
+    }
+    if (filters.allowedItemCategoryIds && filters.allowedItemCategoryIds.length > 0) {
+      query += ` AND s.item_category_id = ANY($${paramIndex}::integer[])`;
+      params.push(filters.allowedItemCategoryIds);
+      paramIndex++;
+    }
+    if (filters.allowedSubCategoryIds && filters.allowedSubCategoryIds.length > 0) {
+      query += ` AND s.sub_category_id = ANY($${paramIndex}::integer[])`;
+      params.push(filters.allowedSubCategoryIds);
       paramIndex++;
     }
     if (filters.brand) {
