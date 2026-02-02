@@ -3,7 +3,7 @@ const router = express.Router();
 const authController = require('../controllers/authController');
 const { validateRequired, validateEmailOrPhone } = require('../middlewares/validation');
 const { authenticate } = require('../middlewares/auth');
-const { getUserPermissions } = require('../utils/rbac');
+const { getUserPermissions, getUserCategoryAccess } = require('../utils/rbac');
 
 router.post(
   '/login',
@@ -30,6 +30,8 @@ router.get('/me', authenticate, async (req, res, next) => {
       permissions = ['*'];
     }
 
+    const categoryAccess = await getUserCategoryAccess(userId, companyId, userRole);
+
     return res.json({
       success: true,
       data: {
@@ -37,6 +39,7 @@ router.get('/me', authenticate, async (req, res, next) => {
         companyId,
         role: userRole,
         permissions: Array.isArray(permissions) ? permissions : [],
+        categoryAccess: categoryAccess || undefined,
       },
     });
   } catch (err) {

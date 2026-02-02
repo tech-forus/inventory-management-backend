@@ -10,13 +10,14 @@ const pool = require('../models/database');
  * @returns {Promise<string[]>} Array of "module.action" strings
  */
 async function getUserPermissions(userId, companyId) {
+  const normalizedCompanyId = String(companyId || '').toUpperCase();
   const result = await pool.query(
     `SELECT DISTINCT p.module, p.action
      FROM user_roles ur
      JOIN role_permissions rp ON ur.role_id = rp.role_id
      JOIN permissions p ON rp.permission_id = p.id
      WHERE ur.user_id = $1 AND ur.company_id = $2`,
-    [userId, companyId]
+    [userId, normalizedCompanyId]
   );
 
   return result.rows.map((r) => `${r.module}.${r.action}`);
@@ -67,12 +68,13 @@ async function getUserCategoryAccess(userId, companyId, userRole) {
   // Only super_admin bypasses (system-wide full access)
   if (userRole === 'super_admin') return null;
 
+  const normalizedCompanyId = String(companyId).toUpperCase();
   const result = await pool.query(
     `SELECT rca.product_category_ids, rca.item_category_ids, rca.sub_category_ids
      FROM user_roles ur
      JOIN role_category_access rca ON ur.role_id = rca.role_id
      WHERE ur.user_id = $1 AND ur.company_id = $2`,
-    [userId, companyId]
+    [userId, normalizedCompanyId]
   );
 
   if (result.rows.length === 0) return null; // No role_category_access = full access

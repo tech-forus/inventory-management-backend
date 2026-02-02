@@ -41,7 +41,7 @@ const getAllSKUs = async (req, res, next) => {
     const skus = await SKUModel.getAll(filters, companyId);
     const total = await SKUModel.getCount(filters, companyId);
     const transformedData = skus.map(transformSKU);
-    res.json({
+    const response = {
       success: true,
       data: transformedData,
       total,
@@ -51,7 +51,18 @@ const getAllSKUs = async (req, res, next) => {
         total,
         totalPages: Math.ceil(total / parseInt(filters.limit)),
       },
-    });
+    };
+    if (req.query.debug === '1') {
+      response._debug = {
+        categoryAccess,
+        appliedFilters: {
+          allowedProductCategoryIds: filters.allowedProductCategoryIds,
+          allowedItemCategoryIds: filters.allowedItemCategoryIds,
+          allowedSubCategoryIds: filters.allowedSubCategoryIds,
+        },
+      };
+    }
+    res.json(response);
   } catch (error) {
     next(error);
   }
