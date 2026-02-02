@@ -4,6 +4,7 @@ const multer = require('multer');
 const { Pool } = require('pg');
 const dbConfig = require('../config/database');
 const { authenticate, getCompanyId } = require('../middlewares/auth');
+const { getUserCategoryAccess } = require('../utils/rbac');
 const { generateUniqueSKUId } = require('../utils/skuIdGenerator');
 const { validateRequired, validateNumeric } = require('../middlewares/validation');
 const skuController = require('../controllers/skuController');
@@ -121,6 +122,8 @@ router.get('/', async (req, res, next) => {
   try {
     const companyId = getCompanyId(req).toUpperCase();
     const user = req.user || {};
+    const categoryAccess = await getUserCategoryAccess(user.userId, companyId, user.role);
+
     const {
       search,
       productCategory,
@@ -154,14 +157,33 @@ router.get('/', async (req, res, next) => {
     const params = [companyId];
     let paramIndex = 2;
 
+    // RBAC: restrict to user's allowed categories when role has category access
+    if (categoryAccess?.productCategoryIds?.length) {
+      query += ` AND s.product_category_id = ANY($${paramIndex}::int[])`;
+      params.push(categoryAccess.productCategoryIds);
+      paramIndex++;
+    }
+    if (categoryAccess?.itemCategoryIds?.length) {
+      query += ` AND s.item_category_id = ANY($${paramIndex}::int[])`;
+      params.push(categoryAccess.itemCategoryIds);
+      paramIndex++;
+    }
+    if (categoryAccess?.subCategoryIds?.length) {
+      query += ` AND s.sub_category_id = ANY($${paramIndex}::int[])`;
+      params.push(categoryAccess.subCategoryIds);
+      paramIndex++;
+    }
+
     // Multi-token search: all tokens must appear in one normalized blob (space/underscore insensitive), then order by relevance
     let searchBlobExpr = null;
     let searchTokenCount = 0;
+    let searchParamStart = 2;
     if (search && search.trim()) {
       const rawTokens = search.trim().split(/[\s,]+/).map(t => t.trim()).filter(t => t.length > 0);
       const tokens = rawTokens.map(t => t.toLowerCase().replace(/\s+/g, ''));
       if (tokens.length > 0) {
         searchTokenCount = tokens.length;
+        searchParamStart = paramIndex;
         // Single normalized blob: item_name + sku_id + brand + model (no spaces, no underscores, lower case)
         searchBlobExpr = `REPLACE(REPLACE(LOWER(COALESCE(s.item_name,'')||' '||COALESCE(s.sku_id,'')||' '||COALESCE(b.name,'')||' '||COALESCE(s.model,'')||' '||COALESCE(pc.name,'')||' '||COALESCE(ic.name,'')||' '||COALESCE(sc.name,'')), ' ', ''), '_', '')`;
         for (const token of tokens) {
@@ -259,7 +281,7 @@ router.get('/', async (req, res, next) => {
 
     const offset = (parseInt(page) - 1) * parseInt(limit);
     if (searchTokenCount > 0 && searchBlobExpr) {
-      const relevanceSum = Array.from({ length: searchTokenCount }, (_, i) => `(${searchBlobExpr} ILIKE $${2 + i})::int`).join(' + ');
+      const relevanceSum = Array.from({ length: searchTokenCount }, (_, i) => `(${searchBlobExpr} ILIKE $${searchParamStart + i})::int`).join(' + ');
       query += ` ORDER BY (${relevanceSum}) DESC, ${sortField} ${sortDirection} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
     } else {
       query += ` ORDER BY ${sortField} ${sortDirection} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
@@ -279,7 +301,7 @@ router.get('/', async (req, res, next) => {
       const categoryIds = productCategory.split(',').map(id => id.trim());
     }
 
-    res.json({
+    const response = {
       success: true,
       data: transformedData,
       total: totalCount,
@@ -289,7 +311,18 @@ router.get('/', async (req, res, next) => {
         total: totalCount,
         totalPages: Math.ceil(totalCount / parseInt(limit)),
       },
-    });
+    };
+    if (req.query.debug === '1') {
+      response._debug = {
+        categoryAccess,
+        appliedFilters: {
+          allowedProductCategoryIds: categoryAccess?.productCategoryIds || null,
+          allowedItemCategoryIds: categoryAccess?.itemCategoryIds || null,
+          allowedSubCategoryIds: categoryAccess?.subCategoryIds || null,
+        },
+      };
+    }
+    res.json(response);
   } catch (error) {
     next(error);
   }
