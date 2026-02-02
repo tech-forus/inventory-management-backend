@@ -10,10 +10,10 @@ CREATE TABLE IF NOT EXISTS role_category_access (
   product_category_ids INTEGER[] DEFAULT '{}',
   item_category_ids INTEGER[] DEFAULT '{}',
   sub_category_ids INTEGER[] DEFAULT '{}',
-  view BOOLEAN DEFAULT true,
-  create BOOLEAN DEFAULT false,
+  "view" BOOLEAN DEFAULT true,
+  "create" BOOLEAN DEFAULT false,
   edit BOOLEAN DEFAULT false,
-  delete BOOLEAN DEFAULT false,
+  "delete" BOOLEAN DEFAULT false,
   UNIQUE(role_id)
 );
 

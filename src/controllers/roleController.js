@@ -133,7 +133,7 @@ const createRole = async (req, res, next) => {
       const icIds = Array.isArray(categoryAccess.itemCategoryIds) ? categoryAccess.itemCategoryIds : [];
       const scIds = Array.isArray(categoryAccess.subCategoryIds) ? categoryAccess.subCategoryIds : [];
       await pool.query(
-        `INSERT INTO role_category_access (role_id, product_category_ids, item_category_ids, sub_category_ids, view, create, edit, delete)
+        `INSERT INTO role_category_access (role_id, product_category_ids, item_category_ids, sub_category_ids, "view", "create", edit, "delete")
          VALUES ($1, $2, $3, $4, true, false, false, false)`,
         [role.id, pcIds, icIds, scIds]
       );
@@ -230,7 +230,7 @@ const updateRole = async (req, res, next) => {
         const icIds = Array.isArray(categoryAccess.itemCategoryIds) ? categoryAccess.itemCategoryIds : [];
         const scIds = Array.isArray(categoryAccess.subCategoryIds) ? categoryAccess.subCategoryIds : [];
         await pool.query(
-          `INSERT INTO role_category_access (role_id, product_category_ids, item_category_ids, sub_category_ids, view, create, edit, delete)
+          `INSERT INTO role_category_access (role_id, product_category_ids, item_category_ids, sub_category_ids, "view", "create", edit, "delete")
            VALUES ($1, $2, $3, $4, true, false, false, false)
            ON CONFLICT (role_id) DO UPDATE SET
              product_category_ids = EXCLUDED.product_category_ids,
