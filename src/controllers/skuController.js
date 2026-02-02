@@ -6,6 +6,7 @@ const { transformSKU } = require('../utils/transformers');
 const { parseExcelFile } = require('../utils/helpers');
 const pool = require('../models/database');
 const { NotFoundError, ValidationError } = require('../middlewares/errorHandler');
+const { logger } = require('../utils/logger');
 
 /**
  * SKU Controller
@@ -20,6 +21,15 @@ const getAllSKUs = async (req, res, next) => {
     const companyId = getCompanyId(req);
     const user = req.user || {};
     const categoryAccess = await getUserCategoryAccess(user.userId, companyId, user.role);
+
+    logger.info({
+      msg: '[getAllSKUs] category access check',
+      userId: user.userId,
+      companyId,
+      userRole: user.role,
+      categoryAccess: categoryAccess || 'null (full access)',
+      willFilter: !!(categoryAccess?.productCategoryIds?.length || categoryAccess?.itemCategoryIds?.length || categoryAccess?.subCategoryIds?.length),
+    });
 
     const filters = {
       search: req.query.search ? req.query.search.trim() : undefined,

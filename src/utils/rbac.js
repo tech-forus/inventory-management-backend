@@ -2,6 +2,7 @@
  * RBAC utilities - resolve user permissions from roles
  */
 const pool = require('../models/database');
+const { logger } = require('../utils/logger');
 
 /**
  * Get all permissions for a user in a company (from user_roles -> role_permissions -> permissions)
@@ -16,7 +17,7 @@ async function getUserPermissions(userId, companyId) {
      FROM user_roles ur
      JOIN role_permissions rp ON ur.role_id = rp.role_id
      JOIN permissions p ON rp.permission_id = p.id
-     WHERE ur.user_id = $1 AND ur.company_id = $2`,
+     WHERE ur.user_id = $1 AND UPPER(ur.company_id) = UPPER($2)`,
     [userId, normalizedCompanyId]
   );
 
@@ -73,9 +74,21 @@ async function getUserCategoryAccess(userId, companyId, userRole) {
     `SELECT rca.product_category_ids, rca.item_category_ids, rca.sub_category_ids
      FROM user_roles ur
      JOIN role_category_access rca ON ur.role_id = rca.role_id
-     WHERE ur.user_id = $1 AND ur.company_id = $2`,
+     WHERE ur.user_id = $1 AND UPPER(ur.company_id) = UPPER($2)`,
     [userId, normalizedCompanyId]
   );
+
+  logger.info({
+    msg: '[getUserCategoryAccess] query result',
+    userId,
+    companyId: normalizedCompanyId,
+    rowCount: result.rows.length,
+    rows: result.rows.map((r) => ({
+      product_category_ids: r.product_category_ids,
+      item_category_ids: r.item_category_ids,
+      sub_category_ids: r.sub_category_ids,
+    })),
+  });
 
   if (result.rows.length === 0) return null; // No role_category_access = full access
 

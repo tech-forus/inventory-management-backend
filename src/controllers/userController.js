@@ -171,17 +171,18 @@ const inviteUser = async (req, res, next) => {
       ]
     );
 
-    // RBAC: assign roles to user
+    // RBAC: assign roles to user (use uppercase company_id for consistency with RBAC queries)
+    const normalizedCompanyId = String(companyId).toUpperCase();
     for (const roleId of roleIdArray) {
       const roleCheck = await client.query(
         'SELECT id FROM roles WHERE id = $1 AND company_id = $2',
-        [roleId, companyId]
+        [roleId, normalizedCompanyId]
       );
       if (roleCheck.rows.length > 0) {
         await client.query(
           `INSERT INTO user_roles (user_id, role_id, company_id)
            VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
-          [user.id, roleId, companyId]
+          [user.id, roleId, normalizedCompanyId]
         );
       }
     }
@@ -666,19 +667,20 @@ const assignUserRoles = async (req, res, next) => {
       throw new NotFoundError('User not found');
     }
 
-    await pool.query('DELETE FROM user_roles WHERE user_id = $1 AND company_id = $2', [id, companyId]);
+    const normalizedCompanyId = String(companyId).toUpperCase();
+    await pool.query('DELETE FROM user_roles WHERE user_id = $1 AND company_id = $2', [id, normalizedCompanyId]);
 
     const roleIdArray = Array.isArray(roleIds) ? roleIds : [];
     for (const roleId of roleIdArray) {
       const roleCheck = await pool.query(
         'SELECT id FROM roles WHERE id = $1 AND company_id = $2',
-        [roleId, companyId]
+        [roleId, normalizedCompanyId]
       );
       if (roleCheck.rows.length > 0) {
         await pool.query(
           `INSERT INTO user_roles (user_id, role_id, company_id)
            VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
-          [id, roleId, companyId]
+          [id, roleId, normalizedCompanyId]
         );
       }
     }
@@ -689,14 +691,14 @@ const assignUserRoles = async (req, res, next) => {
       const placeholders = roleIdArray.map((_, i) => `$${i + 1}`).join(',');
       const roleNamesResult = await pool.query(
         `SELECT name FROM roles WHERE id IN (${placeholders}) AND company_id = $${roleIdArray.length + 1}`,
-        [...roleIdArray, companyId]
+        [...roleIdArray, normalizedCompanyId]
       );
       const hasAdminRole = roleNamesResult.rows.some((r) => r.name && String(r.name).toLowerCase() === 'admin');
       if (hasAdminRole) newUsersRole = 'admin';
     }
     await pool.query(
       'UPDATE users SET role = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND company_id = $3',
-      [newUsersRole, id, companyId]
+      [newUsersRole, id, normalizedCompanyId]
     );
 
     res.json({
