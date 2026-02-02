@@ -292,7 +292,7 @@ const deleteRole = async (req, res, next) => {
     const companyId = getCompanyId(req);
 
     const roleCheck = await pool.query(
-      'SELECT id, is_system FROM roles WHERE id = $1 AND company_id = $2',
+      'SELECT id, is_system, name FROM roles WHERE id = $1 AND company_id = $2',
       [id, companyId]
     );
     if (roleCheck.rows.length === 0) {
@@ -302,6 +302,12 @@ const deleteRole = async (req, res, next) => {
       return res.status(400).json({
         success: false,
         error: 'System roles cannot be deleted',
+      });
+    }
+    if (roleCheck.rows[0].name && String(roleCheck.rows[0].name).toLowerCase() === 'super admin') {
+      return res.status(400).json({
+        success: false,
+        error: 'Super Admin role cannot be deleted',
       });
     }
 
