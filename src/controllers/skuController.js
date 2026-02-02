@@ -22,13 +22,15 @@ const getAllSKUs = async (req, res, next) => {
     const user = req.user || {};
     const categoryAccess = await getUserCategoryAccess(user.userId, companyId, user.role);
 
+    const willFilter = !!(categoryAccess?.productCategoryIds?.length || categoryAccess?.itemCategoryIds?.length || categoryAccess?.subCategoryIds?.length);
     logger.info({
-      msg: '[getAllSKUs] category access check',
+      msg: '[getAllSKUs]',
       userId: user.userId,
-      companyId,
       userRole: user.role,
-      categoryAccess: categoryAccess || 'null (full access)',
-      willFilter: !!(categoryAccess?.productCategoryIds?.length || categoryAccess?.itemCategoryIds?.length || categoryAccess?.subCategoryIds?.length),
+      willFilter,
+      productIds: categoryAccess?.productCategoryIds || [],
+      itemIds: categoryAccess?.itemCategoryIds || [],
+      subIds: categoryAccess?.subCategoryIds || [],
     });
 
     const filters = {

@@ -79,15 +79,19 @@ async function getUserCategoryAccess(userId, companyId, userRole) {
   );
 
   logger.info({
-    msg: '[getUserCategoryAccess] query result',
+    msg: '[getUserCategoryAccess]',
     userId,
     companyId: normalizedCompanyId,
     rowCount: result.rows.length,
-    rows: result.rows.map((r) => ({
-      product_category_ids: r.product_category_ids,
-      item_category_ids: r.item_category_ids,
-      sub_category_ids: r.sub_category_ids,
-    })),
+    hasRestrictions: result.rows.some(
+      (r) =>
+        (r.product_category_ids?.length || 0) > 0 ||
+        (r.item_category_ids?.length || 0) > 0 ||
+        (r.sub_category_ids?.length || 0) > 0
+    ),
+    productIds: result.rows.flatMap((r) => r.product_category_ids || []),
+    itemIds: result.rows.flatMap((r) => r.item_category_ids || []),
+    subIds: result.rows.flatMap((r) => r.sub_category_ids || []),
   });
 
   if (result.rows.length === 0) return null; // No role_category_access = full access
