@@ -5,6 +5,17 @@
 
 BEGIN;
 
+-- Ensure is_non_movable column exists on skus (required for idx_skus_non_movable index)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'skus' AND column_name = 'is_non_movable'
+  ) THEN
+    ALTER TABLE public.skus ADD COLUMN is_non_movable BOOLEAN DEFAULT false;
+  END IF;
+END $$;
+
 -- Index for stock level queries (low stock alerts calculation)
 -- Used by dashboard to find SKUs where current_stock < min_stock_level
 CREATE INDEX IF NOT EXISTS idx_skus_stock_levels 
@@ -34,9 +45,19 @@ ON skus(company_id, is_active, current_stock)
 WHERE is_active = true;
 
 -- Index for non-movable SKUs (is_non_movable flag queries)
-CREATE INDEX IF NOT EXISTS idx_skus_non_movable
-ON skus(company_id, is_non_movable, current_stock, is_active)
-WHERE is_active = true AND is_non_movable = true;
+-- Only create when column exists (column is added by DO block above or migration_non_movable.js)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'skus' AND column_name = 'is_non_movable'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_skus_non_movable
+    ON public.skus(company_id, is_non_movable, current_stock, is_active)
+    WHERE is_active = true AND is_non_movable = true;
+    COMMENT ON INDEX idx_skus_non_movable IS 'Optimizes non-movable SKU analytics queries';
+  END IF;
+END $$;
 
 -- Add comments for documentation
 COMMENT ON INDEX idx_skus_stock_levels IS 
@@ -53,8 +74,5 @@ COMMENT ON INDEX idx_outgoing_items_analytics IS
 
 COMMENT ON INDEX idx_skus_company_active IS 
 'Optimizes general SKU queries by company with active status filter';
-
-COMMENT ON INDEX idx_skus_non_movable IS 
-'Optimizes non-movable SKU analytics queries';
 
 COMMIT;
