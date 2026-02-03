@@ -32,13 +32,14 @@ class TeamModel {
    */
   static async create(teamData, companyId) {
     const result = await pool.query(
-      `INSERT INTO teams (company_id, name, contact_number, email_id, department, designation, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO teams (company_id, name, contact_number, email_id, department, designation, employee_id, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        ON CONFLICT (company_id, email_id) DO UPDATE
        SET name = EXCLUDED.name,
            contact_number = EXCLUDED.contact_number,
            department = EXCLUDED.department,
            designation = EXCLUDED.designation,
+           employee_id = EXCLUDED.employee_id,
            is_active = EXCLUDED.is_active,
            updated_at = CURRENT_TIMESTAMP
        RETURNING *`,
@@ -49,6 +50,7 @@ class TeamModel {
         teamData.emailId,
         teamData.department,
         teamData.designation,
+        teamData.employeeId || null,
         teamData.isActive !== false,
       ]
     );
@@ -66,9 +68,10 @@ class TeamModel {
            email_id = $3, 
            department = $4, 
            designation = $5, 
-           is_active = $6,
+           employee_id = $6,
+           is_active = $7,
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $7 AND company_id = $8 
+       WHERE id = $8 AND company_id = $9 
        RETURNING *`,
       [
         teamData.name,
@@ -76,6 +79,7 @@ class TeamModel {
         teamData.emailId,
         teamData.department,
         teamData.designation,
+        teamData.employeeId || null,
         teamData.isActive !== false,
         id,
         companyId.toUpperCase(),

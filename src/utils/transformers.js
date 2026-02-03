@@ -125,6 +125,7 @@ const transformTeam = (team) => {
     emailId: team.email_id,
     department: team.department,
     designation: team.designation,
+    employeeId: team.employee_id,
     isActive: team.is_active,
     createdAt: team.created_at,
     updatedAt: team.updated_at,

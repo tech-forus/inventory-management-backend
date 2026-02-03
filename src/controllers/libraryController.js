@@ -1305,6 +1305,7 @@ const uploadTeams = async (req, res, next) => {
           emailId: row.email_id || row.emailId,
           department: row.department?.toString().trim(),
           designation: row.designation?.toString().trim(),
+          employeeId: (row.employee_id || row.employeeId || '').toString().trim() || null,
           isActive: true, // Always true for Excel uploads
         }, companyId);
         inserted.push({ id: team.id, name: team.name });
