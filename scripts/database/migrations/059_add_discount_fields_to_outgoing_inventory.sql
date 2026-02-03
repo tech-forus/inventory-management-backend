@@ -113,35 +113,36 @@ WHERE
   OR final_taxable_amount IS NULL;
 
 -- ============================================================================
--- PART 4: Add validation constraints
+-- PART 4: Add validation constraints (idempotent)
 -- ============================================================================
 
--- Ensure invoice_level_discount_type is valid
-ALTER TABLE outgoing_inventory
-  ADD CONSTRAINT check_invoice_discount_type
-  CHECK (invoice_level_discount_type IN ('percentage', 'flat'));
-
--- Ensure percentages are within valid range (0-100)
-ALTER TABLE outgoing_inventory_items
-  ADD CONSTRAINT check_sku_discount_range
-  CHECK (sku_discount >= 0 AND sku_discount <= 100);
-
-ALTER TABLE outgoing_inventory_items
-  ADD CONSTRAINT check_gst_percentage_range
-  CHECK (gst_percentage >= 0 AND gst_percentage <= 100);
-
--- Ensure discount amounts and totals are non-negative
-ALTER TABLE outgoing_inventory
-  ADD CONSTRAINT check_freight_amount_positive
-  CHECK (freight_amount >= 0);
-
-ALTER TABLE outgoing_inventory
-  ADD CONSTRAINT check_invoice_discount_positive
-  CHECK (invoice_level_discount >= 0);
-
-ALTER TABLE outgoing_inventory_items
-  ADD CONSTRAINT check_sku_discount_amount_positive
-  CHECK (sku_discount_amount >= 0);
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'check_invoice_discount_type') THEN
+    ALTER TABLE outgoing_inventory ADD CONSTRAINT check_invoice_discount_type
+      CHECK (invoice_level_discount_type IN ('percentage', 'flat'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'check_sku_discount_range') THEN
+    ALTER TABLE outgoing_inventory_items ADD CONSTRAINT check_sku_discount_range
+      CHECK (sku_discount >= 0 AND sku_discount <= 100);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'check_gst_percentage_range') THEN
+    ALTER TABLE outgoing_inventory_items ADD CONSTRAINT check_gst_percentage_range
+      CHECK (gst_percentage >= 0 AND gst_percentage <= 100);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'check_freight_amount_positive') THEN
+    ALTER TABLE outgoing_inventory ADD CONSTRAINT check_freight_amount_positive
+      CHECK (freight_amount >= 0);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'check_invoice_discount_positive') THEN
+    ALTER TABLE outgoing_inventory ADD CONSTRAINT check_invoice_discount_positive
+      CHECK (invoice_level_discount >= 0);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'check_sku_discount_amount_positive') THEN
+    ALTER TABLE outgoing_inventory_items ADD CONSTRAINT check_sku_discount_amount_positive
+      CHECK (sku_discount_amount >= 0);
+  END IF;
+END $$;
 
 -- ============================================================================
 -- PART 5: Create indexes for performance

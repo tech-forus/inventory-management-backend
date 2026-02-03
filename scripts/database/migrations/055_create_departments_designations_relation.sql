@@ -206,18 +206,24 @@ WHERE v.designation = des.name
 AND v.department_id = d.id
 AND v.designation IS NOT NULL;
 
--- Add foreign key constraints
-ALTER TABLE vendors
-ADD CONSTRAINT fk_vendors_department 
-  FOREIGN KEY (department_id) 
-  REFERENCES departments(id) 
-  ON DELETE SET NULL;
-
-ALTER TABLE vendors
-ADD CONSTRAINT fk_vendors_designation 
-  FOREIGN KEY (designation_id) 
-  REFERENCES designations(id) 
-  ON DELETE SET NULL;
+-- Add foreign key constraints (idempotent: skip if already exist)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_vendors_department') THEN
+    ALTER TABLE vendors
+    ADD CONSTRAINT fk_vendors_department 
+      FOREIGN KEY (department_id) 
+      REFERENCES departments(id) 
+      ON DELETE SET NULL;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_vendors_designation') THEN
+    ALTER TABLE vendors
+    ADD CONSTRAINT fk_vendors_designation 
+      FOREIGN KEY (designation_id) 
+      REFERENCES designations(id) 
+      ON DELETE SET NULL;
+  END IF;
+END $$;
 
 -- Create indexes for foreign keys
 CREATE INDEX IF NOT EXISTS idx_vendors_department_id ON vendors(department_id);
