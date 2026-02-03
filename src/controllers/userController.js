@@ -66,6 +66,7 @@ const inviteUser = async (req, res, next) => {
       role,
       department,
       roleIds = [],
+      categoryAccess,
     } = req.body;
 
     // Get company_id from authenticated user or request
@@ -183,6 +184,26 @@ const inviteUser = async (req, res, next) => {
           `INSERT INTO user_roles (user_id, role_id, company_id)
            VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
           [user.id, roleId, normalizedCompanyId]
+        );
+      }
+    }
+
+    // User-level category access (from CategoryAccessWizard on Invite page)
+    if (categoryAccess && typeof categoryAccess === 'object') {
+      const pcIds = Array.isArray(categoryAccess.productCategoryIds) ? categoryAccess.productCategoryIds : [];
+      const icIds = Array.isArray(categoryAccess.itemCategoryIds) ? categoryAccess.itemCategoryIds : [];
+      const scIds = Array.isArray(categoryAccess.subCategoryIds) ? categoryAccess.subCategoryIds : [];
+      const hasRestrictions = pcIds.length > 0 || icIds.length > 0 || scIds.length > 0;
+      if (hasRestrictions) {
+        await client.query(
+          `INSERT INTO user_category_access (user_id, company_id, product_category_ids, item_category_ids, sub_category_ids)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (user_id, company_id) DO UPDATE SET
+             product_category_ids = EXCLUDED.product_category_ids,
+             item_category_ids = EXCLUDED.item_category_ids,
+             sub_category_ids = EXCLUDED.sub_category_ids,
+             updated_at = CURRENT_TIMESTAMP`,
+          [user.id, normalizedCompanyId, pcIds, icIds, scIds]
         );
       }
     }
