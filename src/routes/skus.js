@@ -180,7 +180,7 @@ router.get('/', async (req, res, next) => {
     let searchParamStart = 2;
     if (search && search.trim()) {
       const rawTokens = search.trim().split(/[\s,]+/).map(t => t.trim()).filter(t => t.length > 0);
-      const tokens = rawTokens.map(t => t.toLowerCase().replace(/\s+/g, ''));
+      const tokens = rawTokens.map(t => t.toLowerCase().replace(/\s+/g, '').replace(/_/g, ''));
       if (tokens.length > 0) {
         searchTokenCount = tokens.length;
         searchParamStart = paramIndex;
