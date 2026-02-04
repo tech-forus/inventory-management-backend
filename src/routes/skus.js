@@ -8,7 +8,6 @@ const { getUserCategoryAccess } = require('../utils/rbac');
 const { generateUniqueSKUId } = require('../utils/skuIdGenerator');
 const { validateRequired, validateNumeric } = require('../middlewares/validation');
 const skuController = require('../controllers/skuController');
-const { expandTokens } = require('../utils/synonyms');
 
 const pool = new Pool(dbConfig);
 
@@ -175,41 +174,23 @@ router.get('/', async (req, res, next) => {
       paramIndex++;
     }
 
-    // Two-stage search: Stage A = exact blob ILIKE with synonym expansion, Stage B = fuzzy similarity fallback (single token only)
-    let searchOrderByPrefix = '';
+    // Multi-token search: all tokens must appear in one normalized blob (space/underscore insensitive), then order by relevance
+    let searchBlobExpr = null;
+    let searchTokenCount = 0;
+    let searchParamStart = 2;
     if (search && search.trim()) {
       const rawTokens = search.trim().split(/[\s,]+/).map(t => t.trim()).filter(t => t.length > 0);
       const tokens = rawTokens.map(t => t.toLowerCase().replace(/\s+/g, '').replace(/_/g, ''));
       if (tokens.length > 0) {
+        searchTokenCount = tokens.length;
+        searchParamStart = paramIndex;
+        // Single normalized blob: item_name + sku_id + brand + model (no spaces, no underscores, lower case)
+        searchBlobExpr = `REPLACE(REPLACE(LOWER(COALESCE(s.item_name,'')||' '||COALESCE(s.sku_id,'')||' '||COALESCE(b.name,'')||' '||COALESCE(s.model,'')||' '||COALESCE(pc.name,'')||' '||COALESCE(ic.name,'')||' '||COALESCE(sc.name,'')), ' ', ''), '_', '')`;
         for (const token of tokens) {
-          const expanded = expandTokens(token);
-          const blobConditions = [];
-          for (const variant of expanded) {
-            const escaped = variant.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
-            blobConditions.push(`s.search_blob ILIKE $${paramIndex}`);
-            params.push(`%${escaped}%`);
-            paramIndex++;
-          }
-          if (tokens.length === 1) {
-            // Single token: add fuzzy fallback via similarity() on item_name
-            blobConditions.push(`similarity(REPLACE(LOWER(COALESCE(s.item_name,'')), ' ', ''), $${paramIndex}) >= 0.4`);
-            params.push(token);
-            paramIndex++;
-          }
-          query += ` AND (${blobConditions.join(' OR ')})`;
-        }
-        // Relevance ORDER BY prefix: exact item_name match ranks first, then similarity score for single-token
-        const escapedFirst = tokens[0].replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
-        params.push(`%${escapedFirst}%`);
-        const rankParam = paramIndex;
-        paramIndex++;
-        if (tokens.length === 1) {
-          params.push(tokens[0]);
-          const simParam = paramIndex;
+          const likePattern = `%${String(token).replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')}%`;
+          query += ` AND (${searchBlobExpr} ILIKE $${paramIndex})`;
+          params.push(likePattern);
           paramIndex++;
-          searchOrderByPrefix = `CASE WHEN REPLACE(LOWER(COALESCE(s.item_name,'')), ' ', '') ILIKE $${rankParam} THEN 0 ELSE 1 END ASC, similarity(REPLACE(LOWER(COALESCE(s.item_name,'')), ' ', ''), $${simParam}) DESC, `;
-        } else {
-          searchOrderByPrefix = `CASE WHEN REPLACE(LOWER(COALESCE(s.item_name,'')), ' ', '') ILIKE $${rankParam} THEN 0 ELSE 1 END ASC, `;
         }
       }
     }
@@ -285,7 +266,7 @@ router.get('/', async (req, res, next) => {
       query += ` AND s.is_non_movable = false`;
     }
 
-    // Sorting
+    // Add sorting (when search active, order by relevance first)
     const validSortFields = {
       skuId: 's.sku_id',
       itemName: 's.item_name',
@@ -297,9 +278,14 @@ router.get('/', async (req, res, next) => {
 
     const sortField = validSortFields[sortBy] || 's.created_at';
     const sortDirection = sortOrder === 'desc' ? 'DESC' : 'ASC';
-    const offset = (parseInt(page) - 1) * parseInt(limit);
 
-    query += ` ORDER BY ${searchOrderByPrefix}${sortField} ${sortDirection} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    if (searchTokenCount > 0 && searchBlobExpr) {
+      const relevanceSum = Array.from({ length: searchTokenCount }, (_, i) => `(${searchBlobExpr} ILIKE $${searchParamStart + i})::int`).join(' + ');
+      query += ` ORDER BY (${relevanceSum}) DESC, ${sortField} ${sortDirection} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    } else {
+      query += ` ORDER BY ${sortField} ${sortDirection} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    }
     params.push(parseInt(limit), offset);
 
     const result = await pool.query(query, params);
@@ -337,78 +323,6 @@ router.get('/', async (req, res, next) => {
       };
     }
     res.json(response);
-  } catch (error) {
-    next(error);
-  }
-});
-
-/**
- * GET /api/skus/suggest
- * Autocomplete suggestions – returns up to 8 matching SKUs.
- * Must be registered before /:id so Express does not consume "suggest" as an id param.
- */
-router.get('/suggest', async (req, res, next) => {
-  try {
-    const companyId = getCompanyId(req).toUpperCase();
-    const user = req.user || {};
-    const categoryAccess = await getUserCategoryAccess(user.userId, companyId, user.role);
-    const { q } = req.query;
-
-    if (!q || q.trim().length < 2) {
-      return res.json({ success: true, suggestions: [] });
-    }
-
-    const normalized = q.trim().toLowerCase().replace(/\s+/g, '').replace(/_/g, '');
-    const expanded = expandTokens(normalized);
-
-    const params = [companyId];
-    let paramIdx = 2;
-
-    // RBAC filter
-    let accessFilter = '';
-    if (categoryAccess?.productCategoryIds?.length) {
-      accessFilter = ` AND s.product_category_id = ANY($${paramIdx}::int[])`;
-      params.push(categoryAccess.productCategoryIds);
-      paramIdx++;
-    }
-
-    // Synonym-expanded blob conditions
-    const blobConditions = [];
-    for (const variant of expanded) {
-      const escaped = variant.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
-      blobConditions.push(`s.search_blob ILIKE $${paramIdx}`);
-      params.push(`%${escaped}%`);
-      paramIdx++;
-    }
-
-    // ORDER BY: direct item_name hit first, then alphabetical
-    const escapedOriginal = normalized.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
-    params.push(`%${escapedOriginal}%`);
-    const rankParam = paramIdx;
-    paramIdx++;
-
-    const result = await pool.query(
-      `SELECT s.item_name, s.sku_id, s.model
-       FROM skus s
-       WHERE s.company_id = $1
-         AND s.is_active = true
-         ${accessFilter}
-         AND (${blobConditions.join(' OR ')})
-       ORDER BY
-         CASE WHEN REPLACE(LOWER(COALESCE(s.item_name,'')), ' ', '') ILIKE $${rankParam} THEN 0 ELSE 1 END ASC,
-         s.item_name ASC
-       LIMIT 8`,
-      params
-    );
-
-    res.json({
-      success: true,
-      suggestions: result.rows.map(row => ({
-        itemName: row.item_name,
-        skuId: row.sku_id,
-        model: row.model || null,
-      })),
-    });
   } catch (error) {
     next(error);
   }
