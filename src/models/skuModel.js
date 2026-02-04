@@ -22,7 +22,8 @@ class SKUModel {
         CASE 
           WHEN latest_incoming.receiving_date IS NOT NULL THEN 'IN'
           ELSE NULL
-        END as transaction_type
+        END as transaction_type,
+        latest_incoming.unit_price as last_purchase_price
       FROM skus s
       LEFT JOIN product_categories pc ON s.product_category_id = pc.id
       LEFT JOIN item_categories ic ON s.item_category_id = ic.id
@@ -30,7 +31,7 @@ class SKUModel {
       LEFT JOIN brands b ON s.brand_id = b.id
       LEFT JOIN vendors v ON s.vendor_id = v.id
       LEFT JOIN LATERAL (
-        SELECT ii.receiving_date
+        SELECT ii.receiving_date, iii.unit_price
         FROM incoming_inventory ii
         INNER JOIN incoming_inventory_items iii ON ii.id = iii.incoming_inventory_id
         WHERE iii.sku_id = s.id 
@@ -59,7 +60,7 @@ class SKUModel {
         { table: 'b', column: 'name', alias: 'brand_name' },
         { table: 'sc', column: 'name', alias: 'sub_category_name' }
       ];
-      
+
       // Use fuzzy search with similarity threshold of 0.3 (30% similarity)
       // This allows for typos while maintaining quality results
       const fuzzySearch = buildFuzzySearchQuery(
@@ -68,12 +69,12 @@ class SKUModel {
         paramIndex,
         { similarityThreshold: 0.3, exactMatchOnly: false }
       );
-      
+
       if (fuzzySearch.whereClause) {
         query += fuzzySearch.whereClause;
         params.push(...fuzzySearch.params);
         paramIndex = fuzzySearch.paramIndex;
-        
+
         // Store order by for later use (will override default sorting when search is active)
         fuzzySearchOrderBy = fuzzySearch.orderByClause;
       }
@@ -591,10 +592,10 @@ class SKUModel {
     const normalizedItemName = String(itemName || '').trim().toLowerCase();
     const normalizedModel = model ? String(model).trim().toUpperCase() : '';
     const normalizedCompanyId = String(companyId || '').toUpperCase();
-    
+
     // Create a combined string
     const combined = `${normalizedCompanyId}|${normalizedItemName}|${normalizedModel}`;
-    
+
     // Simple hash function to convert string to integer (for advisory lock)
     let hash = 0;
     for (let i = 0; i < combined.length; i++) {
@@ -602,7 +603,7 @@ class SKUModel {
       hash = ((hash << 5) - hash) + char;
       hash = hash & hash; // Convert to 32-bit integer
     }
-    
+
     // Use absolute value and ensure it's within PostgreSQL's int4 range
     // PostgreSQL advisory locks use int8, but we'll use a safe range
     return Math.abs(hash) % 2147483647; // Max safe int for PostgreSQL
@@ -631,7 +632,7 @@ class SKUModel {
         normalizedModel = modelStr;
       }
     }
-    
+
     const normalizedItemName = String(itemName).trim();
     if (!normalizedItemName) {
       return false;
