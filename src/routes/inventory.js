@@ -25,6 +25,7 @@ router.get('/', async (req, res, next) => {
       subCategory,
       brand,
       stockStatus,
+      vendorId,
     } = req.query;
 
     let query = `
@@ -92,6 +93,11 @@ router.get('/', async (req, res, next) => {
       } else if (stockStatus === 'in') {
         query += ` AND s.current_stock > 0 AND s.current_stock >= s.min_stock_level`;
       }
+    }
+    if (vendorId) {
+      query += ` AND (s.vendor_id = $${paramIndex} OR s.vendor_id IS NULL)`;
+      params.push(vendorId);
+      paramIndex++;
     }
 
     query += ` ORDER BY s.item_name ASC`;

@@ -158,6 +158,11 @@ class SKUModel {
       params.push(`%${filters.hsnCode}%`);
       paramIndex++;
     }
+    if (filters.vendorId) {
+      query += ` AND (s.vendor_id = $${paramIndex} OR s.vendor_id IS NULL)`;
+      params.push(filters.vendorId);
+      paramIndex++;
+    }
 
 
     // Add dynamic sorting

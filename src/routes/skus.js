@@ -137,6 +137,7 @@ router.get('/', async (req, res, next) => {
       page = 1,
       limit = 20,
       excludeNonMovable,
+      vendorId,
     } = req.query;
     let query = `
       SELECT 
@@ -282,6 +283,11 @@ router.get('/', async (req, res, next) => {
     }
     if (excludeNonMovable === 'true') {
       query += ` AND s.is_non_movable = false`;
+    }
+    if (vendorId) {
+      query += ` AND (s.vendor_id = $${paramIndex} OR s.vendor_id IS NULL)`;
+      params.push(vendorId);
+      paramIndex++;
     }
 
     // Add sorting (when search active, order by relevance first)
