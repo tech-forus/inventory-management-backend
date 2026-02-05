@@ -297,6 +297,9 @@ router.get('/', async (req, res, next) => {
     const sortField = validSortFields[sortBy] || 's.created_at';
     const sortDirection = sortOrder === 'desc' ? 'DESC' : 'ASC';
 
+    // Capture base query for total count (before adding sorting and pagination)
+    const baseQuery = query;
+
     const offset = (parseInt(page) - 1) * parseInt(limit);
     if (searchTokenCount > 0 && searchBlobExpr) {
       const relevanceSum = Array.from({ length: searchTokenCount }, (_, i) => `(${searchBlobExpr} ILIKE $${searchParamStart + i})::int`).join(' + ');
@@ -308,8 +311,8 @@ router.get('/', async (req, res, next) => {
 
     const result = await pool.query(query, params);
 
-    // Get total count
-    const countQuery = query.replace(/SELECT[\s\S]*?FROM/, 'SELECT COUNT(*) FROM').replace(/ORDER BY[\s\S]*$/, '');
+    // Get total count using a robust subquery wrapper
+    const countQuery = `SELECT COUNT(*) FROM (${baseQuery}) AS total`;
     const countResult = await pool.query(countQuery, params.slice(0, -2));
 
     // Transform snake_case to camelCase
