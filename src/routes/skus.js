@@ -109,6 +109,7 @@ const transformSKU = (sku) => {
     defaultStorageLocation: sku.default_storage_location,
     isActive: sku.is_active,
     isNonMovable: sku.is_non_movable,
+    lastPurchasePrice: sku.last_purchase_price,
     createdAt: sku.created_at,
     updatedAt: sku.updated_at,
   };
