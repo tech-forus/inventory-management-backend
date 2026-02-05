@@ -106,8 +106,6 @@ const transformSKU = (sku) => {
     currentStock: sku.current_stock,
     minStockLevel: sku.min_stock_level,
     reorderPoint: sku.reorder_point,
-    lastPurchasePrice: sku.last_purchase_price,
-    transactionType: sku.transaction_type,
     defaultStorageLocation: sku.default_storage_location,
     isActive: sku.is_active,
     isNonMovable: sku.is_non_movable,
@@ -147,30 +145,13 @@ router.get('/', async (req, res, next) => {
         ic.name as item_category,
         sc.name as sub_category,
         b.name as brand,
-        COALESCE(last_vendor.name, v.name) as vendor,
-        CASE 
-          WHEN latest_incoming.receiving_date IS NOT NULL THEN 'IN'
-          ELSE NULL
-        END as transaction_type,
-        latest_incoming.unit_price as last_purchase_price
+        v.name as vendor
       FROM skus s
       LEFT JOIN product_categories pc ON s.product_category_id = pc.id
       LEFT JOIN item_categories ic ON s.item_category_id = ic.id
       LEFT JOIN sub_categories sc ON s.sub_category_id = sc.id
       LEFT JOIN brands b ON s.brand_id = b.id
       LEFT JOIN vendors v ON s.vendor_id = v.id
-      LEFT JOIN LATERAL (
-        SELECT ii.receiving_date, iii.unit_price, ii.vendor_id
-        FROM incoming_inventory ii
-        INNER JOIN incoming_inventory_items iii ON ii.id = iii.incoming_inventory_id
-        WHERE iii.sku_id = s.id 
-          AND ii.company_id = $1 
-          AND ii.is_active = true 
-          AND ii.status = 'completed'
-        ORDER BY ii.receiving_date DESC, ii.id DESC
-        LIMIT 1
-      ) latest_incoming ON true
-      LEFT JOIN vendors last_vendor ON latest_incoming.vendor_id = last_vendor.id
       WHERE s.company_id = $1 AND s.is_active = true
     `;
     const params = [companyId];
@@ -367,30 +348,13 @@ router.get('/:id', async (req, res, next) => {
         ic.name as item_category,
         sc.name as sub_category,
         b.name as brand,
-        COALESCE(last_vendor.name, v.name) as vendor,
-        CASE 
-          WHEN latest_incoming.receiving_date IS NOT NULL THEN 'IN'
-          ELSE NULL
-        END as transaction_type,
-        latest_incoming.unit_price as last_purchase_price
+        v.name as vendor
       FROM skus s
       LEFT JOIN product_categories pc ON s.product_category_id = pc.id
       LEFT JOIN item_categories ic ON s.item_category_id = ic.id
       LEFT JOIN sub_categories sc ON s.sub_category_id = sc.id
       LEFT JOIN brands b ON s.brand_id = b.id
       LEFT JOIN vendors v ON s.vendor_id = v.id
-      LEFT JOIN LATERAL (
-        SELECT ii.receiving_date, iii.unit_price, ii.vendor_id
-        FROM incoming_inventory ii
-        INNER JOIN incoming_inventory_items iii ON ii.id = iii.incoming_inventory_id
-        WHERE iii.sku_id = s.id 
-          AND ii.company_id = $2 
-          AND ii.is_active = true 
-          AND ii.status = 'completed'
-        ORDER BY ii.receiving_date DESC, ii.id DESC
-        LIMIT 1
-      ) latest_incoming ON true
-      LEFT JOIN vendors last_vendor ON latest_incoming.vendor_id = last_vendor.id
       WHERE ${whereClause} AND s.company_id = $2 AND s.is_active = true`,
       [isNumeric ? parseInt(idParam, 10) : idParam, companyId]
     );
@@ -729,10 +693,10 @@ router.put(
 
       // Fetch old SKU to get current stock before update
       // Use proper parameter numbering ($1, $2) instead of referencing UPDATE query parameters
-      const oldSkuQuery = isNumeric
+      const oldSkuQuery = isNumeric 
         ? 'SELECT id, current_stock, opening_stock FROM skus WHERE id = $1 AND company_id = $2'
         : 'SELECT id, current_stock, opening_stock FROM skus WHERE sku_id = $1 AND company_id = $2';
-
+      
       const oldSkuResult = await client.query(oldSkuQuery, [idValue, companyId]);
 
       if (oldSkuResult.rows.length === 0) {
@@ -742,12 +706,12 @@ router.put(
 
       const oldSku = oldSkuResult.rows[0];
       const oldCurrentStock = parseInt(oldSku.current_stock || 0, 10);
-
+      
       // Parse new current stock (use openingStock if currentStock not provided, for backward compatibility)
-      const newCurrentStock = currentStock !== undefined && currentStock !== null
-        ? parseInt(String(currentStock).trim(), 10)
+      const newCurrentStock = currentStock !== undefined && currentStock !== null 
+        ? parseInt(String(currentStock).trim(), 10) 
         : (openingStock !== undefined && openingStock !== null ? parseInt(String(openingStock).trim(), 10) : oldCurrentStock);
-
+      
       // Calculate stock difference
       const stockDifference = newCurrentStock - oldCurrentStock;
 
