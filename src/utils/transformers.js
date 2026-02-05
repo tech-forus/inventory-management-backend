@@ -268,6 +268,9 @@ const transformSKU = (sku) => {
     defaultStorageLocation: sku.default_storage_location,
     isActive: sku.is_active,
     isNonMovable: sku.is_non_movable,
+    // Latest purchase price (unit price) from the most recent completed incoming inventory
+    // This is what the Purchase Page shows as "Last PP"
+    lastPurchasePrice: sku.last_purchase_price,
     createdAt: sku.created_at,
     updatedAt: sku.updated_at,
   };
@@ -343,5 +346,3 @@ module.exports = {
   transformColour,
   transformArray,
 };
-
-

@@ -12,14 +12,14 @@ class SKUModel {
    */
   static async getAll(filters, companyId) {
     let query = `
-      SELECT 
+      SELECT
         s.*,
         pc.name as product_category,
         ic.name as item_category,
         sc.name as sub_category,
         b.name as brand,
         COALESCE(last_vendor.name, v.name) as vendor,
-        CASE 
+        CASE
           WHEN latest_incoming.receiving_date IS NOT NULL THEN 'IN'
           ELSE NULL
         END as transaction_type,
@@ -34,9 +34,9 @@ class SKUModel {
         SELECT ii.receiving_date, iii.unit_price, ii.vendor_id
         FROM incoming_inventory ii
         INNER JOIN incoming_inventory_items iii ON ii.id = iii.incoming_inventory_id
-        WHERE iii.sku_id = s.id 
-          AND ii.company_id = $1 
-          AND ii.is_active = true 
+        WHERE iii.sku_id = s.id
+          AND ii.company_id = $1
+          AND ii.is_active = true
           AND ii.status = 'completed'
           AND ii.vendor_id IS NOT NULL
         ORDER BY ii.receiving_date DESC, ii.id DESC
@@ -173,16 +173,18 @@ class SKUModel {
       orderBy = fuzzySearchOrderBy.trim();
     } else if (filters.sortBy) {
       const validSortFields = {
-        'productCategory': 'pc.name',
-        'itemCategory': 'ic.name',
-        'subCategory': 'sc.name',
-        'itemName': 's.item_name',
-        'brand': 'b.name',
-        'vendor': 'v.name',
-        'currentStock': 's.current_stock',
-        'skuId': 's.sku_id',
-        'model': 's.model',
-        'hsnSacCode': 's.hsn_sac_code'
+        productCategory: 'pc.name',
+        itemCategory: 'ic.name',
+        subCategory: 'sc.name',
+        itemName: 's.item_name',
+        brand: 'b.name',
+        vendor: 'v.name',
+        currentStock: 's.current_stock',
+        skuId: 's.sku_id',
+        model: 's.model',
+        hsnSacCode: 's.hsn_sac_code',
+        // Sort by latest unit price from incoming inventory (Last PP)
+        lastPurchasePrice: 'last_purchase_price',
       };
 
       if (validSortFields[filters.sortBy]) {
@@ -208,7 +210,7 @@ class SKUModel {
    */
   static async getCount(filters, companyId) {
     let query = `
-      SELECT COUNT(*) 
+      SELECT COUNT(*)
       FROM skus s
       LEFT JOIN brands b ON s.brand_id = b.id
       LEFT JOIN sub_categories sc ON s.sub_category_id = sc.id
@@ -221,9 +223,9 @@ class SKUModel {
     if (filters.search && filters.search.trim()) {
       const searchTrimmed = filters.search.trim();
       query += ` AND (
-        s.sku_id ILIKE $${paramIndex} 
-        OR s.item_name ILIKE $${paramIndex} 
-        OR s.model ILIKE $${paramIndex} 
+        s.sku_id ILIKE $${paramIndex}
+        OR s.item_name ILIKE $${paramIndex}
+        OR s.model ILIKE $${paramIndex}
         OR s.hsn_sac_code ILIKE $${paramIndex}
         OR s.series ILIKE $${paramIndex}
         OR s.rating_size ILIKE $${paramIndex}
@@ -341,7 +343,7 @@ class SKUModel {
     const idValue = isNumeric ? parseInt(idStr, 10) : idStr;
 
     let query = `
-      SELECT 
+      SELECT
         s.*,
         s.opening_stock,
         pc.name as product_category,
@@ -349,7 +351,7 @@ class SKUModel {
         sc.name as sub_category,
         b.name as brand,
         COALESCE(last_vendor.name, v.name) as vendor,
-        CASE 
+        CASE
           WHEN latest_incoming.receiving_date IS NOT NULL THEN 'IN'
           ELSE NULL
         END as transaction_type,
@@ -364,9 +366,9 @@ class SKUModel {
         SELECT ii.receiving_date, iii.unit_price, ii.vendor_id
         FROM incoming_inventory ii
         INNER JOIN incoming_inventory_items iii ON ii.id = iii.incoming_inventory_id
-        WHERE iii.sku_id = s.id 
-          AND ii.company_id = s.company_id 
-          AND ii.is_active = true 
+        WHERE iii.sku_id = s.id
+          AND ii.company_id = s.company_id
+          AND ii.is_active = true
           AND ii.status = 'completed'
           AND ii.vendor_id IS NOT NULL
         ORDER BY ii.receiving_date DESC, ii.id DESC
@@ -666,8 +668,8 @@ class SKUModel {
     // Build query - handle NULL and empty string for model
     // Use SELECT FOR UPDATE to lock rows and prevent race conditions
     let query = `
-      SELECT id FROM skus 
-      WHERE company_id = $1 
+      SELECT id FROM skus
+      WHERE company_id = $1
         AND LOWER(TRIM(item_name)) = LOWER(TRIM($2))
         AND is_active = true
     `;
@@ -702,5 +704,3 @@ class SKUModel {
 }
 
 module.exports = SKUModel;
-
-
