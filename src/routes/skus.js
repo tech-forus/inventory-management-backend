@@ -310,7 +310,7 @@ router.get('/', async (req, res, next) => {
     const result = await pool.query(query, params);
 
     // Get total count
-    const countQuery = query.replace(/SELECT[\s\S]*?FROM/, 'SELECT COUNT(*) FROM').replace(/ORDER BY[\s\S]*$/, '');
+    const countQuery = query.replace(/SELECT[\s\S]*FROM/, 'SELECT COUNT(*) FROM').replace(/ORDER BY[\s\S]*$/, '');
     const countResult = await pool.query(countQuery, params.slice(0, -2));
 
     // Transform snake_case to camelCase
