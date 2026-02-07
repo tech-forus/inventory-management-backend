@@ -71,7 +71,7 @@ const login = async (req, res, next) => {
     if (result.rows.length === 0) {
       return res.status(401).json({
         success: false,
-        error: 'Invalid email/phone number or password'
+        error: isEmail ? 'This email does not exist' : 'This phone number does not exist'
       });
     }
 
@@ -89,7 +89,7 @@ const login = async (req, res, next) => {
     if (!isPasswordValid) {
       return res.status(401).json({
         success: false,
-        error: 'Invalid password'
+        error: 'Incorrect password'
       });
     }
 
