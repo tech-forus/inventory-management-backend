@@ -204,8 +204,8 @@ router.get('/', async (req, res, next) => {
       if (tokens.length > 0) {
         searchTokenCount = tokens.length;
         searchParamStart = paramIndex;
-        // Single normalized blob: item_name + sku_id + brand + model (no spaces, no underscores, lower case)
-        searchBlobExpr = `REPLACE(REPLACE(LOWER(COALESCE(s.item_name,'')||' '||COALESCE(s.sku_id,'')||' '||COALESCE(b.name,'')||' '||COALESCE(s.model,'')||' '||COALESCE(pc.name,'')||' '||COALESCE(ic.name,'')||' '||COALESCE(sc.name,'')), ' ', ''), '_', '')`;
+        // Single normalized blob: item_name + sku_id + brand + model + categories + vendor + vendor_item_code (no spaces, no underscores, lower case)
+        searchBlobExpr = `REPLACE(REPLACE(LOWER(COALESCE(s.item_name,'')||' '||COALESCE(s.sku_id,'')||' '||COALESCE(b.name,'')||' '||COALESCE(s.model,'')||' '||COALESCE(pc.name,'')||' '||COALESCE(ic.name,'')||' '||COALESCE(sc.name,'')||' '||COALESCE(v.name,'')||' '||COALESCE(last_vendor.name,'')||' '||COALESCE(s.vendor_item_code,'')), ' ', ''), '_', '')`;
         for (const token of tokens) {
           const likePattern = `%${String(token).replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')}%`;
           query += ` AND (${searchBlobExpr} ILIKE $${paramIndex})`;
