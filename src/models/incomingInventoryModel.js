@@ -9,6 +9,7 @@ const LedgerService = require('../services/ledgerService');
 class IncomingInventoryModel {
   /**
    * Validate that all items belong to the selected Brand and respect Vendor Catalog restrictions
+   * STRICT MODE: SKUs must have matching categories/brands if vendor has restrictions
    * @param {Array} items - List of items with skuId
    * @param {number|string} brandId - Selected Brand ID
    * @param {number|string} vendorId - Selected Vendor ID
@@ -23,14 +24,17 @@ class IncomingInventoryModel {
       const productCatsRes = await client.query('SELECT product_category_id FROM vendor_product_categories WHERE vendor_id = $1', [vendorId]);
       const itemCatsRes = await client.query('SELECT item_category_id FROM vendor_item_categories WHERE vendor_id = $1', [vendorId]);
       const subCatsRes = await client.query('SELECT sub_category_id FROM vendor_sub_categories WHERE vendor_id = $1', [vendorId]);
+      const brandsRes = await client.query('SELECT brand_id FROM vendor_brands WHERE vendor_id = $1', [vendorId]);
 
       const allowedProductCats = productCatsRes.rows.map(r => r.product_category_id);
       const allowedItemCats = itemCatsRes.rows.map(r => r.item_category_id);
       const allowedSubCats = subCatsRes.rows.map(r => r.sub_category_id);
+      const allowedBrands = brandsRes.rows.map(r => r.brand_id);
 
       const hasProductRestrictions = allowedProductCats.length > 0;
       const hasItemRestrictions = allowedItemCats.length > 0;
       const hasSubRestrictions = allowedSubCats.length > 0;
+      const hasBrandRestrictions = allowedBrands.length > 0;
 
       // 2. Fetch details for all SKUs in the invoice
       const skuIds = [...new Set(items.map(i => i.skuId))]; // Unique IDs
@@ -44,7 +48,7 @@ class IncomingInventoryModel {
 
       const skusMap = new Map(skusRes.rows.map(s => [s.id, s]));
 
-      // 3. Iterate and Validate
+      // 3. Iterate and Validate (STRICT MODE)
       for (const item of items) {
         if (!item.skuId) continue;
 
@@ -53,27 +57,38 @@ class IncomingInventoryModel {
           throw new Error(`SKU ID ${item.skuId} not found in database or belongs to another company.`);
         }
 
-        // A. Brand Integrity
+        // A. Brand Integrity (Invoice Header Brand)
         if (brandId && sku.brand_id != brandId) {
           throw new Error(`Integrity Violation: SKU '${sku.sku_id}' (Brand ID: ${sku.brand_id}) does not belong to the selected Brand (ID: ${brandId}).`);
         }
 
-        // B. Vendor Catalog Integrity
+        // B. Vendor Catalog Integrity (STRICT ENFORCEMENT)
+
+        // Product Category - STRICT
         if (hasProductRestrictions) {
           if (!sku.product_category_id || !allowedProductCats.includes(sku.product_category_id)) {
             throw new Error(`Integrity Violation: SKU '${sku.sku_id}' Product Category is not authorized for this Vendor.`);
           }
         }
 
+        // Item Category - STRICT
         if (hasItemRestrictions) {
           if (!sku.item_category_id || !allowedItemCats.includes(sku.item_category_id)) {
             throw new Error(`Integrity Violation: SKU '${sku.sku_id}' Item Category is not authorized for this Vendor.`);
           }
         }
 
+        // Sub-Category - STRICT (SKU must have sub_category_id if vendor has restrictions)
         if (hasSubRestrictions) {
           if (!sku.sub_category_id || !allowedSubCats.includes(sku.sub_category_id)) {
-            throw new Error(`Integrity Violation: SKU '${sku.sku_id}' Sub Category is not authorized for this Vendor.`);
+            throw new Error(`Integrity Violation: SKU '${sku.sku_id}' Sub-Category is not authorized for this Vendor. SKU must have a matching sub-category.`);
+          }
+        }
+
+        // Brand (Vendor Catalog) - STRICT (NEW: validate against vendor's allowed brands)
+        if (hasBrandRestrictions) {
+          if (!sku.brand_id || !allowedBrands.includes(sku.brand_id)) {
+            throw new Error(`Integrity Violation: SKU '${sku.sku_id}' Brand is not authorized for this Vendor. SKU must belong to an allowed brand.`);
           }
         }
       }
@@ -395,7 +410,7 @@ class IncomingInventoryModel {
   static async getHistory(companyId, filters = {}) {
     // Check if we need to join with skus (for search or sku filter)
     const needsSkuJoin = filters.search || filters.sku;
-    
+
     let query = `
       SELECT 
         ii.id,
@@ -605,7 +620,7 @@ class IncomingInventoryModel {
         AND ii.is_active = true
         AND ii.status = 'completed'
     `;
-    
+
     const params = [companyId.toUpperCase()];
     let paramIndex = 2;
 
