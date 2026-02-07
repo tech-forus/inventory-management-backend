@@ -8,19 +8,19 @@ const { getCompanyId } = require('../middleware/auth');
 const getDashboardMetrics = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req).toUpperCase();
-    
+
     // Get date ranges
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
     const thirtyDaysAgo = new Date(today);
     thirtyDaysAgo.setDate(today.getDate() - 30);
     const dateFrom30 = thirtyDaysAgo.toISOString().split('T')[0];
-    
+
     const sevenDaysAgo = new Date(today);
     sevenDaysAgo.setDate(today.getDate() - 6); // 7 days including today
     const dateFrom7 = sevenDaysAgo.toISOString().split('T')[0];
-    
+
     const dateTo = today.toISOString().split('T')[0];
 
     // Execute all queries in parallel for optimal performance
@@ -140,10 +140,10 @@ const getDashboardMetrics = async (req, res, next) => {
       date.setDate(today.getDate() - i);
       const dateStr = date.toISOString().split('T')[0];
       const dayName = days[date.getDay()];
-      
+
       // Find movement data for this date
       const dayMovement = movementData.find(m => m.movement_date === dateStr);
-      
+
       movementSeries.push({
         day: `${dayName}\n${date.getDate()}`,
         date: date.getDate(),
@@ -157,11 +157,11 @@ const getDashboardMetrics = async (req, res, next) => {
     const transformedTopProducts = topProducts.map(item => {
       const stock = parseInt(item.current_stock) || 0;
       const minStock = parseInt(item.min_stock_level) || 0;
-      
+
       let status = 'In Stock';
       if (stock === 0) status = 'Out of Stock';
       else if (minStock > 0 && stock <= minStock) status = 'Low Stock';
-      
+
       return {
         id: item.id,
         name: item.item_name || 'Unknown Item',
@@ -211,7 +211,7 @@ const getSlowMovingSKUs = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req).toUpperCase();
     const period = parseInt(req.query.period || 90, 10);
-    
+
     // For now, return placeholder - this can be implemented later with proper analysis
     res.json({
       success: true,
@@ -223,7 +223,22 @@ const getSlowMovingSKUs = async (req, res, next) => {
   }
 };
 
+/**
+ * Get purchase page statistics
+ */
+const getPurchaseStats = async (req, res, next) => {
+  try {
+    const companyId = getCompanyId(req);
+    const SKUModel = require('../models/skuModel');
+    const stats = await SKUModel.getPurchaseStats(companyId);
+    res.json(stats);
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getDashboardMetrics,
-  getSlowMovingSKUs
+  getSlowMovingSKUs,
+  getPurchaseStats
 };

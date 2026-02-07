@@ -701,6 +701,47 @@ class SKUModel {
     const result = await queryClient.query(query, params);
     return result.rows.length > 0;
   }
+  /**
+   * Get purchase page statistics
+   */
+  static async getPurchaseStats(companyId) {
+    const client = await pool.connect();
+    try {
+      const cid = companyId.toUpperCase();
+
+      // 1. SKU Counts
+      const skuQuery = `
+        SELECT
+          COUNT(*) FILTER (WHERE current_stock = 0 AND min_stock_level > 0) as critical_count,
+          COUNT(*) FILTER (WHERE current_stock = 0 AND (min_stock_level <= 0 OR min_stock_level IS NULL)) as out_count,
+          COUNT(*) FILTER (WHERE current_stock > 0 AND current_stock < min_stock_level) as low_count,
+          COUNT(*) as total_count
+        FROM skus
+        WHERE company_id = $1 AND is_active = true
+      `;
+      const skuResult = await client.query(skuQuery, [cid]);
+      const skuStats = skuResult.rows[0];
+
+      // 2. Incoming Inventory History Count
+      const incomingQuery = `
+        SELECT COUNT(*) as history_count
+        FROM incoming_inventory
+        WHERE company_id = $1 AND is_active = true AND status = 'completed'
+      `;
+      const incomingResult = await client.query(incomingQuery, [cid]);
+      const incomingStats = incomingResult.rows[0];
+
+      return {
+        critical: parseInt(skuStats.critical_count) || 0,
+        out: parseInt(skuStats.out_count) || 0,
+        low: parseInt(skuStats.low_count) || 0,
+        total: parseInt(skuStats.total_count) || 0,
+        incoming: parseInt(incomingStats.history_count) || 0
+      };
+    } finally {
+      client.release();
+    }
+  }
 }
 
 module.exports = SKUModel;
