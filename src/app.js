@@ -156,6 +156,7 @@ const usersRoutes = require('./routes/users');
 const rolesRoutes = require('./routes/roles');
 const emailRoutes = require('./routes/email');
 const manufacturingRoutes = require('./routes/manufacturingRoutes');
+const dashboardRoutes = require('./routes/dashboard');
 
 // Apply conditional rate limiting to routes
 // Authenticated users get unlimited requests (JWT valid for 12 hours)
@@ -171,6 +172,7 @@ app.use('/api/users', usersRoutes); // User management routes
 app.use('/api/roles', rolesRoutes); // Role management routes
 app.use('/api/email', emailRoutes); // Email routes
 app.use('/api/manufacturing', apiRateLimiter, manufacturingRoutes); // Manufacturing routes
+app.use('/api/dashboard', apiRateLimiter, dashboardRoutes); // Dashboard routes
 
 // New "your" prefixed routes (must be last to avoid catching other routes)
 app.use('/api', apiRateLimiter, libraryRoutes);
