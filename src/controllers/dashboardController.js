@@ -1,5 +1,5 @@
 const { pool } = require('../models/database');
-const { getCompanyId } = require('../middleware/auth');
+const { getCompanyId } = require('../middlewares/auth');
 
 /**
  * Get all dashboard metrics in a single optimized call
