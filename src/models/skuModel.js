@@ -732,11 +732,11 @@ class SKUModel {
       const incomingStats = incomingResult.rows[0];
 
       return {
-        critical: parseInt(skuStats.critical_count) || 0,
-        out: parseInt(skuStats.out_count) || 0,
-        low: parseInt(skuStats.low_count) || 0,
-        total: parseInt(skuStats.total_count) || 0,
-        incoming: parseInt(incomingStats.history_count) || 0
+        criticalStock: parseInt(skuStats.critical_count) || 0,
+        outOfStock: parseInt(skuStats.out_count) || 0,
+        lowStock: parseInt(skuStats.low_count) || 0,
+        totalSkus: parseInt(skuStats.total_count) || 0,
+        incomingHistory: parseInt(incomingStats.history_count) || 0
       };
     } finally {
       client.release();
