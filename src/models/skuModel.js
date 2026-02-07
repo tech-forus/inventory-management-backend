@@ -23,7 +23,9 @@ class SKUModel {
           WHEN latest_incoming.receiving_date IS NOT NULL THEN 'IN'
           ELSE NULL
         END as transaction_type,
-        latest_incoming.unit_price as last_purchase_price
+        latest_incoming.unit_price as last_purchase_price,
+        purchase_stats.average_unit_price,
+        purchase_stats.min_unit_price
       FROM skus s
       LEFT JOIN product_categories pc ON s.product_category_id = pc.id
       LEFT JOIN item_categories ic ON s.item_category_id = ic.id
@@ -42,6 +44,17 @@ class SKUModel {
         ORDER BY ii.receiving_date DESC, ii.id DESC
         LIMIT 1
       ) latest_incoming ON true
+      LEFT JOIN LATERAL (
+        SELECT 
+          AVG(iii.unit_price)::DECIMAL(10,2) as average_unit_price,
+          MIN(iii.unit_price) as min_unit_price
+        FROM incoming_inventory ii
+        INNER JOIN incoming_inventory_items iii ON ii.id = iii.incoming_inventory_id
+        WHERE iii.sku_id = s.id
+          AND ii.company_id = $1
+          AND ii.is_active = true
+          AND ii.status = 'completed'
+      ) purchase_stats ON true
       LEFT JOIN vendors last_vendor ON latest_incoming.vendor_id = last_vendor.id
       WHERE s.company_id = $1 AND s.is_active = true
     `;
