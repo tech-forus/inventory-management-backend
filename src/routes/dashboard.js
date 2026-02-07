@@ -19,6 +19,7 @@ const dashboardController = require('../controllers/dashboardController');
  * - /api/inventory/outgoing/history
  */
 router.get('/metrics', authenticate, dashboardController.getDashboardMetrics);
+router.get('/purchase-stats', authenticate, dashboardController.getPurchaseStats);
 
 /**
  * GET /api/dashboard/slow-moving

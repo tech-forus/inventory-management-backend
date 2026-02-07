@@ -262,6 +262,44 @@ class IncomingInventoryModel {
               companyId: companyId.toUpperCase()
             });
           }
+
+          // UPDATE SKU STATS (Avg Price, Min Price, Purchase Count)
+          // Only if unit price > 0 and status is completed
+          if (unitPrice > 0) {
+            // Fetch current SKU stats
+            const skuStatsRes = await client.query(
+              'SELECT average_unit_price, min_unit_price, purchase_count FROM skus WHERE id = $1',
+              [item.skuId]
+            );
+
+            if (skuStatsRes.rows.length > 0) {
+              const sku = skuStatsRes.rows[0];
+              const currentAvg = parseFloat(sku.average_unit_price || 0);
+              const currentMin = parseFloat(sku.min_unit_price || 0);
+              const currentCount = parseInt(sku.purchase_count || 0);
+
+              // Calculate new stats
+              // Formula: new_avg = (old_avg * n + new_value) / (n + 1)
+              const newCount = currentCount + 1;
+              const newAvg = ((currentAvg * currentCount) + unitPrice) / newCount;
+
+              // Min price: if first purchase (count 0) or new price < current min
+              let newMin = currentMin;
+              if (currentCount === 0 || currentMin === 0) {
+                newMin = unitPrice;
+              } else {
+                newMin = Math.min(currentMin, unitPrice);
+              }
+
+              // Update SKU
+              await client.query(
+                `UPDATE skus
+                 SET average_unit_price = $1, min_unit_price = $2, purchase_count = $3
+                 WHERE id = $4`,
+                [newAvg, newMin, newCount, item.skuId]
+              );
+            }
+          }
         }
       }
 

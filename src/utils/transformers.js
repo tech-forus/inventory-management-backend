@@ -271,6 +271,9 @@ const transformSKU = (sku) => {
     // Latest purchase price (unit price) from the most recent completed incoming inventory
     // This is what the Purchase Page shows as "Last PP"
     lastPurchasePrice: sku.last_purchase_price,
+    averageUnitPrice: sku.average_unit_price,
+    minUnitPrice: sku.min_unit_price,
+    purchaseCount: sku.purchase_count,
     createdAt: sku.created_at,
     updatedAt: sku.updated_at,
   };
