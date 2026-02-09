@@ -110,8 +110,21 @@ const transformSKU = (sku) => {
     isActive: sku.is_active,
     isNonMovable: sku.is_non_movable,
     lastPurchasePrice: sku.last_purchase_price,
+    lastPurchaseDetails: sku.last_purchase_price ? {
+      invoiceNumber: sku.last_invoice_number,
+      invoiceDate: sku.last_invoice_date,
+      quantity: sku.last_quantity,
+      vendorName: sku.vendor
+    } : null,
     averageUnitPrice: sku.average_unit_price,
     minUnitPrice: sku.min_unit_price,
+    minPriceDetails: sku.min_unit_price ? {
+      invoiceNumber: sku.min_invoice_number,
+      invoiceDate: sku.min_invoice_date,
+      quantity: sku.min_quantity,
+      vendorName: sku.min_vendor_name,
+      price: sku.min_unit_price
+    } : null,
     createdAt: sku.created_at,
     updatedAt: sku.updated_at,
   };
@@ -155,8 +168,15 @@ router.get('/', async (req, res, next) => {
           ELSE NULL
         END as transaction_type,
         latest_incoming.unit_price as last_purchase_price,
+        latest_incoming.invoice_number as last_invoice_number,
+        latest_incoming.invoice_date as last_invoice_date,
+        latest_incoming.total_quantity as last_quantity,
         purchase_stats.average_unit_price,
-        purchase_stats.min_unit_price
+        purchase_stats.min_unit_price,
+        min_price_transaction.invoice_number as min_invoice_number,
+        min_price_transaction.invoice_date as min_invoice_date,
+        min_price_transaction.total_quantity as min_quantity,
+        min_vendor.name as min_vendor_name
       FROM skus s
       LEFT JOIN product_categories pc ON s.product_category_id = pc.id
       LEFT JOIN item_categories ic ON s.item_category_id = ic.id
@@ -164,7 +184,7 @@ router.get('/', async (req, res, next) => {
       LEFT JOIN brands b ON s.brand_id = b.id
       LEFT JOIN vendors v ON s.vendor_id = v.id
       LEFT JOIN LATERAL (
-        SELECT ii.receiving_date, iii.unit_price, ii.vendor_id
+        SELECT ii.receiving_date, iii.unit_price, ii.vendor_id, ii.invoice_number, ii.invoice_date, iii.total_quantity
         FROM incoming_inventory ii
         INNER JOIN incoming_inventory_items iii ON ii.id = iii.incoming_inventory_id
         WHERE iii.sku_id = s.id 
@@ -186,7 +206,20 @@ router.get('/', async (req, res, next) => {
           AND ii.is_active = true
           AND ii.status = 'completed'
       ) purchase_stats ON true
+      LEFT JOIN LATERAL (
+        SELECT ii.invoice_number, ii.invoice_date, ii.vendor_id, iii.unit_price, iii.total_quantity
+        FROM incoming_inventory ii
+        INNER JOIN incoming_inventory_items iii ON ii.id = iii.incoming_inventory_id
+        WHERE iii.sku_id = s.id
+          AND ii.company_id = $1
+          AND ii.is_active = true
+          AND ii.status = 'completed'
+          AND ii.vendor_id IS NOT NULL
+        ORDER BY iii.unit_price ASC, ii.receiving_date DESC
+        LIMIT 1
+      ) min_price_transaction ON true
       LEFT JOIN vendors last_vendor ON latest_incoming.vendor_id = last_vendor.id
+      LEFT JOIN vendors min_vendor ON min_price_transaction.vendor_id = min_vendor.id
       WHERE s.company_id = $1 AND s.is_active = true
     `;
     const params = [companyId];
