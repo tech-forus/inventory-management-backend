@@ -162,6 +162,41 @@ class PriceHistoryModel {
             ]
           );
         }
+
+        // --- PERFORMANCE OPTIMIZATION ---
+        // Update the cached pricing columns on the SKUS table directly
+        // This allows for instant sorting and filtering on the Purchase Page
+        await client.query(`
+          WITH stats AS (
+            SELECT 
+              MIN(unit_price) as min_price,
+              AVG(unit_price)::DECIMAL(10,2) as avg_price
+            FROM incoming_inventory_items iii
+            JOIN incoming_inventory ii ON iii.incoming_inventory_id = ii.id
+            WHERE iii.sku_id = $1 
+              AND ii.company_id = $2 
+              AND ii.status = 'completed' 
+              AND ii.is_active = true
+          ),
+          latest AS (
+            SELECT unit_price as last_price
+            FROM incoming_inventory_items iii
+            JOIN incoming_inventory ii ON iii.incoming_inventory_id = ii.id
+            WHERE iii.sku_id = $1 
+              AND ii.company_id = $2 
+              AND ii.status = 'completed' 
+              AND ii.is_active = true
+            ORDER BY ii.receiving_date DESC, ii.id DESC
+            LIMIT 1
+          )
+          UPDATE skus
+          SET 
+            min_unit_price = stats.min_price,
+            average_unit_price = stats.avg_price,
+            last_purchase_price = latest.last_price
+          FROM stats, latest
+          WHERE id = $1 AND company_id = $2;
+        `, [sku_id, companyId.toUpperCase()]);
       }
 
       await client.query('COMMIT');

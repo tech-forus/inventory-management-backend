@@ -167,12 +167,12 @@ router.get('/', async (req, res, next) => {
           WHEN latest_incoming.receiving_date IS NOT NULL THEN 'IN'
           ELSE NULL
         END as transaction_type,
-        latest_incoming.unit_price as last_purchase_price,
+        s.last_purchase_price,
         latest_incoming.invoice_number as last_invoice_number,
         latest_incoming.invoice_date as last_invoice_date,
         latest_incoming.total_quantity as last_quantity,
-        purchase_stats.average_unit_price,
-        purchase_stats.min_unit_price,
+        s.average_unit_price,
+        s.min_unit_price,
         min_price_transaction.invoice_number as min_invoice_number,
         min_price_transaction.invoice_date as min_invoice_date,
         min_price_transaction.total_quantity as min_quantity,
@@ -195,17 +195,7 @@ router.get('/', async (req, res, next) => {
         ORDER BY ii.receiving_date DESC, ii.id DESC
         LIMIT 1
       ) latest_incoming ON true
-      LEFT JOIN LATERAL (
-        SELECT 
-          AVG(iii.unit_price)::DECIMAL(10,2) as average_unit_price,
-          MIN(iii.unit_price) as min_unit_price
-        FROM incoming_inventory ii
-        INNER JOIN incoming_inventory_items iii ON ii.id = iii.incoming_inventory_id
-        WHERE iii.sku_id = s.id
-          AND ii.company_id = $1
-          AND ii.is_active = true
-          AND ii.status = 'completed'
-      ) purchase_stats ON true
+
       LEFT JOIN LATERAL (
         SELECT ii.invoice_number, ii.invoice_date, ii.vendor_id, iii.unit_price, iii.total_quantity
         FROM incoming_inventory ii
@@ -346,9 +336,9 @@ router.get('/', async (req, res, next) => {
       brand: 'b.name',
       currentStock: 's.current_stock',
       usefulStocks: 's.current_stock',
-      averageUnitPrice: 'purchase_stats.average_unit_price',
-      minUnitPrice: 'purchase_stats.min_unit_price',
-      lastPurchasePrice: 'latest_incoming.unit_price',
+      averageUnitPrice: 's.average_unit_price',
+      minUnitPrice: 's.min_unit_price',
+      lastPurchasePrice: 's.last_purchase_price',
       createdAt: 's.created_at'
     };
 
