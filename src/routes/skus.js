@@ -110,6 +110,8 @@ const transformSKU = (sku) => {
     isActive: sku.is_active,
     isNonMovable: sku.is_non_movable,
     lastPurchasePrice: sku.last_purchase_price,
+    averageUnitPrice: sku.average_unit_price,
+    minUnitPrice: sku.min_unit_price,
     createdAt: sku.created_at,
     updatedAt: sku.updated_at,
   };
@@ -152,7 +154,9 @@ router.get('/', async (req, res, next) => {
           WHEN latest_incoming.receiving_date IS NOT NULL THEN 'IN'
           ELSE NULL
         END as transaction_type,
-        latest_incoming.unit_price as last_purchase_price
+        latest_incoming.unit_price as last_purchase_price,
+        purchase_stats.average_unit_price,
+        purchase_stats.min_unit_price
       FROM skus s
       LEFT JOIN product_categories pc ON s.product_category_id = pc.id
       LEFT JOIN item_categories ic ON s.item_category_id = ic.id
@@ -171,6 +175,17 @@ router.get('/', async (req, res, next) => {
         ORDER BY ii.receiving_date DESC, ii.id DESC
         LIMIT 1
       ) latest_incoming ON true
+      LEFT JOIN LATERAL (
+        SELECT 
+          AVG(iii.unit_price)::DECIMAL(10,2) as average_unit_price,
+          MIN(iii.unit_price) as min_unit_price
+        FROM incoming_inventory ii
+        INNER JOIN incoming_inventory_items iii ON ii.id = iii.incoming_inventory_id
+        WHERE iii.sku_id = s.id
+          AND ii.company_id = $1
+          AND ii.is_active = true
+          AND ii.status = 'completed'
+      ) purchase_stats ON true
       LEFT JOIN vendors last_vendor ON latest_incoming.vendor_id = last_vendor.id
       WHERE s.company_id = $1 AND s.is_active = true
     `;
@@ -381,7 +396,9 @@ router.get('/:id', async (req, res, next) => {
           WHEN latest_incoming.receiving_date IS NOT NULL THEN 'IN'
           ELSE NULL
         END as transaction_type,
-        latest_incoming.unit_price as last_purchase_price
+        latest_incoming.unit_price as last_purchase_price,
+        purchase_stats.average_unit_price,
+        purchase_stats.min_unit_price
       FROM skus s
       LEFT JOIN product_categories pc ON s.product_category_id = pc.id
       LEFT JOIN item_categories ic ON s.item_category_id = ic.id
@@ -400,6 +417,17 @@ router.get('/:id', async (req, res, next) => {
         ORDER BY ii.receiving_date DESC, ii.id DESC
         LIMIT 1
       ) latest_incoming ON true
+      LEFT JOIN LATERAL (
+        SELECT 
+          AVG(iii.unit_price)::DECIMAL(10,2) as average_unit_price,
+          MIN(iii.unit_price) as min_unit_price
+        FROM incoming_inventory ii
+        INNER JOIN incoming_inventory_items iii ON ii.id = iii.incoming_inventory_id
+        WHERE iii.sku_id = s.id
+          AND ii.company_id = $2
+          AND ii.is_active = true
+          AND ii.status = 'completed'
+      ) purchase_stats ON true
       LEFT JOIN vendors last_vendor ON latest_incoming.vendor_id = last_vendor.id
       WHERE ${whereClause} AND s.company_id = $2 AND s.is_active = true`,
       [isNumeric ? parseInt(idParam, 10) : idParam, companyId]
