@@ -313,6 +313,9 @@ router.get('/', async (req, res, next) => {
       brand: 'b.name',
       currentStock: 's.current_stock',
       usefulStocks: 's.current_stock',
+      averageUnitPrice: 'purchase_stats.average_unit_price',
+      minUnitPrice: 'purchase_stats.min_unit_price',
+      lastPurchasePrice: 'latest_incoming.unit_price',
       createdAt: 's.created_at'
     };
 
