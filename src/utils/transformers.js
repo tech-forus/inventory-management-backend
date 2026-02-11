@@ -329,6 +329,37 @@ const transformColour = (colour) => {
 };
 
 /**
+ * Transform purchase order from snake_case to camelCase
+ */
+const transformPurchaseOrder = (po) => {
+  if (!po) return null;
+
+  let items = [];
+  try {
+    if (typeof po.items === 'string') {
+      items = JSON.parse(po.items);
+    } else if (Array.isArray(po.items)) {
+      items = po.items;
+    }
+  } catch (e) {
+    items = [];
+  }
+
+  return {
+    id: po.id,
+    poNumber: po.po_number,
+    date: po.order_date,
+    totalAmount: parseFloat(po.total_amount),
+    status: po.status,
+    items: items,
+    createdBy: po.created_by,
+    createdByName: po.created_by_name,
+    createdAt: po.created_at,
+    updatedAt: po.updated_at
+  };
+};
+
+/**
  * Transform array of items
  */
 const transformArray = (items, transformer) => {
@@ -347,5 +378,6 @@ module.exports = {
   transformWarehouse,
   transformMaterial,
   transformColour,
+  transformPurchaseOrder,
   transformArray,
 };

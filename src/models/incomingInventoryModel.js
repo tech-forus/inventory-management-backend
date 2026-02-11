@@ -292,6 +292,7 @@ class IncomingInventoryModel {
               }
 
               // Update SKU
+              // Update SKU with new stats including last_purchase_price
               await client.query(
                 `UPDATE skus
                  SET average_unit_price = $1, min_unit_price = $2, purchase_count = $3
