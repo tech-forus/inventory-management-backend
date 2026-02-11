@@ -39,8 +39,18 @@ const getPurchaseOrderById = async (req, res, next) => {
 
 const createPurchaseOrder = async (req, res, next) => {
     try {
-        const companyId = getCompanyId(req);
+        const companyId = getCompanyId(req); // Will throw if missing
         const userId = req.user.userId;
+
+        if (!userId) {
+            throw new ValidationError('User ID missing from token');
+        }
+
+        console.log('Received Create PO Request:', {
+            companyId,
+            userId,
+            body: req.body
+        });
 
         let poNumber = req.body.poNumber;
         if (!poNumber) {
@@ -56,8 +66,15 @@ const createPurchaseOrder = async (req, res, next) => {
         };
 
         const order = await PurchaseOrderModel.create(poData, companyId, userId);
+        console.log('PO Created Successfully:', order.id);
+
         res.json({ success: true, data: transformPurchaseOrder(order) });
     } catch (error) {
+        console.error('Create Purchase Order failed:', {
+            message: error.message,
+            stack: error.stack,
+            body: req.body
+        });
         next(error);
     }
 };
