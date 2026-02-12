@@ -27,16 +27,20 @@ class ItemHistoryModel {
           il.quantity_change,
           il.net_balance as current_stock,
           il.created_at,
-          -- Get rejected and short from incoming_inventory_items for IN transactions
+          -- Get rejected, short, received, and total_quantity from incoming_inventory_items for IN transactions
           -- Use MAX to handle potential duplicates (shouldn't happen, but safe)
           MAX(COALESCE(iii.rejected, 0)) as rejected,
           MAX(COALESCE(iii.short, 0)) as short,
           MAX(COALESCE(iii.received, 0)) as received,
+          MAX(COALESCE(iii.total_quantity, 0)) as total_quantity,
+          
           -- Get challan info from incoming_inventory_items
           MAX(COALESCE(iii.challan_number, '')) as challan_number,
           MAX(iii.challan_date) as challan_date,
+          
           -- Get dispatch person name for OUT transactions
           MAX(ot.name) as dispatch_person_name,
+          
           -- Extract invoice number from reference_number (remove "IN / " or "OUT / " prefix)
           CASE 
             WHEN il.transaction_type = 'IN' THEN REPLACE(il.reference_number, 'IN / ', '')
@@ -44,11 +48,13 @@ class ItemHistoryModel {
             WHEN il.transaction_type = 'REJ' THEN REPLACE(il.reference_number, 'REJ / ', '')
             ELSE il.reference_number
           END as extracted_invoice_number,
+          
           -- Backward compatibility fields
           il.reference_number as challan_number_ledger,
           il.transaction_date as challan_date_ledger, 
-          -- Preserve sign in total_quantity so UI can show + / - correctly
-          il.quantity_change as total_quantity
+          
+          -- Preserve sign in stock_change so UI can show + / - correctly (renamed from total_quantity for clarity)
+          il.quantity_change as stock_change
         FROM inventory_ledgers il
         JOIN skus s ON il.sku_id = s.id
         -- Left join with incoming_inventory to get rejected/short for IN transactions

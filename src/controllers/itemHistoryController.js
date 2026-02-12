@@ -18,9 +18,11 @@ const transformHistoryRecord = (record) => {
         itemName: record.item_name,
         skuId: record.sku_id,
         skuCode: record.sku_code,
-        // Keep totalQuantity signed (IN/OPENING positive, OUT/REJ usually negative; REJ can be positive for received-back)
-        totalQuantity: record.total_quantity,
-        quantityChange: record.quantity_change,
+        // Keep totalQuantity as the "Main Quantity" displayed in the Quantity column
+        // For IN: Use total_quantity (Ordered Qty)
+        // For OUT/OPENING/REJ: Use stock_change (Net movement)
+        totalQuantity: record.transaction_type === 'IN' ? (parseInt(record.total_quantity || 0, 10)) : (parseInt(record.stock_change || record.quantity_change || 0, 10)),
+        quantityChange: parseInt(record.stock_change || record.quantity_change || 0, 10),
         // Do not duplicate rejected/short values onto IN rows. UI will show these on the appropriate rows.
         received: record.transaction_type === 'IN' ? (record.received || 0) : 0,
         rejected: 0,
