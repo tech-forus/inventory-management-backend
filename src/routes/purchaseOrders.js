@@ -19,6 +19,12 @@ router.get('/', purchaseOrderController.getAllPurchaseOrders);
 router.post('/', purchaseOrderController.createPurchaseOrder);
 
 /**
+ * GET /api/purchase-orders/next-number
+ * Get the next available PO number
+ */
+router.get('/next-number', purchaseOrderController.getNextPoNumber);
+
+/**
  * GET /api/purchase-orders/:id
  * Get purchase order by ID
  */

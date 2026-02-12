@@ -99,5 +99,16 @@ module.exports = {
     getAllPurchaseOrders,
     getPurchaseOrderById,
     createPurchaseOrder,
-    updatePurchaseOrderStatus
+    updatePurchaseOrderStatus,
+    getNextPoNumber
+};
+
+const getNextPoNumber = async (req, res, next) => {
+    try {
+        const companyId = getCompanyId(req);
+        const nextPo = await PurchaseOrderModel.generateNextPoNumber(companyId);
+        res.json({ success: true, data: { poNumber: nextPo } });
+    } catch (error) {
+        next(error);
+    }
 };
