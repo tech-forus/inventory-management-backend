@@ -54,10 +54,7 @@ const createPurchaseOrder = async (req, res, next) => {
 
         let poNumber = req.body.poNumber;
         if (!poNumber) {
-            // Simple generation: PO-Timestamp-Random
-            const timestamp = Date.now();
-            const random = Math.floor(Math.random() * 1000);
-            poNumber = `PO-${timestamp}-${random}`;
+            poNumber = await PurchaseOrderModel.generateNextPoNumber(companyId);
         }
 
         const poData = {

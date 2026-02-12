@@ -87,6 +87,62 @@ class PurchaseOrderModel {
   }
 
   /**
+   * Generate next PO Number
+   * Format: PO-YYMM-{COMPANY_INITIALS}-{SEQ}
+   * Example: PO-2602-FEPL-0001
+   */
+  static async generateNextPoNumber(companyId) {
+    // 1. Get Company Name for Initials
+    const companyRes = await pool.query(
+      'SELECT company_name FROM companies WHERE company_id = $1',
+      [companyId.toUpperCase()]
+    );
+
+    let initials = 'FC'; // Fallback
+    if (companyRes.rows.length > 0 && companyRes.rows[0].company_name) {
+      const name = companyRes.rows[0].company_name;
+      // Extract first letter of each word
+      initials = name.trim().split(/\s+/)
+        .map(word => word[0])
+        .join('')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, ''); // Ensure only alphanumeric
+    }
+
+    // 2. Date Component (YYMM)
+    const now = new Date();
+    const yy = now.getFullYear().toString().slice(-2);
+    const mm = (now.getMonth() + 1).toString().padStart(2, '0');
+
+    // 3. Construct Prefix
+    const prefix = `PO-${yy}${mm}-${initials}-`;
+
+    // 4. Find Latest PO with this prefix
+    const query = `
+      SELECT po_number FROM purchase_orders 
+      WHERE po_number LIKE $1 AND company_id = $2
+      ORDER BY LENGTH(po_number) DESC, po_number DESC 
+      LIMIT 1
+    `;
+
+    const result = await pool.query(query, [`${prefix}%`, companyId.toUpperCase()]);
+
+    let sequence = 1;
+    if (result.rows.length > 0) {
+      const lastPo = result.rows[0].po_number;
+      // Extract sequence part
+      const lastSeqStr = lastPo.replace(prefix, '');
+      const lastSeq = parseInt(lastSeqStr, 10);
+      if (!isNaN(lastSeq)) {
+        sequence = lastSeq + 1;
+      }
+    }
+
+    // 5. Format Full PO Number
+    return `${prefix}${sequence.toString().padStart(4, '0')}`;
+  }
+
+  /**
    * Update purchase order status
    */
   static async updateStatus(id, status, companyId) {
