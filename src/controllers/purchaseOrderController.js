@@ -95,14 +95,6 @@ const updatePurchaseOrderStatus = async (req, res, next) => {
     }
 };
 
-module.exports = {
-    getAllPurchaseOrders,
-    getPurchaseOrderById,
-    createPurchaseOrder,
-    updatePurchaseOrderStatus,
-    getNextPoNumber
-};
-
 const getNextPoNumber = async (req, res, next) => {
     try {
         const companyId = getCompanyId(req);
@@ -111,4 +103,12 @@ const getNextPoNumber = async (req, res, next) => {
     } catch (error) {
         next(error);
     }
+};
+
+module.exports = {
+    getAllPurchaseOrders,
+    getPurchaseOrderById,
+    createPurchaseOrder,
+    updatePurchaseOrderStatus,
+    getNextPoNumber
 };
