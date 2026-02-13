@@ -110,6 +110,12 @@ const createSKU = async (req, res, next) => {
 
     // Generate SKU ID if not provided or if auto-generate is enabled
     let skuId = req.body.skuId;
+
+    // Ensure openingStock is set from currentStock if not provided (critical for ledger entry)
+    if (req.body.currentStock && !req.body.openingStock) {
+      req.body.openingStock = req.body.currentStock;
+    }
+
     if (!skuId || req.body.autoGenerateSKU !== false) {
       skuId = await generateUniqueSKUId(client, companyId);
     }
@@ -137,13 +143,13 @@ const createSKU = async (req, res, next) => {
           modelValue = modelStr;
         }
       }
-      
+
       // Generate a lock key from itemName + model + companyId for advisory lock
       const lockKey = SKUModel.generateDuplicateLockKey(req.body.itemName, modelValue, companyId);
-      
+
       // Acquire advisory lock to prevent concurrent duplicate checks
       await client.query('SELECT pg_advisory_xact_lock($1)', [lockKey]);
-      
+
       // Pass transaction client to prevent race conditions
       const duplicateExists = await SKUModel.itemNameModelExists(
         req.body.itemName,
@@ -174,18 +180,18 @@ const createSKU = async (req, res, next) => {
     if (error.code === '23505') {
       const errorMessage = error.message || '';
       const errorConstraint = error.constraint || '';
-      
+
       // Check if this is related to item_name + model duplicate constraint
       // Check constraint name, error message, or if it's a generic duplicate on skus table
-      const isItemModelDuplicate = 
+      const isItemModelDuplicate =
         errorConstraint.includes('item_name_model') ||
         errorConstraint.includes('idx_skus_unique') ||
         errorConstraint.startsWith('idx_s') ||
         errorMessage.includes('idx_skus_unique_item_name_model') ||
         errorMessage.includes('item_name_model') ||
-        (errorMessage.includes('duplicate key') && 
-         (errorMessage.includes('skus') || errorMessage.includes('item') || errorMessage.includes('model')));
-      
+        (errorMessage.includes('duplicate key') &&
+          (errorMessage.includes('skus') || errorMessage.includes('item') || errorMessage.includes('model')));
+
       if (isItemModelDuplicate) {
         next(new ValidationError('This Item Already Exists'));
         return;
@@ -217,13 +223,13 @@ const updateSKU = async (req, res, next) => {
           modelValue = modelStr;
         }
       }
-      
+
       // Generate a lock key from itemName + model + companyId for advisory lock
       const lockKey = SKUModel.generateDuplicateLockKey(req.body.itemName, modelValue, companyId);
-      
+
       // Acquire advisory lock to prevent concurrent duplicate checks
       await client.query('SELECT pg_advisory_xact_lock($1)', [lockKey]);
-      
+
       // Pass transaction client to prevent race conditions
       const duplicateExists = await SKUModel.itemNameModelExists(
         req.body.itemName,
@@ -263,18 +269,18 @@ const updateSKU = async (req, res, next) => {
     if (error.code === '23505') {
       const errorMessage = error.message || '';
       const errorConstraint = error.constraint || '';
-      
+
       // Check if this is related to item_name + model duplicate constraint
       // Check constraint name, error message, or if it's a generic duplicate on skus table
-      const isItemModelDuplicate = 
+      const isItemModelDuplicate =
         errorConstraint.includes('item_name_model') ||
         errorConstraint.includes('idx_skus_unique') ||
         errorConstraint.startsWith('idx_s') ||
         errorMessage.includes('idx_skus_unique_item_name_model') ||
         errorMessage.includes('item_name_model') ||
-        (errorMessage.includes('duplicate key') && 
-         (errorMessage.includes('skus') || errorMessage.includes('item') || errorMessage.includes('model')));
-      
+        (errorMessage.includes('duplicate key') &&
+          (errorMessage.includes('skus') || errorMessage.includes('item') || errorMessage.includes('model')));
+
       if (isItemModelDuplicate) {
         next(new ValidationError('This Item Already Exists'));
         return;
@@ -381,7 +387,7 @@ const uploadSKUs = async (req, res, next) => {
             .replace(/\s*\/\s*/g, '/') // Normalize spaces around forward slashes
             .trim()
             .toLowerCase();
-          
+
           // Normalize search key: replace underscores with spaces, normalize spaces
           const normalizedKey = key
             .replace(/_/g, ' ') // Replace underscores with spaces
@@ -389,7 +395,7 @@ const uploadSKUs = async (req, res, next) => {
             .replace(/\s*\/\s*/g, '/') // Normalize spaces around forward slashes
             .trim()
             .toLowerCase();
-          
+
           if (normalizedRowKey === normalizedKey) {
             const value = row[rowKey];
             if (value !== undefined && value !== null && value !== '') {
@@ -491,13 +497,13 @@ const uploadSKUs = async (req, res, next) => {
         // Validate Current Stock (required field from template)
         // Try multiple variations of the header name
         const currentStockValue = getValue(
-          row, 
-          'current_stock', 
-          'currentStock', 
-          'Current Stock', 
+          row,
+          'current_stock',
+          'currentStock',
+          'Current Stock',
           'Current Stock *',
-          'Current/Opening Stocks', 
-          'Current/Opening Stocks *', 
+          'Current/Opening Stocks',
+          'Current/Opening Stocks *',
           'Current/Opening Stocks*',
           'Current / Opening Stocks',
           'Current / Opening Stocks *',
@@ -506,22 +512,22 @@ const uploadSKUs = async (req, res, next) => {
           'Opening Stocks',
           'Opening Stocks *'
         );
-        
+
         // Check if value exists (0 is a valid value, so we need to check for null/undefined/empty string)
         if (currentStockValue === null || currentStockValue === undefined || (typeof currentStockValue === 'string' && currentStockValue.trim() === '')) {
           // Debug: log available keys to help diagnose header matching issues
           const availableKeys = Object.keys(row).join(', ');
-          errors.push({ 
-            row: i + 2, 
-            error: `Current/Opening Stocks is required. Available columns: ${availableKeys.substring(0, 200)}` 
+          errors.push({
+            row: i + 2,
+            error: `Current/Opening Stocks is required. Available columns: ${availableKeys.substring(0, 200)}`
           });
           continue;
         }
-        
+
         // Parse the value - handle both string and number types
         const stockString = String(currentStockValue).trim();
         const parsedStock = stockString === '' ? 0 : parseInt(stockString, 10);
-        
+
         if (isNaN(parsedStock) || parsedStock < 0) {
           errors.push({ row: i + 2, error: `Current/Opening Stocks must be a valid non-negative number (found: "${currentStockValue}")` });
           continue;
@@ -586,6 +592,7 @@ const uploadSKUs = async (req, res, next) => {
           currentStock: currentStock, // Use parsed current stock value
           openingStock: currentStock, // Set openingStock same as currentStock for ledger entry
           minStockLevel: getValue(row, 'min_stock_level', 'minStockLevel', 'Min Stock', 'min_stock', 'Minimum Stock Level', 'Minimum Stock Level (MSQ)', 'MSQ') ? parseInt(getValue(row, 'min_stock_level', 'minStockLevel', 'Min Stock', 'min_stock', 'Minimum Stock Level', 'Minimum Stock Level (MSQ)', 'MSQ')) : 0,
+          reorderPoint: getValue(row, 'reorder_point', 'reorderPoint', 'Reorder Point', 'reorder_point', 'Reorder Level') ? parseInt(getValue(row, 'reorder_point', 'reorderPoint', 'Reorder Point', 'reorder_point', 'Reorder Level')) : null,
           defaultStorageLocation: String(defaultStorageLocation).trim(),
           customFields: customFields,
           status: getValue(row, 'status', 'Status') || 'active',
