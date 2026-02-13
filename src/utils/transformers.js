@@ -163,6 +163,7 @@ const transformCustomer = (customer) => {
     taxId: customer.tax_id,
     creditLimit: customer.credit_limit,
     outstandingBalance: customer.outstanding_balance,
+    creditPeriod: customer.credit_period,
     isActive: customer.is_active,
     notes: customer.notes,
     createdAt: customer.created_at,
