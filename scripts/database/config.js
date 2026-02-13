@@ -15,7 +15,7 @@ function parseDatabaseUrl() {
       database: url.pathname.slice(1), // Remove leading '/'
       user: url.username,
       password: url.password,
-      ssl: url.protocol === 'postgresql:' || url.protocol === 'postgres:' 
+      ssl: url.protocol === 'postgresql:' || url.protocol === 'postgres:'
         ? { rejectUnauthorized: false } // Railway requires SSL but doesn't provide CA cert
         : false,
     };
@@ -27,7 +27,7 @@ function parseDatabaseUrl() {
 const urlConfig = parseDatabaseUrl();
 
 const dbConfig = {
-  development: {
+  development: urlConfig || {
     host: process.env.DB_HOST || 'localhost',
     port: process.env.DB_PORT || 5432,
     database: process.env.DB_NAME || 'inventory_db',
@@ -63,6 +63,6 @@ module.exports = {
   // Connection pool settings
   max: 20, // Maximum number of clients in the pool
   idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
-  connectionTimeoutMillis: 2000, // Return an error after 2 seconds if connection could not be established
+  connectionTimeoutMillis: 10000, // Return an error after 10 seconds if connection could not be established
 };
 

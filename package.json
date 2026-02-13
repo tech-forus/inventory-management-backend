@@ -7,7 +7,7 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "create-db": "node scripts/createDatabase.js",
-    "migrate": "node-pg-migrate up",
+    "migrate": "node scripts/database/migrate.js",
     "migrate:down": "node-pg-migrate down",
     "migrate:create": "node-pg-migrate create",
     "migrate:status": "node-pg-migrate list",

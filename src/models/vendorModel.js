@@ -12,6 +12,7 @@ class VendorModel {
     const result = await pool.query(
       `SELECT 
         v.*,
+        v.credit_period,
         COALESCE(
           (SELECT json_agg(product_category_id) 
            FROM vendor_product_categories 
@@ -52,6 +53,7 @@ class VendorModel {
     const result = await queryClient.query(
       `SELECT 
         v.*,
+        v.credit_period,
         COALESCE(
           (SELECT json_agg(product_category_id) 
            FROM vendor_product_categories 
@@ -91,8 +93,8 @@ class VendorModel {
     const result = await queryClient.query(
       `INSERT INTO vendors (
         company_id, name, contact_person, department, designation, email, phone, whatsapp_number, gst_number,
-        address, city, state, pin, is_active
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        address, city, state, pin, is_active, credit_period
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
       RETURNING *`,
       [
         companyId.toUpperCase(),
@@ -109,15 +111,16 @@ class VendorModel {
         vendorData.state || null,
         vendorData.pin || null,
         vendorData.isActive !== false,
+        vendorData.creditPeriod || 0,
       ]
     );
     const vendor = result.rows[0];
-    
+
     // Save relationships if provided
     if (vendor.id) {
       await this.saveRelationships(vendor.id, vendorData, queryClient);
     }
-    
+
     // Fetch vendor with relationships using the same client (within transaction)
     return await this.getById(vendor.id, companyId, queryClient);
   }
@@ -127,13 +130,13 @@ class VendorModel {
    */
   static async saveRelationships(vendorId, vendorData, client = null) {
     const queryClient = client || pool;
-    
+
     // Delete existing relationships
     await queryClient.query('DELETE FROM vendor_product_categories WHERE vendor_id = $1', [vendorId]);
     await queryClient.query('DELETE FROM vendor_item_categories WHERE vendor_id = $1', [vendorId]);
     await queryClient.query('DELETE FROM vendor_sub_categories WHERE vendor_id = $1', [vendorId]);
     await queryClient.query('DELETE FROM vendor_brands WHERE vendor_id = $1', [vendorId]);
-    
+
     // Insert product categories
     if (vendorData.productCategoryIds && Array.isArray(vendorData.productCategoryIds) && vendorData.productCategoryIds.length > 0) {
       for (const categoryId of vendorData.productCategoryIds) {
@@ -146,7 +149,7 @@ class VendorModel {
         }
       }
     }
-    
+
     // Insert item categories
     if (vendorData.itemCategoryIds && Array.isArray(vendorData.itemCategoryIds) && vendorData.itemCategoryIds.length > 0) {
       for (const categoryId of vendorData.itemCategoryIds) {
@@ -159,7 +162,7 @@ class VendorModel {
         }
       }
     }
-    
+
     // Insert sub categories
     if (vendorData.subCategoryIds && Array.isArray(vendorData.subCategoryIds) && vendorData.subCategoryIds.length > 0) {
       for (const categoryId of vendorData.subCategoryIds) {
@@ -172,7 +175,7 @@ class VendorModel {
         }
       }
     }
-    
+
     // Insert brands
     if (vendorData.brandIds && Array.isArray(vendorData.brandIds) && vendorData.brandIds.length > 0) {
       for (const brandId of vendorData.brandIds) {
@@ -196,8 +199,8 @@ class VendorModel {
       `UPDATE vendors SET
         name = $1, contact_person = $2, department = $3, designation = $4, email = $5,
         phone = $6, whatsapp_number = $7, gst_number = $8, address = $9, city = $10,
-        state = $11, pin = $12, is_active = $13, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $14 AND company_id = $15
+        state = $11, pin = $12, is_active = $13, credit_period = $14, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $15 AND company_id = $16
       RETURNING *`,
       [
         vendorData.name,
@@ -213,18 +216,19 @@ class VendorModel {
         vendorData.state || null,
         vendorData.pin || null,
         vendorData.isActive !== false,
+        vendorData.creditPeriod || 0,
         id,
         companyId.toUpperCase(),
       ]
     );
-    
+
     if (result.rows.length === 0) {
       return null;
     }
-    
+
     // Save relationships if provided
     await this.saveRelationships(id, vendorData, queryClient);
-    
+
     // Fetch vendor with relationships using the same client (within transaction)
     return await this.getById(id, companyId, queryClient);
   }
@@ -253,8 +257,8 @@ class VendorModel {
         const result = await client.query(
           `INSERT INTO vendors (
             company_id, name, contact_person, department, designation, email, phone, whatsapp_number, gst_number,
-            address, city, state, pin
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            address, city, state, pin, credit_period
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
           ON CONFLICT (company_id, name) DO UPDATE
           SET contact_person = EXCLUDED.contact_person,
               department = EXCLUDED.department,
@@ -267,6 +271,7 @@ class VendorModel {
               city = EXCLUDED.city,
               state = EXCLUDED.state,
               pin = EXCLUDED.pin,
+              credit_period = EXCLUDED.credit_period,
               updated_at = CURRENT_TIMESTAMP
           RETURNING *`,
           [
@@ -283,6 +288,7 @@ class VendorModel {
             vendor.city || null,
             vendor.state || null,
             vendor.pin || null,
+            vendor.creditPeriod || vendor.credit_period || 0,
           ]
         );
         inserted.push(result.rows[0]);
