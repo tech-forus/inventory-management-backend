@@ -28,23 +28,6 @@ class OutgoingInventoryModel {
     try {
       await client.query('BEGIN');
 
-      // Validation: Integrity check for polymorphic destination_id
-      if (inventoryData.destinationId) {
-        if (inventoryData.destinationType === 'customer') {
-          const customerCheck = await client.query('SELECT id FROM customers WHERE id = $1', [inventoryData.destinationId]);
-          if (customerCheck.rows.length === 0) {
-            await client.query('ROLLBACK');
-            throw new Error(`Integrity Error: Customer with ID ${inventoryData.destinationId} does not exist.`);
-          }
-        } else if (inventoryData.destinationType === 'vendor') {
-          const vendorCheck = await client.query('SELECT id FROM vendors WHERE id = $1', [inventoryData.destinationId]);
-          if (vendorCheck.rows.length === 0) {
-            await client.query('ROLLBACK');
-            throw new Error(`Integrity Error: Vendor with ID ${inventoryData.destinationId} does not exist.`);
-          }
-        }
-      }
-
       // Calculate total value from items (including GST)
       const totalValue = items.reduce((sum, item) => {
         const quantity = item.outgoingQuantity || 0;
@@ -125,14 +108,14 @@ class OutgoingInventoryModel {
         const skuIdString = String(item.skuId);
         const isNumericSkuId = /^\d+$/.test(skuIdString);
         let skuIntegerId;
-
+        
         console.log('[OutgoingInventoryModel] SKU ID resolution:', {
           originalSkuId: item.skuId,
           skuIdString: skuIdString,
           isNumeric: isNumericSkuId,
           companyId: companyId.toUpperCase()
         });
-
+        
         if (isNumericSkuId) {
           skuIntegerId = parseInt(item.skuId, 10);
           console.log('[OutgoingInventoryModel] Using numeric SKU ID directly:', {
@@ -145,19 +128,19 @@ class OutgoingInventoryModel {
             skuIdString: skuIdString,
             companyId: companyId.toUpperCase()
           });
-
+          
           const skuLookup = await client.query(
             'SELECT id FROM skus WHERE sku_id = $1 AND company_id = $2',
             [skuIdString, companyId.toUpperCase()]
           );
-
+          
           console.log('[OutgoingInventoryModel] SKU lookup result:', {
             query: 'SELECT id FROM skus WHERE sku_id = $1 AND company_id = $2',
             params: [skuIdString, companyId.toUpperCase()],
             rowsFound: skuLookup.rows.length,
             result: skuLookup.rows
           });
-
+          
           if (skuLookup.rows.length === 0) {
             console.error('[OutgoingInventoryModel] SKU not found:', {
               skuId: skuIdString,
@@ -215,12 +198,12 @@ class OutgoingInventoryModel {
             item.finalTaxableAmount || totalValueExclGst,
           ]
         );
-
+        
         console.log('[OutgoingInventoryModel] Item inserted successfully:', {
           itemId: itemResult.rows[0]?.id,
           skuId: itemResult.rows[0]?.sku_id
         });
-
+        
         insertedItems.push(itemResult.rows[0]);
 
         // Verify stock availability before allowing outgoing (status is 'completed')
@@ -246,7 +229,7 @@ class OutgoingInventoryModel {
                ORDER BY created_at DESC, id DESC 
                LIMIT 1`;
             const ledgerParams = [skuIntegerId, companyId.toUpperCase()];
-
+            
             console.log('[OutgoingInventoryModel] Executing ledger stock check query:', {
               query: ledgerQuery,
               params: ledgerParams,
@@ -277,7 +260,7 @@ class OutgoingInventoryModel {
               // Fallback: check skus.current_stock if no ledger entries exist
               const skuCheckQuery = 'SELECT current_stock FROM skus WHERE id = $1';
               const skuCheckParams = [skuIntegerId];
-
+              
               console.log('[OutgoingInventoryModel] Executing SKU stock check query:', {
                 query: skuCheckQuery,
                 params: skuCheckParams,
@@ -285,7 +268,7 @@ class OutgoingInventoryModel {
               });
 
               const skuCheck = await client.query(skuCheckQuery, skuCheckParams);
-
+              
               console.log('[OutgoingInventoryModel] SKU stock check result:', {
                 rowsFound: skuCheck.rows.length,
                 result: skuCheck.rows,
@@ -673,7 +656,7 @@ class OutgoingInventoryModel {
         AND oi.is_active = true
         AND oi.status = 'completed'
     `;
-
+    
     const params = [companyId.toUpperCase()];
     let paramIndex = 2;
 

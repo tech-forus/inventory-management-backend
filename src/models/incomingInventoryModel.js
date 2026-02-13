@@ -106,16 +106,22 @@ class IncomingInventoryModel {
     try {
       await client.query('BEGIN');
 
-      // Calculate total value from items using strict backend calculation
+      // Calculate total value from items using frontend-calculated values (including GST)
       const totalValue = items.reduce((sum, item) => {
-        const quantity = parseInt(item.totalQuantity || 0, 10);
-        const unitPrice = parseFloat(item.unitPrice || 0);
-        const gstPercentage = parseFloat(item.gstRate || item.gstPercentage || 0);
-
+        // Use frontend-calculated totalInclGst if available, otherwise calculate
+        if (item.totalInclGst !== undefined) {
+          return sum + parseFloat(item.totalInclGst);
+        }
+        if (item.totalValueInclGst !== undefined) {
+          return sum + parseFloat(item.totalValueInclGst);
+        }
+        // Fallback calculation if frontend values not provided
+        const quantity = item.totalQuantity || 0;
+        const unitPrice = item.unitPrice || 0;
+        const gstPercentage = item.gstRate || item.gstPercentage || 0;
         const baseValue = quantity * unitPrice;
         const gstAmount = baseValue * (gstPercentage / 100);
         const totalInclGst = baseValue + gstAmount;
-
         return sum + totalInclGst;
       }, 0);
 
@@ -161,22 +167,22 @@ class IncomingInventoryModel {
 
       const incomingInventoryId = inventoryResult.rows[0].id;
 
-      // Insert items using strict backend calculations
+      // Insert items using frontend-calculated GST values
       const insertedItems = [];
       for (const item of items) {
-        const quantity = parseInt(item.totalQuantity || 0, 10);
-        const unitPrice = parseFloat(item.unitPrice || 0);
-        const gstPercentage = parseFloat(item.gstRate || item.gstPercentage || 0);
+        const quantity = item.totalQuantity || 0;
+        const unitPrice = item.unitPrice || 0;
+        const gstPercentage = item.gstRate || item.gstPercentage || 0;
 
         // Calculate received and short quantities
-        const receivedQty = parseInt(item.received || 0, 10);
+        const receivedQty = item.received || 0;
         // Auto-calculate short quantity: short = total_quantity - received
-        const shortQty = item.short !== undefined ? parseInt(item.short, 10) : Math.max(0, quantity - receivedQty);
+        const shortQty = item.short !== undefined ? item.short : Math.max(0, quantity - receivedQty);
 
-        // Strict Backend Calculation
-        const totalValueExclGst = quantity * unitPrice;
-        const gstAmount = totalValueExclGst * (gstPercentage / 100);
-        const totalValueInclGst = totalValueExclGst + gstAmount;
+        // Use frontend-calculated GST values (trust frontend calculations)
+        const totalValueExclGst = item.totalExclGst !== undefined ? parseFloat(item.totalExclGst) : (quantity * unitPrice);
+        const gstAmount = item.gstAmount !== undefined ? parseFloat(item.gstAmount) : (totalValueExclGst * (gstPercentage / 100));
+        const totalValueInclGst = item.totalInclGst !== undefined ? parseFloat(item.totalInclGst) : (totalValueExclGst + gstAmount);
 
         const itemResult = await client.query(
           `INSERT INTO incoming_inventory_items (

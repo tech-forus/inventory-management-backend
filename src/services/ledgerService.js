@@ -54,18 +54,6 @@ class LedgerService {
             let currentBalance = 0;
             if (lastBalanceResult.rows.length > 0) {
                 currentBalance = parseInt(lastBalanceResult.rows[0].net_balance, 10);
-            } else {
-                // FALLBACK: If no ledger entry exists, check the SKUs table directly.
-                // This handles cases where SKUs were created with opening stock but no ledger entry (legacy/upload issue)
-                // or when a SKU is new and has an initial stock set in the SKU definition.
-                const skuResult = await client.query(
-                    'SELECT current_stock FROM skus WHERE id = $1',
-                    [skuId]
-                );
-
-                if (skuResult.rows.length > 0) {
-                    currentBalance = parseInt(skuResult.rows[0].current_stock || 0, 10);
-                }
             }
 
             // 2. Calculate new balance
