@@ -484,7 +484,7 @@ class SKUModel {
           skuData.minStockLevel || 0,
           skuData.reorderPoint || null,
           skuData.defaultStorageLocation || null,
-          skuData.openingStock !== undefined && skuData.openingStock !== null ? skuData.openingStock : 0, // Use openingStock for current_stock initialization
+          0, // Initialize current_stock to 0 to prevent double counting (LedgerService will add the opening stock)
           customFields ? JSON.stringify(customFields) : null,
           skuData.status || 'active',
           skuData.status === 'active',
@@ -509,6 +509,10 @@ class SKUModel {
           quantityChange: newSku.opening_stock,
           companyId: companyId.toUpperCase()
         });
+
+        // Update the local object to reflect the stock added by LedgerService
+        // This ensures the frontend receives the correct stock (e.g. 123) instead of 0
+        newSku.current_stock = newSku.opening_stock;
       }
 
       await client.query('COMMIT');
@@ -539,7 +543,7 @@ class SKUModel {
       }
     }
 
-    let paramIndex = 36;
+    let paramIndex = 35;
     let query = `
       UPDATE skus SET
         product_category_id = $1, item_category_id = $2, sub_category_id = $3,
@@ -548,15 +552,16 @@ class SKUModel {
         material = $15, manufacture_or_import = $16, color = $17,
         weight = $18, weight_unit = $19, length = $20, length_unit = $21, width = $22, width_unit = $23, height = $24, height_unit = $25,
         min_stock_level = $26, reorder_point = $27, default_storage_location = $28,
-        current_stock = $29, custom_fields = $30,
-        status = $31, is_active = $32, is_non_movable = $33, opening_stock = $34, warranty = $35, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $${paramIndex}
+        custom_fields = $29,
+        status = $30, is_active = $31, is_non_movable = $32, opening_stock = $33, warranty = $34, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $35
     `;
 
     // Add company ID filter if provided
     if (companyId) {
+      paramIndex = 35; // Update paramIndex
       paramIndex++;
-      query += ` AND company_id = $${paramIndex}`;
+      query += ` AND company_id = $${paramIndex} `;
     }
 
     const params = [
@@ -588,7 +593,7 @@ class SKUModel {
       skuData.minStockLevel || 0,
       skuData.reorderPoint || null,
       skuData.defaultStorageLocation || null,
-      skuData.openingStock !== undefined && skuData.openingStock !== null ? skuData.openingStock : 0, // Use openingStock for current_stock
+      // REMOVED current_stock update to preserve Ledger integrity
       customFields ? JSON.stringify(customFields) : null,
       skuData.status || 'active',
       skuData.status === 'active',
@@ -599,11 +604,12 @@ class SKUModel {
     ];
 
     if (companyId) {
-      query = query.replace('WHERE id = $36', `WHERE id = $36 AND company_id = $37`);
+      // id is now at index 34 ($35), company_id at index 35 ($36)
+      query = query.replace('WHERE id = $35', `WHERE id = $35 AND company_id = $36`);
       params.push(companyId.toUpperCase());
     }
 
-    query += ` RETURNING *`;
+    query += ` RETURNING * `;
 
     const result = await pool.query(query, params);
     return result.rows[0];
@@ -647,7 +653,7 @@ class SKUModel {
     const normalizedCompanyId = String(companyId || '').toUpperCase();
 
     // Create a combined string
-    const combined = `${normalizedCompanyId}|${normalizedItemName}|${normalizedModel}`;
+    const combined = `${normalizedCompanyId}| ${normalizedItemName}| ${normalizedModel} `;
 
     // Simple hash function to convert string to integer (for advisory lock)
     let hash = 0;
@@ -698,7 +704,7 @@ class SKUModel {
       WHERE company_id = $1
         AND LOWER(TRIM(item_name)) = LOWER(TRIM($2))
         AND is_active = true
-    `;
+      `;
     const params = [companyId.toUpperCase(), normalizedItemName];
 
     // Handle model comparison: treat NULL and empty string as the same
@@ -713,7 +719,7 @@ class SKUModel {
 
     if (excludeId) {
       const excludeParamIndex = params.length + 1;
-      query += ` AND id != $${excludeParamIndex}`;
+      query += ` AND id != $${excludeParamIndex} `;
       params.push(excludeId);
     }
 
@@ -737,10 +743,10 @@ class SKUModel {
 
       // 1. SKU Counts
       const skuQuery = `
-        SELECT
-          COUNT(*) FILTER (WHERE current_stock = 0 AND min_stock_level > 0) as critical_count,
-          COUNT(*) FILTER (WHERE current_stock = 0 AND (min_stock_level <= 0 OR min_stock_level IS NULL)) as out_count,
-          COUNT(*) FILTER (WHERE current_stock > 0 AND current_stock < min_stock_level) as low_count,
+    SELECT
+    COUNT(*) FILTER(WHERE current_stock = 0 AND min_stock_level > 0) as critical_count,
+      COUNT(*) FILTER(WHERE current_stock = 0 AND(min_stock_level <= 0 OR min_stock_level IS NULL)) as out_count,
+        COUNT(*) FILTER(WHERE current_stock > 0 AND current_stock < min_stock_level) as low_count,
           COUNT(*) as total_count
         FROM skus
         WHERE company_id = $1 AND is_active = true
