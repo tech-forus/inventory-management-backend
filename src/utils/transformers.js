@@ -70,6 +70,7 @@ const transformVendor = (vendor) => {
     state: vendor.state,
     pin: vendor.pin,
     isActive: vendor.is_active,
+    creditPeriod: vendor.credit_period,
     productCategoryIds: extractIds(vendor.product_category_ids),
     itemCategoryIds: extractIds(vendor.item_category_ids),
     subCategoryIds: extractIds(vendor.sub_category_ids),
