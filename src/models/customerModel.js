@@ -36,9 +36,9 @@ class CustomerModel {
         company_id, customer_name, contact_person, email, phone, whatsapp_number,
         address_line1, address_line2, city, state, country, postal_code,
         company_name, gst_number, tax_id,
-        credit_limit, outstanding_balance,
+        credit_limit, outstanding_balance, credit_period,
         is_active, notes, date_of_birth, personal_address
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
       RETURNING *`,
       [
         companyId,
@@ -58,6 +58,7 @@ class CustomerModel {
         customerData.taxId || null,
         customerData.creditLimit || 0.00,
         customerData.outstandingBalance || 0.00,
+        customerData.creditPeriod || 0,
         customerData.isActive !== undefined ? customerData.isActive : true,
         customerData.notes || null,
         customerData.dateOfBirth || null,
@@ -89,12 +90,13 @@ class CustomerModel {
         tax_id = COALESCE($14, tax_id),
         credit_limit = COALESCE($15, credit_limit),
         outstanding_balance = COALESCE($16, outstanding_balance),
-        is_active = COALESCE($17, is_active),
-        notes = COALESCE($18, notes),
-        date_of_birth = COALESCE($19, date_of_birth),
-        personal_address = COALESCE($20, personal_address),
+        credit_period = COALESCE($17, credit_period),
+        is_active = COALESCE($18, is_active),
+        notes = COALESCE($19, notes),
+        date_of_birth = COALESCE($20, date_of_birth),
+        personal_address = COALESCE($21, personal_address),
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $21 AND company_id = $22
+      WHERE id = $22 AND company_id = $23
       RETURNING *`,
       [
         customerData.customerName || customerData.name || null,
@@ -113,6 +115,7 @@ class CustomerModel {
         customerData.taxId || null,
         customerData.creditLimit !== undefined ? customerData.creditLimit : null,
         customerData.outstandingBalance !== undefined ? customerData.outstandingBalance : null,
+        customerData.creditPeriod !== undefined ? customerData.creditPeriod : null,
         customerData.isActive !== undefined ? customerData.isActive : null,
         customerData.notes || null,
         customerData.dateOfBirth || null,
