@@ -3,6 +3,7 @@ const db = require('./database');
 /**
  * Terms & Conditions Model
  * Manages master T&C library and PO-specific terms
+ * Compatible with PostgreSQL
  */
 const TermsConditionsModel = {
 
@@ -16,8 +17,8 @@ const TermsConditionsModel = {
             SELECT * FROM terms_conditions 
             ORDER BY term_order ASC, id ASC
         `;
-        const [rows] = await db.query(query);
-        return rows;
+        const result = await db.query(query);
+        return result.rows;
     },
 
     /**
@@ -26,11 +27,11 @@ const TermsConditionsModel = {
     async getMasterTermById(idOrKey) {
         const query = `
             SELECT * FROM terms_conditions 
-            WHERE id = ? OR term_key = ?
+            WHERE id = $1 OR term_key = $1
             LIMIT 1
         `;
-        const [rows] = await db.query(query, [idOrKey, idOrKey]);
-        return rows[0];
+        const result = await db.query(query, [idOrKey]);
+        return result.rows[0];
     },
 
     /**
@@ -42,8 +43,8 @@ const TermsConditionsModel = {
             WHERE is_mandatory = TRUE
             ORDER BY term_order ASC
         `;
-        const [rows] = await db.query(query);
-        return rows;
+        const result = await db.query(query);
+        return result.rows;
     },
 
     /**
@@ -63,15 +64,16 @@ const TermsConditionsModel = {
         const query = `
             INSERT INTO terms_conditions 
             (term_key, term_title, term_value, term_order, is_mandatory, is_system_default, category)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING id
         `;
 
-        const [result] = await db.query(query, [
+        const result = await db.query(query, [
             term_key, term_title, term_value, term_order,
             is_mandatory, is_system_default, category
         ]);
 
-        return this.getMasterTermById(result.insertId);
+        return this.getMasterTermById(result.rows[0].id);
     },
 
     /**
@@ -80,14 +82,16 @@ const TermsConditionsModel = {
     async updateMasterTerm(id, termData) {
         const updates = [];
         const values = [];
+        let paramCounter = 1;
 
         // Build dynamic update query
         const allowedFields = ['term_title', 'term_value', 'term_order', 'is_mandatory', 'category'];
 
         allowedFields.forEach(field => {
             if (termData[field] !== undefined) {
-                updates.push(`${field} = ?`);
+                updates.push(`${field} = $${paramCounter}`);
                 values.push(termData[field]);
+                paramCounter++;
             }
         });
 
@@ -100,7 +104,7 @@ const TermsConditionsModel = {
         const query = `
             UPDATE terms_conditions 
             SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
+            WHERE id = $${paramCounter}
         `;
 
         await db.query(query, values);
@@ -120,7 +124,7 @@ const TermsConditionsModel = {
             throw new Error('Cannot delete system default terms');
         }
 
-        const query = `DELETE FROM terms_conditions WHERE id = ?`;
+        const query = `DELETE FROM terms_conditions WHERE id = $1`;
         await db.query(query, [id]);
         return true;
     },
@@ -140,11 +144,11 @@ const TermsConditionsModel = {
                 tc.category
             FROM po_terms_conditions pt
             LEFT JOIN terms_conditions tc ON pt.term_key = tc.term_key
-            WHERE pt.po_id = ?
+            WHERE pt.po_id = $1
             ORDER BY pt.term_order ASC
         `;
-        const [rows] = await db.query(query, [poId]);
-        return rows;
+        const result = await db.query(query, [poId]);
+        return result.rows;
     },
 
     /**
@@ -153,13 +157,13 @@ const TermsConditionsModel = {
     async getVariablesByPoId(poId) {
         const query = `
             SELECT * FROM po_term_variables 
-            WHERE po_id = ?
+            WHERE po_id = $1
         `;
-        const [rows] = await db.query(query, [poId]);
+        const result = await db.query(query, [poId]);
 
         // Convert to key-value object
         const variables = {};
-        rows.forEach(row => {
+        result.rows.forEach(row => {
             variables[row.variable_name] = row.variable_value;
         });
 
@@ -170,24 +174,24 @@ const TermsConditionsModel = {
      * Save terms for a PO (replaces existing)
      */
     async savePoTerms(poId, termsData) {
-        const connection = await db.getConnection();
+        const client = await db.pool.connect();
 
         try {
-            await connection.beginTransaction();
+            await client.query('BEGIN');
 
             // Delete existing terms for this PO
-            await connection.query('DELETE FROM po_terms_conditions WHERE po_id = ?', [poId]);
+            await client.query('DELETE FROM po_terms_conditions WHERE po_id = $1', [poId]);
 
             // Insert new terms
             if (termsData && termsData.length > 0) {
                 const insertQuery = `
                     INSERT INTO po_terms_conditions 
                     (po_id, term_key, customized_value, final_value, term_order)
-                    VALUES (?, ?, ?, ?, ?)
+                    VALUES ($1, $2, $3, $4, $5)
                 `;
 
                 for (const term of termsData) {
-                    await connection.query(insertQuery, [
+                    await client.query(insertQuery, [
                         poId,
                         term.term_key,
                         term.customized_value || null,
@@ -197,13 +201,13 @@ const TermsConditionsModel = {
                 }
             }
 
-            await connection.commit();
+            await client.query('COMMIT');
             return true;
         } catch (error) {
-            await connection.rollback();
+            await client.query('ROLLBACK');
             throw error;
         } finally {
-            connection.release();
+            client.release();
         }
     },
 
@@ -211,34 +215,34 @@ const TermsConditionsModel = {
      * Save variables for a PO (replaces existing)
      */
     async savePoVariables(poId, variables) {
-        const connection = await db.getConnection();
+        const client = await db.pool.connect();
 
         try {
-            await connection.beginTransaction();
+            await client.query('BEGIN');
 
             // Delete existing variables for this PO
-            await connection.query('DELETE FROM po_term_variables WHERE po_id = ?', [poId]);
+            await client.query('DELETE FROM po_term_variables WHERE po_id = $1', [poId]);
 
             // Insert new variables
             if (variables && Object.keys(variables).length > 0) {
                 const insertQuery = `
                     INSERT INTO po_term_variables 
                     (po_id, variable_name, variable_value)
-                    VALUES (?, ?, ?)
+                    VALUES ($1, $2, $3)
                 `;
 
                 for (const [varName, varValue] of Object.entries(variables)) {
-                    await connection.query(insertQuery, [poId, varName, varValue]);
+                    await client.query(insertQuery, [poId, varName, varValue]);
                 }
             }
 
-            await connection.commit();
+            await client.query('COMMIT');
             return true;
         } catch (error) {
-            await connection.rollback();
+            await client.query('ROLLBACK');
             throw error;
         } finally {
-            connection.release();
+            client.release();
         }
     },
 
@@ -248,8 +252,8 @@ const TermsConditionsModel = {
     async updatePoTermsStatus(poId, status) {
         const query = `
             UPDATE purchase_orders 
-            SET terms_status = ?
-            WHERE id = ?
+            SET terms_status = $1
+            WHERE id = $2
         `;
         await db.query(query, [status, poId]);
     },
