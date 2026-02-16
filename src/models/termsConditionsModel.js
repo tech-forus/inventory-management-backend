@@ -27,7 +27,7 @@ const TermsConditionsModel = {
     async getMasterTermById(idOrKey) {
         const query = `
             SELECT * FROM terms_conditions 
-            WHERE id = $1 OR term_key = $2
+            WHERE term_key = $1 OR id::text = $2
             LIMIT 1
         `;
         const result = await db.query(query, [idOrKey, idOrKey]);
