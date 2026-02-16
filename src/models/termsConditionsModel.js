@@ -174,7 +174,7 @@ const TermsConditionsModel = {
      * Save terms for a PO (replaces existing)
      */
     async savePoTerms(poId, termsData) {
-        const client = await db.pool.connect();
+        const client = await db.connect();
 
         try {
             await client.query('BEGIN');
@@ -215,7 +215,7 @@ const TermsConditionsModel = {
      * Save variables for a PO (replaces existing)
      */
     async savePoVariables(poId, variables) {
-        const client = await db.pool.connect();
+        const client = await db.connect();
 
         try {
             await client.query('BEGIN');
