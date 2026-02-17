@@ -8,6 +8,64 @@ const TermsConditionsModel = require('../models/termsConditionsModel');
  * GET /api/terms-conditions
  * Get all master terms & conditions
  */
+// ================== GLOBAL DEFAULTS ROUTES ==================
+
+/**
+ * GET /api/terms-conditions/defaults
+ * Get global default terms configuration
+ */
+router.get('/defaults', async (req, res) => {
+    try {
+        // Initialize table if needed - model handles it
+        const defaults = await TermsConditionsModel.getGlobalDefaults();
+
+        res.json({
+            success: true,
+            data: defaults
+        });
+    } catch (error) {
+        console.error('Error fetching global defaults:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch global defaults',
+            error: error.message
+        });
+    }
+});
+
+/**
+ * POST /api/terms-conditions/defaults
+ * Save global default terms configuration
+ */
+router.post('/defaults', async (req, res) => {
+    try {
+        const { selectedTerms, variables } = req.body;
+
+        await TermsConditionsModel.saveGlobalDefaults({
+            selectedTerms: selectedTerms || [],
+            variables: variables || {}
+        });
+
+        res.json({
+            success: true,
+            message: 'Global defaults saved successfully'
+        });
+    } catch (error) {
+        console.error('Error saving global defaults:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to save global defaults',
+            error: error.message
+        });
+    }
+});
+
+// ================== MASTER TERMS LIBRARY ROUTES ==================
+
+/**
+ * GET /api/terms-conditions
+ * Get all master terms & conditions
+ */
 router.get('/', async (req, res) => {
     try {
         const terms = await TermsConditionsModel.getAllMasterTerms();

@@ -10,6 +10,21 @@ const TermsConditionsModel = {
     // ================== MASTER TERMS LIBRARY ==================
 
     /**
+     * Initialize database tables
+     */
+    async init() {
+        const query = `
+            CREATE TABLE IF NOT EXISTS global_term_defaults (
+                id SERIAL PRIMARY KEY,
+                selected_terms TEXT[], -- Array of term keys
+                variables JSONB,       -- JSON object of default variable values
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `;
+        await db.query(query);
+    },
+
+    /**
      * Get all master terms & conditions
      */
     async getAllMasterTerms() {
@@ -351,11 +366,60 @@ const TermsConditionsModel = {
             const term = await this.getMasterTermById(termKey);
             if (term) {
                 const placeholders = this.extractPlaceholders(term.term_value);
-                placeholders.forEach(p => allPlaceholders.add(p));
             }
         }
 
         return Array.from(allPlaceholders);
+    },
+
+    // ================== GLOBAL DEFAULTS ==================
+
+    /**
+     * Get global default configuration
+     */
+    async getGlobalDefaults() {
+        // Ensure table exists (lazy initialization)
+        await this.init();
+
+        const query = `
+            SELECT * FROM global_term_defaults 
+            ORDER BY updated_at DESC 
+            LIMIT 1
+        `;
+        const result = await db.query(query);
+
+        if (result.rows.length === 0) {
+            return null;
+        }
+
+        const defaults = result.rows[0];
+
+        return {
+            selectedTerms: defaults.selected_terms || [],
+            variables: defaults.variables || {}
+        };
+    },
+
+    /**
+     * Save global default configuration
+     */
+    async saveGlobalDefaults(data) {
+        // Ensure table exists
+        await this.init();
+
+        const { selectedTerms, variables } = data;
+
+        // We only keep one active record, or could just append. 
+        // Let's just insert a new one for history, but we only read the latest.
+        const query = `
+            INSERT INTO global_term_defaults 
+            (selected_terms, variables)
+            VALUES ($1, $2)
+            RETURNING id
+        `;
+
+        await db.query(query, [selectedTerms, variables]);
+        return true;
     }
 };
 
