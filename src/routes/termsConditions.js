@@ -17,6 +17,14 @@ const TermsConditionsModel = require('../models/termsConditionsModel');
 router.get('/defaults', async (req, res) => {
     try {
         const { companyId } = req.query;
+
+        if (!companyId) {
+            return res.status(400).json({
+                success: false,
+                message: 'companyId query parameter is required'
+            });
+        }
+
         // Initialize table if needed - model handles it
         const defaults = await TermsConditionsModel.getGlobalDefaults(companyId);
 
@@ -42,6 +50,13 @@ router.post('/defaults', async (req, res) => {
     try {
         const { selectedTerms, variables, companyId } = req.body;
 
+        if (!companyId) {
+            return res.status(400).json({
+                success: false,
+                message: 'companyId is required'
+            });
+        }
+
         await TermsConditionsModel.saveGlobalDefaults({
             selectedTerms: selectedTerms || [],
             variables: variables || {},
@@ -50,7 +65,7 @@ router.post('/defaults', async (req, res) => {
 
         res.json({
             success: true,
-            message: 'Global defaults saved successfully'
+            message: 'Default terms saved successfully'
         });
     } catch (error) {
         console.error('Error saving global defaults:', error);

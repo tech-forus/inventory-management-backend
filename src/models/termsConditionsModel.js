@@ -380,28 +380,21 @@ const TermsConditionsModel = {
     /**
      * Get global default configuration
      */
-    async getGlobalDefaults(companyId = null) {
+    async getGlobalDefaults(companyId) {
         // Ensure table exists (lazy initialization)
         await this.init();
 
-        let query, params;
-        if (companyId) {
-            query = `
-                SELECT * FROM global_term_defaults 
-                WHERE company_id = $1
-                ORDER BY updated_at DESC 
-                LIMIT 1
-            `;
-            params = [companyId];
-        } else {
-            query = `
-                SELECT * FROM global_term_defaults 
-                WHERE company_id IS NULL
-                ORDER BY updated_at DESC 
-                LIMIT 1
-            `;
-            params = [];
+        if (!companyId) {
+            throw new Error('Company ID is required to fetch terms defaults');
         }
+
+        const query = `
+            SELECT * FROM global_term_defaults 
+            WHERE company_id = $1
+            ORDER BY updated_at DESC 
+            LIMIT 1
+        `;
+        const params = [companyId];
 
         const result = await db.query(query, params);
 
@@ -421,14 +414,15 @@ const TermsConditionsModel = {
     /**
      * Save global default configuration
      */
-    /**
-     * Save global default configuration
-     */
     async saveGlobalDefaults(data) {
         // Ensure table exists
         await this.init();
 
         const { selectedTerms, variables, companyId } = data;
+
+        if (!companyId) {
+            throw new Error('Company ID is required to save terms defaults');
+        }
 
         // We only keep one active record per company (or global), or could just append. 
         // Let's just insert a new one for history, but we only read the latest.
@@ -439,7 +433,7 @@ const TermsConditionsModel = {
             RETURNING id
         `;
 
-        await db.query(query, [selectedTerms, variables, companyId || null]);
+        await db.query(query, [selectedTerms, variables, companyId]);
         return true;
     }
 };
