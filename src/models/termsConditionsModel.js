@@ -377,16 +377,33 @@ const TermsConditionsModel = {
     /**
      * Get global default configuration
      */
-    async getGlobalDefaults() {
+    /**
+     * Get global default configuration
+     */
+    async getGlobalDefaults(companyId = null) {
         // Ensure table exists (lazy initialization)
         await this.init();
 
-        const query = `
-            SELECT * FROM global_term_defaults 
-            ORDER BY updated_at DESC 
-            LIMIT 1
-        `;
-        const result = await db.query(query);
+        let query, params;
+        if (companyId) {
+            query = `
+                SELECT * FROM global_term_defaults 
+                WHERE company_id = $1
+                ORDER BY updated_at DESC 
+                LIMIT 1
+            `;
+            params = [companyId];
+        } else {
+            query = `
+                SELECT * FROM global_term_defaults 
+                WHERE company_id IS NULL
+                ORDER BY updated_at DESC 
+                LIMIT 1
+            `;
+            params = [];
+        }
+
+        const result = await db.query(query, params);
 
         if (result.rows.length === 0) {
             return null;
@@ -396,10 +413,14 @@ const TermsConditionsModel = {
 
         return {
             selectedTerms: defaults.selected_terms || [],
-            variables: defaults.variables || {}
+            variables: defaults.variables || {},
+            companyId: defaults.company_id
         };
     },
 
+    /**
+     * Save global default configuration
+     */
     /**
      * Save global default configuration
      */
@@ -407,18 +428,18 @@ const TermsConditionsModel = {
         // Ensure table exists
         await this.init();
 
-        const { selectedTerms, variables } = data;
+        const { selectedTerms, variables, companyId } = data;
 
-        // We only keep one active record, or could just append. 
+        // We only keep one active record per company (or global), or could just append. 
         // Let's just insert a new one for history, but we only read the latest.
         const query = `
             INSERT INTO global_term_defaults 
-            (selected_terms, variables)
-            VALUES ($1, $2)
+            (selected_terms, variables, company_id)
+            VALUES ($1, $2, $3)
             RETURNING id
         `;
 
-        await db.query(query, [selectedTerms, variables]);
+        await db.query(query, [selectedTerms, variables, companyId || null]);
         return true;
     }
 };

@@ -9,7 +9,7 @@ const { logger } = require('../utils/logger');
  */
 const register = async (req, res, next) => {
   const client = await pool.connect();
-  
+
   try {
     await client.query('BEGIN');
 
@@ -135,7 +135,7 @@ const register = async (req, res, next) => {
 const getCompany = async (req, res, next) => {
   try {
     const { companyId } = req.params;
-    
+
     const result = await pool.query(
       `SELECT 
         id, company_id, company_name, gst_number, business_type,
@@ -164,6 +164,19 @@ const getCompany = async (req, res, next) => {
 module.exports = {
   register,
   getCompany,
+  getAllCompanies: async (req, res, next) => {
+    try {
+      const result = await pool.query(
+        `SELECT id, company_id, company_name FROM companies ORDER BY company_name ASC`
+      );
+      res.json({
+        success: true,
+        data: result.rows
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
 };
 
 

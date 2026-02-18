@@ -16,8 +16,9 @@ const TermsConditionsModel = require('../models/termsConditionsModel');
  */
 router.get('/defaults', async (req, res) => {
     try {
+        const { companyId } = req.query;
         // Initialize table if needed - model handles it
-        const defaults = await TermsConditionsModel.getGlobalDefaults();
+        const defaults = await TermsConditionsModel.getGlobalDefaults(companyId);
 
         res.json({
             success: true,
@@ -39,11 +40,12 @@ router.get('/defaults', async (req, res) => {
  */
 router.post('/defaults', async (req, res) => {
     try {
-        const { selectedTerms, variables } = req.body;
+        const { selectedTerms, variables, companyId } = req.body;
 
         await TermsConditionsModel.saveGlobalDefaults({
             selectedTerms: selectedTerms || [],
-            variables: variables || {}
+            variables: variables || {},
+            companyId: companyId
         });
 
         res.json({
