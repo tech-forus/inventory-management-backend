@@ -120,7 +120,7 @@ const createIncomingInventory = async (req, res, next) => {
     if (items && items.length > 0) {
       await IncomingInventoryModel.validateItemsLineage(
         items,
-        inventoryData.brandId,
+        inventoryData.brandIds || inventoryData.brandId,
         inventoryData.vendorId, // Pass Vendor ID for Catalog Validation
         companyId
       );

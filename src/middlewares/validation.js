@@ -9,13 +9,13 @@
 const validateRequired = (fields) => {
   return (req, res, next) => {
     const missing = [];
-    
+
     for (const field of fields) {
       if (!req.body[field] || (typeof req.body[field] === 'string' && !req.body[field].trim())) {
         missing.push(field);
       }
     }
-    
+
     if (missing.length > 0) {
       return res.status(400).json({
         success: false,
@@ -23,7 +23,7 @@ const validateRequired = (fields) => {
         missing,
       });
     }
-    
+
     next();
   };
 };
@@ -58,7 +58,7 @@ const validateEmailOrPhone = (field = 'email') => {
       // Normalize phone: remove spaces, dashes, parentheses, plus signs
       const normalizedPhone = value.replace(/[\s\-\(\)\+]/g, '');
       const phoneRegex = /^[0-9]{10}$/;
-      
+
       // Check if it's a valid email or phone
       if (!emailRegex.test(value) && !phoneRegex.test(normalizedPhone)) {
         return res.status(400).json({
@@ -163,7 +163,7 @@ const validateDate = (field = 'date', required = false) => {
         field,
       });
     }
-    
+
     // If field is provided, validate format
     if (req.body[field]) {
       const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
@@ -258,16 +258,16 @@ const validateIncomingItems = () => {
 const validateIncomingInventorySupplier = () => {
   return (req, res, next) => {
     const { vendorId, destinationId, brandId, documentType } = req.body;
-    
+
     // Skip validation for transfer_note (has different requirements)
     if (documentType === 'transfer_note') {
       return next();
     }
-    
+
     // Check if at least one supplier identifier is provided
     const hasVendor = vendorId !== null && vendorId !== undefined && vendorId !== '';
     const hasCustomer = destinationId !== null && destinationId !== undefined && destinationId !== '';
-    
+
     if (!hasVendor && !hasCustomer) {
       return res.status(400).json({
         success: false,
@@ -275,8 +275,8 @@ const validateIncomingInventorySupplier = () => {
         field: 'supplier',
       });
     }
-    
-    // If vendor is selected, validate vendorId and brandId
+
+    // If vendor is selected, validate vendorId and brand identifier
     if (hasVendor) {
       const vendorIdNum = parseFloat(vendorId);
       if (isNaN(vendorIdNum) || vendorIdNum <= 0) {
@@ -286,26 +286,45 @@ const validateIncomingInventorySupplier = () => {
           field: 'vendorId',
         });
       }
-      
-      // Brand is required when vendor is selected
-      if (!brandId || brandId === null || brandId === '') {
+
+      // Brand is required when vendor is selected (either brandId or brandIds array)
+      const brandIds = req.body.brandIds;
+      const hasBrandId = brandId !== null && brandId !== undefined && brandId !== '';
+      const hasBrandIds = Array.isArray(brandIds) && brandIds.length > 0;
+
+      if (!hasBrandId && !hasBrandIds) {
         return res.status(400).json({
           success: false,
-          error: 'brandId is required when vendorId is provided',
+          error: 'At least one brand must be selected when vendorId is provided',
           field: 'brandId',
         });
       }
-      
-      const brandIdNum = parseFloat(brandId);
-      if (isNaN(brandIdNum) || brandIdNum <= 0) {
-        return res.status(400).json({
-          success: false,
-          error: 'brandId must be a positive number',
-          field: 'brandId',
-        });
+
+      if (hasBrandId) {
+        const brandIdNum = parseFloat(brandId);
+        if (isNaN(brandIdNum) || brandIdNum <= 0) {
+          return res.status(400).json({
+            success: false,
+            error: 'brandId must be a positive number',
+            field: 'brandId',
+          });
+        }
+      }
+
+      if (hasBrandIds) {
+        for (const id of brandIds) {
+          const bIdNum = parseFloat(id);
+          if (isNaN(bIdNum) || bIdNum <= 0) {
+            return res.status(400).json({
+              success: false,
+              error: 'brandIds must contain only positive numbers',
+              field: 'brandIds',
+            });
+          }
+        }
       }
     }
-    
+
     // If customer is selected, validate destinationId
     if (hasCustomer) {
       const destinationIdNum = parseFloat(destinationId);
@@ -317,7 +336,7 @@ const validateIncomingInventorySupplier = () => {
         });
       }
     }
-    
+
     next();
   };
 };

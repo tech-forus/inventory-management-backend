@@ -11,7 +11,7 @@ class IncomingInventoryModel {
    * Validate that all items belong to the selected Brand and respect Vendor Catalog restrictions
    * STRICT MODE: SKUs must have matching categories/brands if vendor has restrictions
    * @param {Array} items - List of items with skuId
-   * @param {number|string} brandId - Selected Brand ID
+   * @param {number|string|Array} brandId - Selected Brand ID(s)
    * @param {number|string} vendorId - Selected Vendor ID
    * @param {string} companyId - Company ID
    */
@@ -58,8 +58,14 @@ class IncomingInventoryModel {
         }
 
         // A. Brand Integrity (Invoice Header Brand)
-        if (brandId && sku.brand_id != brandId) {
-          throw new Error(`Integrity Violation: SKU '${sku.sku_id}' (Brand ID: ${sku.brand_id}) does not belong to the selected Brand (ID: ${brandId}).`);
+        if (brandId) {
+          if (Array.isArray(brandId)) {
+            if (sku.brand_id && !brandId.map(id => id.toString()).includes(sku.brand_id.toString())) {
+              throw new Error(`Integrity Violation: SKU '${sku.sku_id}' (Brand ID: ${sku.brand_id}) does not belong to any of the selected Brands (IDs: ${brandId.join(', ')}).`);
+            }
+          } else if (sku.brand_id != brandId) {
+            throw new Error(`Integrity Violation: SKU '${sku.sku_id}' (Brand ID: ${sku.brand_id}) does not belong to the selected Brand (ID: ${brandId}).`);
+          }
         }
 
         // B. Vendor Catalog Integrity (STRICT ENFORCEMENT)
