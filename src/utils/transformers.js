@@ -360,7 +360,9 @@ const transformPurchaseOrder = (po) => {
     createdBy: po.created_by,
     createdByName: po.created_by_name,
     createdAt: po.created_at,
-    updatedAt: po.updated_at
+    createdAt: po.created_at,
+    updatedAt: po.updated_at,
+    vendorIds: po.vendor_ids || []
   };
 };
 

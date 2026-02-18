@@ -36,9 +36,9 @@ class PurchaseOrderModel {
 
     const query = `
       INSERT INTO purchase_orders (
-        company_id, po_number, enquiry_number, order_date, total_amount, status, items, created_by, type
+        company_id, po_number, enquiry_number, order_date, total_amount, status, items, created_by, type, vendor_ids
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
       ) RETURNING *
     `;
     const params = [
@@ -50,7 +50,45 @@ class PurchaseOrderModel {
       'Enquiry',
       JSON.stringify(poData.items || []),
       userId,
-      'enquiry'
+      'enquiry',
+      JSON.stringify(poData.vendorIds || [])
+    ];
+
+    const result = await pool.query(query, params);
+    return result.rows[0];
+  }
+
+  /**
+   * Update a purchase order or enquiry
+   */
+  static async update(id, poData, companyId, userId) {
+    const query = `
+      UPDATE purchase_orders
+      SET
+        items = $1,
+        total_amount = $2,
+        order_date = $3,
+        vendor_ids = $4,
+        vendor_id = $5,
+        updated_at = NOW(),
+        updated_by = $6
+      WHERE id = $7 AND company_id = $8
+      RETURNING *
+    `;
+
+    // Ensure we handle JSON arrays correctly for vendor_ids
+    const vendorIds = poData.vendorIds ? JSON.stringify(poData.vendorIds) : null;
+    const vendorId = poData.vendorId || null;
+
+    const params = [
+      JSON.stringify(poData.items || []),
+      poData.totalAmount || 0,
+      poData.date || new Date(),
+      vendorIds,
+      vendorId,
+      userId,
+      id,
+      companyId.toUpperCase()
     ];
 
     const result = await pool.query(query, params);

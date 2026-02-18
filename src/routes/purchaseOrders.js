@@ -48,4 +48,10 @@ router.get('/:id', purchaseOrderController.getPurchaseOrderById);
  */
 router.patch('/:id/status', purchaseOrderController.updatePurchaseOrderStatus);
 
+/**
+ * PUT /api/purchase-orders/:id
+ * Update purchase order or enquiry
+ */
+router.put('/:id', purchaseOrderController.updatePurchaseOrder);
+
 module.exports = router;

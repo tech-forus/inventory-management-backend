@@ -136,12 +136,31 @@ const getNextEnquiryNumber = async (req, res, next) => {
     }
 };
 
+const updatePurchaseOrder = async (req, res, next) => {
+    try {
+        const companyId = getCompanyId(req);
+        const userId = req.user.userId;
+        const { id } = req.params;
+
+        const updatedOrder = await PurchaseOrderModel.update(id, req.body, companyId, userId);
+
+        if (!updatedOrder) {
+            throw new NotFoundError('Purchase Order not found');
+        }
+
+        res.json({ success: true, data: transformPurchaseOrder(updatedOrder) });
+    } catch (error) {
+        next(error);
+    }
+};
+
 module.exports = {
     getAllPurchaseOrders,
     getPurchaseOrderById,
     createPurchaseOrder,
     createEnquiry,
     updatePurchaseOrderStatus,
+    updatePurchaseOrder,
     getNextPoNumber,
     getNextEnquiryNumber
 };
