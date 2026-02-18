@@ -8,7 +8,7 @@ router.use(authenticate);
 
 /**
  * GET /api/purchase-orders
- * Get all purchase orders with filters
+ * Get all purchase orders with filters (search, status, excludeStatus, type, page, limit)
  */
 router.get('/', purchaseOrderController.getAllPurchaseOrders);
 
@@ -19,10 +19,22 @@ router.get('/', purchaseOrderController.getAllPurchaseOrders);
 router.post('/', purchaseOrderController.createPurchaseOrder);
 
 /**
+ * POST /api/purchase-orders/enquiry
+ * Create a new enquiry (multi-vendor, generates ENQ number)
+ */
+router.post('/enquiry', purchaseOrderController.createEnquiry);
+
+/**
  * GET /api/purchase-orders/next-number
  * Get the next available PO number
  */
 router.get('/next-number', purchaseOrderController.getNextPoNumber);
+
+/**
+ * GET /api/purchase-orders/next-enquiry-number
+ * Get the next available Enquiry number
+ */
+router.get('/next-enquiry-number', purchaseOrderController.getNextEnquiryNumber);
 
 /**
  * GET /api/purchase-orders/:id

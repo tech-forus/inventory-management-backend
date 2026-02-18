@@ -350,6 +350,9 @@ const transformPurchaseOrder = (po) => {
   return {
     id: po.id,
     poNumber: po.po_number,
+    enquiryNumber: po.enquiry_number || null,
+    type: po.type || 'po',
+    vendorId: po.vendor_id || null,
     date: po.order_date,
     totalAmount: parseFloat(po.total_amount),
     status: po.status,

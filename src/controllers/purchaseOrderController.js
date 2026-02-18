@@ -12,6 +12,9 @@ const getAllPurchaseOrders = async (req, res, next) => {
         const companyId = getCompanyId(req);
         const filters = {
             search: req.query.search,
+            status: req.query.status,
+            excludeStatus: req.query.excludeStatus,
+            type: req.query.type,
             page: req.query.page,
             limit: req.query.limit,
             offset: req.query.offset
@@ -39,18 +42,12 @@ const getPurchaseOrderById = async (req, res, next) => {
 
 const createPurchaseOrder = async (req, res, next) => {
     try {
-        const companyId = getCompanyId(req); // Will throw if missing
+        const companyId = getCompanyId(req);
         const userId = req.user.userId;
 
         if (!userId) {
             throw new ValidationError('User ID missing from token');
         }
-
-        console.log('Received Create PO Request:', {
-            companyId,
-            userId,
-            body: req.body
-        });
 
         let poNumber = req.body.poNumber;
         if (!poNumber) {
@@ -59,7 +56,8 @@ const createPurchaseOrder = async (req, res, next) => {
 
         const poData = {
             ...req.body,
-            poNumber
+            poNumber,
+            type: 'po'
         };
 
         const order = await PurchaseOrderModel.create(poData, companyId, userId);
@@ -68,6 +66,29 @@ const createPurchaseOrder = async (req, res, next) => {
         res.json({ success: true, data: transformPurchaseOrder(order) });
     } catch (error) {
         console.error('Create Purchase Order failed:', {
+            message: error.message,
+            stack: error.stack,
+            body: req.body
+        });
+        next(error);
+    }
+};
+
+const createEnquiry = async (req, res, next) => {
+    try {
+        const companyId = getCompanyId(req);
+        const userId = req.user.userId;
+
+        if (!userId) {
+            throw new ValidationError('User ID missing from token');
+        }
+
+        const order = await PurchaseOrderModel.createEnquiry(req.body, companyId, userId);
+        console.log('Enquiry Created Successfully:', order.id, order.enquiry_number);
+
+        res.json({ success: true, data: transformPurchaseOrder(order) });
+    } catch (error) {
+        console.error('Create Enquiry failed:', {
             message: error.message,
             stack: error.stack,
             body: req.body
@@ -105,10 +126,22 @@ const getNextPoNumber = async (req, res, next) => {
     }
 };
 
+const getNextEnquiryNumber = async (req, res, next) => {
+    try {
+        const companyId = getCompanyId(req);
+        const nextEnq = await PurchaseOrderModel.generateNextEnquiryNumber(companyId);
+        res.json({ success: true, data: { enquiryNumber: nextEnq } });
+    } catch (error) {
+        next(error);
+    }
+};
+
 module.exports = {
     getAllPurchaseOrders,
     getPurchaseOrderById,
     createPurchaseOrder,
+    createEnquiry,
     updatePurchaseOrderStatus,
-    getNextPoNumber
+    getNextPoNumber,
+    getNextEnquiryNumber
 };

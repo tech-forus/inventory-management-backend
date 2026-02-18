@@ -26,6 +26,8 @@ function parseDatabaseUrl() {
 // Parse DATABASE_URL if available
 const urlConfig = parseDatabaseUrl();
 
+const isRemote = (process.env.DB_HOST && !process.env.DB_HOST.includes('localhost'));
+
 const dbConfig = {
   development: urlConfig || {
     host: process.env.DB_HOST || 'localhost',
@@ -33,7 +35,7 @@ const dbConfig = {
     database: process.env.DB_NAME || 'inventory_db',
     user: process.env.DB_USER || 'postgres',
     password: process.env.DB_PASSWORD || 'forus',
-    ssl: false, // No SSL for local development
+    ssl: isRemote ? { rejectUnauthorized: false } : false, // Enable SSL for remote dev DBs
   },
   test: {
     host: process.env.DB_HOST || 'localhost',

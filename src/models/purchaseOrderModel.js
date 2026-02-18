@@ -7,9 +7,9 @@ class PurchaseOrderModel {
   static async create(poData, companyId, userId) {
     const query = `
       INSERT INTO purchase_orders (
-        company_id, po_number, order_date, total_amount, status, items, created_by
+        company_id, po_number, order_date, total_amount, status, items, created_by, vendor_id, type
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7
+        $1, $2, $3, $4, $5, $6, $7, $8, $9
       ) RETURNING *
     `;
     const params = [
@@ -19,7 +19,38 @@ class PurchaseOrderModel {
       poData.totalAmount || 0,
       poData.status || 'Created',
       JSON.stringify(poData.items || []),
-      userId
+      userId,
+      poData.vendorId || null,
+      poData.type || 'po'
+    ];
+
+    const result = await pool.query(query, params);
+    return result.rows[0];
+  }
+
+  /**
+   * Create a new enquiry
+   */
+  static async createEnquiry(poData, companyId, userId) {
+    const enquiryNumber = await PurchaseOrderModel.generateNextEnquiryNumber(companyId);
+
+    const query = `
+      INSERT INTO purchase_orders (
+        company_id, po_number, enquiry_number, order_date, total_amount, status, items, created_by, type
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9
+      ) RETURNING *
+    `;
+    const params = [
+      companyId.toUpperCase(),
+      enquiryNumber,       // use enquiry number as po_number too for consistency
+      enquiryNumber,
+      poData.date || new Date(),
+      poData.totalAmount || 0,
+      'Enquiry',
+      JSON.stringify(poData.items || []),
+      userId,
+      'enquiry'
     ];
 
     const result = await pool.query(query, params);
@@ -28,6 +59,7 @@ class PurchaseOrderModel {
 
   /**
    * Get all purchase orders for a company
+   * Supports filters: search, status, excludeStatus, type, page, limit
    */
   static async getAll(companyId, filters = {}) {
     let query = `
@@ -40,8 +72,29 @@ class PurchaseOrderModel {
     let paramIndex = 2;
 
     if (filters.search) {
-      query += ` AND po.po_number ILIKE $${paramIndex}`;
+      query += ` AND (po.po_number ILIKE $${paramIndex} OR po.enquiry_number ILIKE $${paramIndex})`;
       params.push(`%${filters.search}%`);
+      paramIndex++;
+    }
+
+    // Filter by exact status
+    if (filters.status) {
+      query += ` AND po.status = $${paramIndex}`;
+      params.push(filters.status);
+      paramIndex++;
+    }
+
+    // Exclude a specific status (e.g. excludeStatus=Completed for open POs)
+    if (filters.excludeStatus) {
+      query += ` AND po.status != $${paramIndex}`;
+      params.push(filters.excludeStatus);
+      paramIndex++;
+    }
+
+    // Filter by type: 'po' or 'enquiry'
+    if (filters.type) {
+      query += ` AND po.type = $${paramIndex}`;
+      params.push(filters.type);
       paramIndex++;
     }
 
@@ -92,32 +145,13 @@ class PurchaseOrderModel {
    * Example: PO-2602-FEPL-0001
    */
   static async generateNextPoNumber(companyId) {
-    // 1. Get Company Name for Initials
-    const companyRes = await pool.query(
-      'SELECT company_name FROM companies WHERE company_id = $1',
-      [companyId.toUpperCase()]
-    );
+    const initials = await PurchaseOrderModel._getCompanyInitials(companyId);
 
-    let initials = 'FC'; // Fallback
-    if (companyRes.rows.length > 0 && companyRes.rows[0].company_name) {
-      const name = companyRes.rows[0].company_name;
-      // Extract first letter of each word
-      initials = name.trim().split(/\s+/)
-        .map(word => word[0])
-        .join('')
-        .toUpperCase()
-        .replace(/[^A-Z0-9]/g, ''); // Ensure only alphanumeric
-    }
-
-    // 2. Date Component (YYMM)
     const now = new Date();
     const yy = now.getFullYear().toString().slice(-2);
     const mm = (now.getMonth() + 1).toString().padStart(2, '0');
-
-    // 3. Construct Prefix
     const prefix = `PO-${yy}${mm}-${initials}-`;
 
-    // 4. Find Latest PO with this prefix
     const query = `
       SELECT po_number FROM purchase_orders 
       WHERE po_number LIKE $1 AND company_id = $2
@@ -130,7 +164,6 @@ class PurchaseOrderModel {
     let sequence = 1;
     if (result.rows.length > 0) {
       const lastPo = result.rows[0].po_number;
-      // Extract sequence part
       const lastSeqStr = lastPo.replace(prefix, '');
       const lastSeq = parseInt(lastSeqStr, 10);
       if (!isNaN(lastSeq)) {
@@ -138,8 +171,63 @@ class PurchaseOrderModel {
       }
     }
 
-    // 5. Format Full PO Number
     return `${prefix}${sequence.toString().padStart(4, '0')}`;
+  }
+
+  /**
+   * Generate next Enquiry Number
+   * Format: ENQ-YYMM-{COMPANY_INITIALS}-{SEQ}
+   * Example: ENQ-2602-FEPL-0001
+   */
+  static async generateNextEnquiryNumber(companyId) {
+    const initials = await PurchaseOrderModel._getCompanyInitials(companyId);
+
+    const now = new Date();
+    const yy = now.getFullYear().toString().slice(-2);
+    const mm = (now.getMonth() + 1).toString().padStart(2, '0');
+    const prefix = `ENQ-${yy}${mm}-${initials}-`;
+
+    const query = `
+      SELECT enquiry_number FROM purchase_orders 
+      WHERE enquiry_number LIKE $1 AND company_id = $2
+      ORDER BY LENGTH(enquiry_number) DESC, enquiry_number DESC 
+      LIMIT 1
+    `;
+
+    const result = await pool.query(query, [`${prefix}%`, companyId.toUpperCase()]);
+
+    let sequence = 1;
+    if (result.rows.length > 0) {
+      const lastEnq = result.rows[0].enquiry_number;
+      const lastSeqStr = lastEnq.replace(prefix, '');
+      const lastSeq = parseInt(lastSeqStr, 10);
+      if (!isNaN(lastSeq)) {
+        sequence = lastSeq + 1;
+      }
+    }
+
+    return `${prefix}${sequence.toString().padStart(4, '0')}`;
+  }
+
+  /**
+   * Internal helper: get company initials
+   */
+  static async _getCompanyInitials(companyId) {
+    const companyRes = await pool.query(
+      'SELECT company_name FROM companies WHERE company_id = $1',
+      [companyId.toUpperCase()]
+    );
+
+    let initials = 'FC'; // Fallback
+    if (companyRes.rows.length > 0 && companyRes.rows[0].company_name) {
+      const name = companyRes.rows[0].company_name;
+      initials = name.trim().split(/\s+/)
+        .map(word => word[0])
+        .join('')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '');
+    }
+    return initials;
   }
 
   /**
