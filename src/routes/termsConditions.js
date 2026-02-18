@@ -1,6 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const TermsConditionsModel = require('../models/termsConditionsModel');
+const { authenticate, getCompanyId } = require('../middlewares/auth');
+
+// Apply authentication to all routes
+router.use(authenticate);
 
 // ================== MASTER TERMS LIBRARY ROUTES ==================
 
@@ -16,14 +20,7 @@ const TermsConditionsModel = require('../models/termsConditionsModel');
  */
 router.get('/defaults', async (req, res) => {
     try {
-        const { companyId } = req.query;
-
-        if (!companyId) {
-            return res.status(400).json({
-                success: false,
-                message: 'companyId query parameter is required'
-            });
-        }
+        const companyId = getCompanyId(req);
 
         // Initialize table if needed - model handles it
         const defaults = await TermsConditionsModel.getGlobalDefaults(companyId);
@@ -48,14 +45,8 @@ router.get('/defaults', async (req, res) => {
  */
 router.post('/defaults', async (req, res) => {
     try {
-        const { selectedTerms, variables, companyId } = req.body;
-
-        if (!companyId) {
-            return res.status(400).json({
-                success: false,
-                message: 'companyId is required'
-            });
-        }
+        const { selectedTerms, variables } = req.body;
+        const companyId = getCompanyId(req);
 
         await TermsConditionsModel.saveGlobalDefaults({
             selectedTerms: selectedTerms || [],
