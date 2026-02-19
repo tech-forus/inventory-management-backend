@@ -14,8 +14,10 @@ router.put('/customers/:id/reassign', salesController.reassignCustomer);
 
 // --- Leads ---
 router.get('/leads', salesController.getAllLeads);
+router.get('/leads/:id', salesController.getLead);
 router.post('/leads', salesController.createLead);
 router.put('/leads/:id', salesController.updateLead);
+router.delete('/leads/:id', salesController.deleteLead);
 
 // Follow-ups
 router.post('/leads/:id/follow-ups', salesController.addFollowUp);

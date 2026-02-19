@@ -83,11 +83,23 @@ const getAllLeads = async (req, res, next) => {
             status: req.query.status,
             search: req.query.search,
             limit: req.query.limit,
-            page: req.query.page, // Handle pagination logic in model or here? Model handles limit/offset.
-            offset: req.query.offset // Frontend usually sends limit/offset or page/limit
+            page: req.query.page,
+            offset: req.query.offset
         };
         const leads = await LeadModel.getAll(companyId, userId, role, filters);
         res.json({ success: true, data: leads });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const getLead = async (req, res, next) => {
+    try {
+        const companyId = getCompanyId(req);
+        const { id } = req.params;
+        const lead = await LeadModel.getById(id, companyId);
+        if (!lead) throw new NotFoundError('Lead not found');
+        res.json({ success: true, data: lead });
     } catch (error) {
         next(error);
     }
@@ -113,6 +125,18 @@ const updateLead = async (req, res, next) => {
         const lead = await LeadModel.update(id, req.body, companyId);
         if (!lead) throw new NotFoundError('Lead not found');
         res.json({ success: true, data: lead });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const deleteLead = async (req, res, next) => {
+    try {
+        const companyId = getCompanyId(req);
+        const { id } = req.params;
+        const lead = await LeadModel.delete(id, companyId);
+        if (!lead) throw new NotFoundError('Lead not found');
+        res.json({ success: true, data: lead, message: 'Lead deleted successfully' });
     } catch (error) {
         next(error);
     }
@@ -159,8 +183,10 @@ module.exports = {
     updateCustomer,
     reassignCustomer,
     getAllLeads,
+    getLead,
     createLead,
     updateLead,
+    deleteLead,
     addFollowUp,
     markFollowUpDone,
     getDashboardStats
