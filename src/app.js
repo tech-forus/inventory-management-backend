@@ -159,6 +159,7 @@ const manufacturingRoutes = require('./routes/manufacturingRoutes');
 const dashboardRoutes = require('./routes/dashboard');
 const purchaseOrderRoutes = require('./routes/purchaseOrders');
 const termsConditionsRoutes = require('./routes/termsConditions');
+const salesRoutes = require('./routes/sales');
 
 // Apply conditional rate limiting to routes
 // Authenticated users get unlimited requests (JWT valid for 12 hours)
@@ -177,6 +178,7 @@ app.use('/api/manufacturing', apiRateLimiter, manufacturingRoutes); // Manufactu
 app.use('/api/dashboard', apiRateLimiter, dashboardRoutes); // Dashboard routes
 app.use('/api/purchase-orders', apiRateLimiter, purchaseOrderRoutes); // Purchase Order routes
 app.use('/api/terms-conditions', apiRateLimiter, termsConditionsRoutes); // Terms & Conditions routes
+app.use('/api/sales', apiRateLimiter, salesRoutes); // Sales routes
 
 // New "your" prefixed routes (must be last to avoid catching other routes)
 app.use('/api', apiRateLimiter, libraryRoutes);
