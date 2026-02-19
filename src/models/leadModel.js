@@ -9,6 +9,7 @@ class LeadModel {
             SELECT l.*, 
                    u.full_name as assigned_to_name,
                    c.customer_name as linked_customer_name,
+                   c.company_name as customer_company,
                    (SELECT COUNT(*) FROM lead_items li WHERE li.lead_id = l.id) as item_count,
                    (SELECT json_agg(json_build_object('id', li.id, 'item_name', li.item_name, 'quantity', li.quantity, 'estimated_value', li.estimated_value)) 
                     FROM lead_items li WHERE li.lead_id = l.id) as items,
@@ -152,6 +153,7 @@ class LeadModel {
             SELECT l.*, 
                    u.full_name as assigned_to_name,
                    c.customer_name as linked_customer_name,
+                   c.company_name as customer_company,
                    (SELECT json_agg(json_build_object(
                        'id', li.id, 
                        'sku_code', li.sku_code,
