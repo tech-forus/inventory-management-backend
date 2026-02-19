@@ -148,6 +148,14 @@ const transformCustomer = (customer) => {
     return [];
   };
 
+  // Format date to YYYY-MM-DD for HTML date inputs
+  const formatDate = (val) => {
+    if (!val) return null;
+    if (val instanceof Date) return val.toISOString().split('T')[0];
+    if (typeof val === 'string') return val.split('T')[0];
+    return null;
+  };
+
   return {
     id: customer.id,
     companyId: customer.company_id,
@@ -162,7 +170,7 @@ const transformCustomer = (customer) => {
     addressLine2: customer.address_line2,
     address: customer.address_line1, // Alias for compatibility
     personalAddress: customer.personal_address,
-    dateOfBirth: customer.date_of_birth,
+    dateOfBirth: formatDate(customer.date_of_birth),
     city: customer.city,
     state: customer.state,
     country: customer.country,
@@ -177,7 +185,7 @@ const transformCustomer = (customer) => {
     isActive: customer.is_active,
     notes: customer.notes,
     // New fields
-    anniversaryDate: customer.anniversary,
+    anniversaryDate: formatDate(customer.anniversary),
     customerType: customer.customer_type,
     interests: parseJsonArray(customer.interests),
     tags: parseJsonArray(customer.tags),
