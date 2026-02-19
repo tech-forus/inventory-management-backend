@@ -216,11 +216,11 @@ class LeadModel {
         }
 
         const queries = {
-            totalLeads: `SELECT COUNT(*) FROM leads ${whereClause}`,
-            openLeads: `SELECT COUNT(*) FROM leads ${whereClause} AND status = 'open'`,
-            wonLeads: `SELECT COUNT(*) FROM leads ${whereClause} AND status = 'closed_won'`,
-            totalValue: `SELECT COALESCE(SUM(estimated_value), 0) FROM leads ${whereClause}`,
-            wonValue: `SELECT COALESCE(SUM(estimated_value), 0) FROM leads ${whereClause} AND status = 'closed_won'`,
+            totalLeads: `SELECT COUNT(*) FROM leads l ${whereClause}`,
+            openLeads: `SELECT COUNT(*) FROM leads l ${whereClause} AND status = 'open'`,
+            wonLeads: `SELECT COUNT(*) FROM leads l ${whereClause} AND status = 'closed_won'`,
+            totalValue: `SELECT COALESCE(SUM(estimated_value), 0) FROM leads l ${whereClause}`,
+            wonValue: `SELECT COALESCE(SUM(estimated_value), 0) FROM leads l ${whereClause} AND status = 'closed_won'`,
             upcomingFollowUps: `
                 SELECT COUNT(*) 
                 FROM lead_follow_ups f
