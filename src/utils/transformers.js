@@ -138,6 +138,16 @@ const transformTeam = (team) => {
  */
 const transformCustomer = (customer) => {
   if (!customer) return null;
+
+  // Parse JSONB arrays (interests, tags) safely
+  const parseJsonArray = (val) => {
+    if (Array.isArray(val)) return val;
+    if (typeof val === 'string') {
+      try { return JSON.parse(val); } catch (e) { return []; }
+    }
+    return [];
+  };
+
   return {
     id: customer.id,
     companyId: customer.company_id,
@@ -166,6 +176,15 @@ const transformCustomer = (customer) => {
     creditPeriod: customer.credit_period,
     isActive: customer.is_active,
     notes: customer.notes,
+    // New fields
+    anniversaryDate: customer.anniversary,
+    customerType: customer.customer_type,
+    interests: parseJsonArray(customer.interests),
+    tags: parseJsonArray(customer.tags),
+    loyaltyTier: customer.loyalty_tier,
+    source: customer.source,
+    assignedTo: customer.assigned_to,
+    assignedToName: customer.assigned_to_name,
     createdAt: customer.created_at,
     updatedAt: customer.updated_at,
     createdBy: customer.created_by,

@@ -66,33 +66,58 @@ class CustomerModel {
                 company_id, assigned_to, customer_name, phone, email, 
                 company_name, city, postal_code, address_line1, gst_number,
                 birthday, anniversary, interests, tags, loyalty_tier, 
-                preferred_categories, notes
+                preferred_categories, notes, whatsapp_number, contact_person,
+                date_of_birth, personal_address, credit_period, state,
+                customer_type, source, is_active
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
             RETURNING *
         `;
 
     const params = [
       companyId,
       assignedTo,
-      data.name,                 // customer_name
+      data.name || data.customer_name,                          // customer_name
       data.phone,
       data.email,
-      data.company_name,
+      data.company_name || data.name,                           // company_name (fallback to name)
       data.city,
-      data.pincode,              // postal_code
-      data.address,              // address_line1
-      data.gstin,                // gst_number
-      data.birthday || null,
-      data.anniversary || null,
+      data.pin || data.pincode || data.postal_code,             // postal_code
+      data.address || data.address_line1,                       // address_line1
+      data.gstNumber || data.gstin || data.gst_number,          // gst_number
+      data.dateOfBirth || data.birthday || null,                // birthday
+      data.anniversaryDate || data.anniversary || null,         // anniversary
       JSON.stringify(data.interests || []),
       JSON.stringify(data.tags || []),
-      data.loyalty_tier || null,
+      data.loyaltyTier || data.loyalty_tier || null,            // loyalty_tier
       data.preferred_categories || null,
-      data.notes || null
+      data.notes || null,
+      data.whatsappNumber || data.whatsapp_number || null,      // whatsapp_number
+      data.contactPerson || data.contact_person || null,        // contact_person
+      data.dateOfBirth || data.date_of_birth || null,           // date_of_birth
+      data.personalAddress || data.personal_address || null,    // personal_address
+      data.creditPeriod || data.credit_period || 0,             // credit_period
+      data.state || null,                                       // state
+      data.customerType || data.customer_type || null,          // customer_type
+      data.source || null,                                      // source
+      data.isActive !== undefined ? data.isActive : true        // is_active
     ];
 
     const result = await pool.query(query, params);
+    return result.rows[0];
+  }
+
+  /**
+   * Get a single customer by ID
+   */
+  static async getById(id, companyId) {
+    const query = `
+            SELECT c.*, u.full_name as assigned_to_name
+            FROM customers c
+            LEFT JOIN users u ON c.assigned_to = u.id
+            WHERE c.id = $1 AND c.company_id = $2
+        `;
+    const result = await pool.query(query, [id, companyId]);
     return result.rows[0];
   }
 
@@ -106,21 +131,37 @@ class CustomerModel {
     let paramIndex = 3;
 
     const mappings = {
+      // Frontend camelCase keys → DB column names
       name: 'customer_name',
+      customerName: 'customer_name',
       phone: 'phone',
       email: 'email',
       company_name: 'company_name',
       city: 'city',
+      state: 'state',
+      pin: 'postal_code',
       pincode: 'postal_code',
       address: 'address_line1',
+      gstNumber: 'gst_number',
       gstin: 'gst_number',
+      whatsappNumber: 'whatsapp_number',
+      contactPerson: 'contact_person',
+      dateOfBirth: 'date_of_birth',
       birthday: 'birthday',
+      anniversaryDate: 'anniversary',
       anniversary: 'anniversary',
+      personalAddress: 'personal_address',
+      creditPeriod: 'credit_period',
       interests: 'interests',
       tags: 'tags',
+      loyaltyTier: 'loyalty_tier',
       loyalty_tier: 'loyalty_tier',
+      customerType: 'customer_type',
+      customer_type: 'customer_type',
+      source: 'source',
       preferred_categories: 'preferred_categories',
-      notes: 'notes'
+      notes: 'notes',
+      isActive: 'is_active'
     };
 
     for (const [key, value] of Object.entries(data)) {
