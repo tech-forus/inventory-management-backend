@@ -78,9 +78,10 @@ class CustomerModel {
                 birthday, anniversary, interests, tags, loyalty_tier, 
                 preferred_categories, notes, whatsapp_number, contact_person,
                 date_of_birth, personal_address, credit_period, state,
-                customer_type, source, is_active, department, designation
+                customer_type, source, is_active, department, designation,
+                payment_terms, consignee_address, is_consignee_same_as_billing
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31)
             RETURNING *
         `;
 
@@ -93,7 +94,7 @@ class CustomerModel {
       data.company_name || data.name,                           // company_name (fallback to name)
       data.city,
       data.pin || data.pincode || data.postal_code,             // postal_code
-      data.address || data.address_line1,                       // address_line1
+      data.billingAddress || data.address || data.address_line1,// address_line1
       data.gstNumber || data.gstin || data.gst_number,          // gst_number
       data.dateOfBirth || data.birthday || null,                // birthday
       data.anniversaryDate || data.anniversary || null,         // anniversary
@@ -112,7 +113,10 @@ class CustomerModel {
       data.source || null,                                      // source
       data.isActive !== undefined ? data.isActive : true,       // is_active
       data.department || null,                                  // department
-      data.designation || null                                  // designation
+      data.designation || null,                                 // designation
+      data.paymentTerms || 'Open Credit',                       // payment_terms
+      data.consigneeAddress || null,                            // consignee_address
+      data.isConsigneeSameAsBilling !== undefined ? data.isConsigneeSameAsBilling : false // is_consignee_same_as_billing
     ];
 
     const result = await db.query(query, params);
@@ -176,7 +180,11 @@ class CustomerModel {
       notes: 'notes',
       isActive: 'is_active',
       department: 'department',
-      designation: 'designation'
+      designation: 'designation',
+      billingAddress: 'address_line1',
+      consigneeAddress: 'consignee_address',
+      isConsigneeSameAsBilling: 'is_consignee_same_as_billing',
+      paymentTerms: 'payment_terms'
     };
 
     const updates = new Map();

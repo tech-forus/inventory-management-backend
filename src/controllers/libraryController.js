@@ -1108,14 +1108,16 @@ const uploadCustomers = async (req, res, next) => {
           }
 
           const customer = await CustomerModel.create(client, {
-            name: row.customer_name || row.name,
-            phone: row.phone,
-            email: row.email,
-            company_name: row.company_name || row.name,
-            city: row.city,
-            pin: row.pin || row.pincode || row.postal_code,
-            address: row.address || row.address_line1,
-            gstNumber: row.gstNumber || row.gstin || row.gst_number,
+            name: row.customer_name || row.name || row['Customer Name'] || row['Name'],
+            phone: row.phone || row['Phone'] || row['Phone Number'],
+            email: row.email || row['Email'],
+            company_name: row.company_name || row.name || row['Company Name'],
+            city: row.city || row['City'],
+            pin: row.pin || row.pincode || row.postal_code || row['PIN'] || row['Pincode'],
+            billingAddress: row.billing_address || row.address || row.address_line1 || row['Billing Address'] || row['Address'],
+            consigneeAddress: row.consignee_address || row['Consignee Address'],
+            paymentTerms: row.payment_terms || row['Payment Terms'],
+            gstNumber: row.gstNumber || row.gstin || row.gst_number || row['GST Number'] || row['GSTIN'],
             isActive: true, // Always true for Excel uploads
           }, companyId, userId);
           inserted.push({ id: customer.id, name: customer.customer_name });
