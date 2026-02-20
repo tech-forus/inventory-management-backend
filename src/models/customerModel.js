@@ -15,14 +15,13 @@ class CustomerModel {
     let paramIndex = 2;
 
     // Role-based filtering
-    // User sees only their own customers
     if (role === 'user') {
       query += ` AND c.assigned_to = $${paramIndex}`;
       params.push(userId);
       paramIndex++;
     }
 
-    // Search filter (name, phone, email, company_name)
+    // Search filter
     if (filters.search) {
       query += ` AND (
                 c.customer_name ILIKE $${paramIndex} OR 
@@ -33,6 +32,16 @@ class CustomerModel {
       params.push(`%${filters.search}%`);
       paramIndex++;
     }
+
+    // Status filter
+    if (filters.status) {
+      query += ` AND c.is_active = $${paramIndex}`;
+      params.push(filters.status === 'active');
+      paramIndex++;
+    }
+
+    // Count query for pagination meta
+    const countQuery = `SELECT COUNT(*) OVER() as total_count FROM customers c WHERE c.company_id = $1 ${query.split('WHERE c.company_id = $1')[1].split('ORDER BY')[0]}`;
 
     query += ` ORDER BY c.created_at DESC`;
 
@@ -55,7 +64,8 @@ class CustomerModel {
   /**
    * Create a new customer
    */
-  static async create(data, companyId, assignedTo) {
+  static async create(client, data, companyId, assignedTo) {
+    const db = client || pool;
     // Map frontend fields (name, phone, etc) to DB columns if slightly different
     // DB Columns from migration 086 + 031:
     // customer_name, phone, email, company_name, city, postal_code, address_line1 (address), gst_number (gstin)
@@ -105,7 +115,7 @@ class CustomerModel {
       data.designation || null                                  // designation
     ];
 
-    const result = await pool.query(query, params);
+    const result = await db.query(query, params);
     return result.rows[0];
   }
 
@@ -126,7 +136,8 @@ class CustomerModel {
   /**
    * Update customer
    */
-  static async update(id, data, companyId) {
+  static async update(client, id, data, companyId) {
+    const db = client || pool;
     // Dynamic update to handle partial updates
     const sets = [];
     const params = [id, companyId];
@@ -189,7 +200,7 @@ class CustomerModel {
             RETURNING *
         `;
 
-    const result = await pool.query(query, params);
+    const result = await db.query(query, params);
     return result.rows[0];
   }
 

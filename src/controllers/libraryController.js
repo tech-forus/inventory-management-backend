@@ -12,6 +12,7 @@ const { getUserCategoryAccess } = require('../utils/rbac');
 const { parseExcelFile, parseExcelFileAllSheets } = require('../utils/helpers');
 const { transformVendor, transformBrand, transformCategory, transformTeam, transformCustomer, transformTransportor, transformWarehouse, transformMaterial, transformColour, transformArray } = require('../utils/transformers');
 const { NotFoundError, ValidationError } = require('../middlewares/errorHandler');
+const { withTx, measure } = require('../utils/dbHelpers');
 const xlsx = require('xlsx');
 
 /**
@@ -26,7 +27,7 @@ const getVendors = async (req, res, next) => {
     const companyId = getCompanyId(req);
     const vendors = await VendorModel.getAll(companyId);
     const transformedData = transformArray(vendors, transformVendor);
-    
+
     // Debug logging
     if (vendors.length > 0) {
       console.log('[getVendors] Sample vendor raw data:', {
@@ -39,7 +40,7 @@ const getVendors = async (req, res, next) => {
       });
       console.log('[getVendors] Sample vendor transformed:', transformedData[0]);
     }
-    
+
     res.json({ success: true, data: transformedData });
   } catch (error) {
     next(error); // Pass error to error handler
@@ -52,24 +53,24 @@ const createVendor = async (req, res, next) => {
   try {
     await client.query('BEGIN');
     const companyId = getCompanyId(req);
-    
+
     console.log('[createVendor] Request body:', {
       productCategoryIds: req.body.productCategoryIds,
       brandIds: req.body.brandIds,
       productCategoryIds_type: typeof req.body.productCategoryIds,
       brandIds_type: typeof req.body.brandIds,
     });
-    
+
     const vendor = await VendorModel.create(req.body, companyId, client);
     await client.query('COMMIT');
-    
+
     const transformed = transformVendor(vendor);
     console.log('[createVendor] Transformed vendor:', {
       id: transformed.id,
       productCategoryIds: transformed.productCategoryIds,
       brandIds: transformed.brandIds,
     });
-    
+
     res.json({ success: true, data: transformed });
   } catch (error) {
     await client.query('ROLLBACK');
@@ -167,7 +168,7 @@ const updateVendor = async (req, res, next) => {
   try {
     await client.query('BEGIN');
     const companyId = getCompanyId(req);
-    
+
     console.log('[updateVendor] Request body:', {
       vendorId: req.params.id,
       productCategoryIds: req.body.productCategoryIds,
@@ -175,23 +176,23 @@ const updateVendor = async (req, res, next) => {
       productCategoryIds_type: typeof req.body.productCategoryIds,
       brandIds_type: typeof req.body.brandIds,
     });
-    
+
     const vendor = await VendorModel.update(req.params.id, req.body, companyId, client);
-    
+
     if (!vendor) {
       await client.query('ROLLBACK');
       throw new NotFoundError('Vendor not found');
     }
 
     await client.query('COMMIT');
-    
+
     const transformed = transformVendor(vendor);
     console.log('[updateVendor] Transformed vendor:', {
       id: transformed.id,
       productCategoryIds: transformed.productCategoryIds,
       brandIds: transformed.brandIds,
     });
-    
+
     res.json({ success: true, data: transformed });
   } catch (error) {
     await client.query('ROLLBACK');
@@ -206,11 +207,11 @@ const deleteVendor = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
     const result = await VendorModel.delete(req.params.id, companyId);
-    
+
     if (!result) {
       throw new NotFoundError('Vendor not found');
     }
-    
+
     res.json({ success: true, message: 'Vendor deleted successfully' });
   } catch (error) {
     next(error);
@@ -258,7 +259,7 @@ const uploadBrands = async (req, res, next) => {
     await client.query('BEGIN');
     const companyId = getCompanyId(req);
     const rawData = parseExcelFile(req.file.buffer);
-    
+
     // Filter out empty rows (rows with no name)
     const data = rawData.filter(row => {
       const name = row.name || row.Name || '';
@@ -280,7 +281,7 @@ const uploadBrands = async (req, res, next) => {
 
         // Handle description with different column name formats
         const description = row.description || row.Description || '';
-        
+
         // Always set isActive to true for Excel uploads
         const brand = await BrandModel.create({
           name: name.toString().trim(),
@@ -316,7 +317,7 @@ const updateBrand = async (req, res, next) => {
     await client.query('BEGIN');
     const companyId = getCompanyId(req);
     const brand = await BrandModel.update(req.params.id, req.body, companyId);
-    
+
     if (!brand) {
       await client.query('ROLLBACK');
       throw new NotFoundError('Brand not found');
@@ -336,11 +337,11 @@ const deleteBrand = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
     const result = await BrandModel.delete(req.params.id, companyId);
-    
+
     if (!result) {
       throw new NotFoundError('Brand not found');
     }
-    
+
     res.json({ success: true, message: 'Brand deleted successfully' });
   } catch (error) {
     next(error);
@@ -407,7 +408,7 @@ const updateProductCategory = async (req, res, next) => {
     const user = req.user || {};
     await client.query('BEGIN');
     const category = await CategoryModel.updateProductCategory(req.params.id, req.body, companyId);
-    
+
     if (!category) {
       await client.query('ROLLBACK');
       throw new NotFoundError('Product category not found');
@@ -430,13 +431,13 @@ const deleteProductCategory = async (req, res, next) => {
     const user = req.user || {};
     const hardDelete = req.query.force === 'true' || req.query.force === true;
     const result = await CategoryModel.deleteProductCategory(req.params.id, companyId, hardDelete);
-    
+
     if (!result) {
       throw new NotFoundError('Product category not found');
     }
-    
-    const message = hardDelete 
-      ? 'Product category permanently deleted from database' 
+
+    const message = hardDelete
+      ? 'Product category permanently deleted from database'
       : 'Product category deleted successfully';
     res.json({ success: true, message });
   } catch (error) {
@@ -505,7 +506,7 @@ const updateItemCategory = async (req, res, next) => {
     const user = req.user || {};
     await client.query('BEGIN');
     const category = await CategoryModel.updateItemCategory(req.params.id, req.body, companyId);
-    
+
     if (!category) {
       await client.query('ROLLBACK');
       throw new NotFoundError('Item category not found');
@@ -528,13 +529,13 @@ const deleteItemCategory = async (req, res, next) => {
     const user = req.user || {};
     const hardDelete = req.query.force === 'true' || req.query.force === true;
     const result = await CategoryModel.deleteItemCategory(req.params.id, companyId, hardDelete);
-    
+
     if (!result) {
       throw new NotFoundError('Item category not found');
     }
-    
-    const message = hardDelete 
-      ? 'Item category permanently deleted from database' 
+
+    const message = hardDelete
+      ? 'Item category permanently deleted from database'
       : 'Item category deleted successfully';
     res.json({ success: true, message });
   } catch (error) {
@@ -603,7 +604,7 @@ const updateSubCategory = async (req, res, next) => {
     const user = req.user || {};
     await client.query('BEGIN');
     const category = await CategoryModel.updateSubCategory(req.params.id, req.body, companyId);
-    
+
     if (!category) {
       await client.query('ROLLBACK');
       throw new NotFoundError('Sub category not found');
@@ -626,13 +627,13 @@ const deleteSubCategory = async (req, res, next) => {
     const user = req.user || {};
     const hardDelete = req.query.force === 'true' || req.query.force === true;
     const result = await CategoryModel.deleteSubCategory(req.params.id, companyId, hardDelete);
-    
+
     if (!result) {
       throw new NotFoundError('Sub category not found');
     }
-    
-    const message = hardDelete 
-      ? 'Sub category permanently deleted from database' 
+
+    const message = hardDelete
+      ? 'Sub category permanently deleted from database'
       : 'Sub category deleted successfully';
     res.json({ success: true, message });
   } catch (error) {
@@ -646,13 +647,13 @@ const getSubCategoryDefaults = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
     const subCategoryId = parseInt(req.params.subCategoryId);
-    
+
     if (!subCategoryId || isNaN(subCategoryId)) {
       throw new ValidationError('Invalid sub category ID');
     }
-    
+
     const defaults = await CategoryModel.getSubCategoryDefaults(subCategoryId, companyId);
-    
+
     // Transform snake_case to camelCase
     const transformedDefaults = defaults.map(defaultSet => ({
       id: defaultSet.id,
@@ -685,7 +686,7 @@ const getSubCategoryDefaults = async (req, res, next) => {
       createdAt: defaultSet.created_at,
       updatedAt: defaultSet.updated_at,
     }));
-    
+
     res.json({ success: true, data: transformedDefaults });
   } catch (error) {
     next(error);
@@ -695,9 +696,9 @@ const getSubCategoryDefaults = async (req, res, next) => {
 const getAllSubCategoryDefaults = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
-    
+
     const defaults = await CategoryModel.getAllSubCategoryDefaults(companyId);
-    
+
     // Transform snake_case to camelCase
     const transformedDefaults = defaults.map(defaultSet => ({
       id: defaultSet.id,
@@ -730,7 +731,7 @@ const getAllSubCategoryDefaults = async (req, res, next) => {
       createdAt: defaultSet.created_at,
       updatedAt: defaultSet.updated_at,
     }));
-    
+
     res.json({ success: true, data: transformedDefaults });
   } catch (error) {
     next(error);
@@ -741,17 +742,17 @@ const getSubCategoryDefaultById = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
     const defaultId = parseInt(req.params.defaultId);
-    
+
     if (!defaultId || isNaN(defaultId)) {
       throw new ValidationError('Invalid default ID');
     }
-    
+
     const defaultSet = await CategoryModel.getSubCategoryDefaultById(defaultId, companyId);
-    
+
     if (!defaultSet) {
       throw new NotFoundError('Default set not found');
     }
-    
+
     // Transform snake_case to camelCase
     const transformedDefault = {
       id: defaultSet.id,
@@ -784,7 +785,7 @@ const getSubCategoryDefaultById = async (req, res, next) => {
       createdAt: defaultSet.created_at,
       updatedAt: defaultSet.updated_at,
     };
-    
+
     res.json({ success: true, data: transformedDefault });
   } catch (error) {
     next(error);
@@ -797,23 +798,23 @@ const createSubCategoryDefault = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
     const subCategoryId = parseInt(req.params.subCategoryId);
-    
+
     if (!subCategoryId || isNaN(subCategoryId)) {
       throw new ValidationError('Invalid sub category ID');
     }
-    
+
     // Verify sub-category exists
     const subCategory = await CategoryModel.getSubCategoryById(subCategoryId, companyId);
     if (!subCategory) {
       throw new NotFoundError('Sub category not found');
     }
-    
+
     await client.query('BEGIN');
-    
+
     const defaultSet = await CategoryModel.createSubCategoryDefault(subCategoryId, req.body, companyId);
-    
+
     await client.query('COMMIT');
-    
+
     // Transform snake_case to camelCase
     const transformedDefault = {
       id: defaultSet.id,
@@ -846,7 +847,7 @@ const createSubCategoryDefault = async (req, res, next) => {
       createdAt: defaultSet.created_at,
       updatedAt: defaultSet.updated_at,
     };
-    
+
     res.json({ success: true, data: transformedDefault });
   } catch (error) {
     await client.query('ROLLBACK');
@@ -862,22 +863,22 @@ const updateSubCategoryDefault = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
     const defaultId = parseInt(req.params.defaultId);
-    
+
     if (!defaultId || isNaN(defaultId)) {
       throw new ValidationError('Invalid default ID');
     }
-    
+
     await client.query('BEGIN');
-    
+
     const defaultSet = await CategoryModel.updateSubCategoryDefault(defaultId, req.body, companyId);
-    
+
     if (!defaultSet) {
       await client.query('ROLLBACK');
       throw new NotFoundError('Default set not found');
     }
-    
+
     await client.query('COMMIT');
-    
+
     // Transform snake_case to camelCase
     const transformedDefault = {
       id: defaultSet.id,
@@ -910,7 +911,7 @@ const updateSubCategoryDefault = async (req, res, next) => {
       createdAt: defaultSet.created_at,
       updatedAt: defaultSet.updated_at,
     };
-    
+
     res.json({ success: true, data: transformedDefault });
   } catch (error) {
     await client.query('ROLLBACK');
@@ -925,19 +926,19 @@ const deleteSubCategoryDefault = async (req, res, next) => {
     const companyId = getCompanyId(req);
     const defaultId = parseInt(req.params.defaultId);
     const hardDelete = req.query.force === 'true' || req.query.force === true;
-    
+
     if (!defaultId || isNaN(defaultId)) {
       throw new ValidationError('Invalid default ID');
     }
-    
+
     const result = await CategoryModel.deleteSubCategoryDefault(defaultId, companyId, hardDelete);
-    
+
     if (!result) {
       throw new NotFoundError('Default set not found');
     }
-    
-    const message = hardDelete 
-      ? 'Default set permanently deleted from database' 
+
+    const message = hardDelete
+      ? 'Default set permanently deleted from database'
       : 'Default set deleted successfully';
     res.json({ success: true, message });
   } catch (error) {
@@ -994,133 +995,146 @@ const createTeam = async (req, res, next) => {
 const getCustomers = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
-    const customers = await CustomerModel.getAll(companyId);
+    const { userId, role } = req.user;
+    const { page = 1, limit = 25, search, status } = req.query;
+    const offset = (page - 1) * limit;
+
+    const customers = await measure('getCustomers', () =>
+      CustomerModel.getAll(companyId, userId, role, {
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+        search,
+        status
+      })
+    );
+
     const transformedData = transformArray(customers, transformCustomer);
-    res.json({ success: true, data: transformedData });
+    const totalCount = customers.length > 0 ? parseInt(customers[0].total_count || 0) : 0;
+
+    res.json({
+      success: true,
+      data: transformedData,
+      pagination: {
+        total: totalCount,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(totalCount / limit)
+      }
+    });
   } catch (error) {
     next(error);
   }
 };
 
 const createCustomer = async (req, res, next) => {
-  const pool = require('../models/database');
-  const client = await pool.connect();
   try {
-    await client.query('BEGIN');
     const companyId = getCompanyId(req);
-    const customer = await CustomerModel.create(req.body, companyId);
-    await client.query('COMMIT');
-    res.json({ success: true, data: transformCustomer(customer) });
+    const { id: userId } = req.user;
+
+    const customer = await withTx(async (client) => {
+      return await CustomerModel.create(client, req.body, companyId, userId);
+    }, 'createCustomer');
+
+    res.json({
+      success: true,
+      customer: transformCustomer(customer)
+    });
   } catch (error) {
-    await client.query('ROLLBACK');
     next(error);
-  } finally {
-    client.release();
   }
 };
 
 const updateCustomer = async (req, res, next) => {
-  const pool = require('../models/database');
-  const client = await pool.connect();
   try {
-    await client.query('BEGIN');
     const companyId = getCompanyId(req);
     const { id } = req.params;
-    
-    const existingCustomer = await CustomerModel.getById(id, companyId);
-    if (!existingCustomer) {
-      throw new NotFoundError('Customer not found');
-    }
-    
-    const customer = await CustomerModel.update(id, req.body, companyId);
-    await client.query('COMMIT');
-    res.json({ success: true, data: transformCustomer(customer) });
+
+    const customer = await withTx(async (client) => {
+      const existingCustomer = await CustomerModel.getById(id, companyId);
+      if (!existingCustomer) {
+        throw new NotFoundError('Customer not found');
+      }
+      return await CustomerModel.update(client, id, req.body, companyId);
+    }, 'updateCustomer');
+
+    res.json({
+      success: true,
+      customer: transformCustomer(customer)
+    });
   } catch (error) {
-    await client.query('ROLLBACK');
     next(error);
-  } finally {
-    client.release();
   }
 };
 
 const deleteCustomer = async (req, res, next) => {
-  const pool = require('../models/database');
-  const client = await pool.connect();
   try {
-    await client.query('BEGIN');
     const companyId = getCompanyId(req);
     const { id } = req.params;
-    
-    const existingCustomer = await CustomerModel.getById(id, companyId);
-    if (!existingCustomer) {
-      throw new NotFoundError('Customer not found');
-    }
-    
-    await CustomerModel.delete(id, companyId);
-    await client.query('COMMIT');
+
+    await withTx(async (client) => {
+      const existingCustomer = await CustomerModel.getById(id, companyId);
+      if (!existingCustomer) {
+        throw new NotFoundError('Customer not found');
+      }
+      await CustomerModel.delete(id, companyId);
+    }, 'deleteCustomer');
+
     res.json({ success: true, message: 'Customer deleted successfully' });
   } catch (error) {
-    await client.query('ROLLBACK');
     next(error);
-  } finally {
-    client.release();
   }
 };
 
 const uploadCustomers = async (req, res, next) => {
-  const pool = require('../models/database');
-  const client = await pool.connect();
   try {
     if (!req.file) {
       throw new ValidationError('No file uploaded');
     }
 
-    await client.query('BEGIN');
     const companyId = getCompanyId(req);
+    const { id: userId } = req.user;
     const data = parseExcelFile(req.file.buffer);
 
-    const inserted = [];
-    const errors = [];
+    const result = await withTx(async (client) => {
+      const inserted = [];
+      const errors = [];
 
-    for (let i = 0; i < data.length; i++) {
-      const row = data[i];
-      try {
-        if (!row.name || !row.name.toString().trim()) {
-          errors.push({ row: i + 2, error: 'Name is required' });
-          continue;
+      for (let i = 0; i < data.length; i++) {
+        const row = data[i];
+        try {
+          if (!row.customer_name && !row.name) {
+            errors.push({ row: i + 2, error: 'Customer Name is required' });
+            continue;
+          }
+
+          const customer = await CustomerModel.create(client, {
+            name: row.customer_name || row.name,
+            phone: row.phone,
+            email: row.email,
+            company_name: row.company_name || row.name,
+            city: row.city,
+            pin: row.pin || row.pincode || row.postal_code,
+            address: row.address || row.address_line1,
+            gstNumber: row.gstNumber || row.gstin || row.gst_number,
+            isActive: true, // Always true for Excel uploads
+          }, companyId, userId);
+          inserted.push({ id: customer.id, name: customer.customer_name });
+        } catch (error) {
+          errors.push({ row: i + 2, error: error.message });
         }
-
-        const customer = await CustomerModel.create({
-          name: row.name?.toString().trim(),
-          contactPerson: row.contact_person || row.contactPerson,
-          email: row.email,
-          phone: row.phone,
-          gstNumber: row.gst_number || row.gstNumber,
-          address: row.address,
-          city: row.city,
-          state: row.state,
-          pin: row.pin,
-          isActive: true, // Always true for Excel uploads
-        }, companyId);
-        inserted.push({ id: customer.id, name: customer.name });
-      } catch (error) {
-        errors.push({ row: i + 2, error: error.message });
       }
-    }
+      return { inserted, errors };
+    }, 'uploadCustomers');
 
-    await client.query('COMMIT');
     res.json({
       success: true,
-      message: `Uploaded ${inserted.length} customers successfully`,
-      inserted: inserted.length,
-      errors: errors.length,
-      errorDetails: errors,
+      message: `Uploaded ${result.inserted.length} customers successfully`,
+      inserted: result.inserted.length,
+      errors: result.errors.length,
+      errorDetails: result.errors,
     });
   } catch (error) {
-    await client.query('ROLLBACK');
     next(error);
-  } finally {
-    client.release();
   }
 };
 
@@ -1161,12 +1175,12 @@ const updateTransportor = async (req, res, next) => {
     await client.query('BEGIN');
     const companyId = getCompanyId(req);
     const { id } = req.params;
-    
+
     const existingTransportor = await TransportorModel.getById(id, companyId);
     if (!existingTransportor) {
       throw new NotFoundError('Transportor not found');
     }
-    
+
     const transportor = await TransportorModel.update(id, req.body, companyId);
     await client.query('COMMIT');
     res.json({ success: true, data: transformTransportor(transportor) });
@@ -1185,12 +1199,12 @@ const deleteTransportor = async (req, res, next) => {
     await client.query('BEGIN');
     const companyId = getCompanyId(req);
     const { id } = req.params;
-    
+
     const existingTransportor = await TransportorModel.getById(id, companyId);
     if (!existingTransportor) {
       throw new NotFoundError('Transportor not found');
     }
-    
+
     await TransportorModel.delete(id, companyId);
     await client.query('COMMIT');
     res.json({ success: true, message: 'Transportor deleted successfully' });
@@ -1375,8 +1389,8 @@ const uploadCategories = async (req, res, next) => {
     const categoryMasterSheetName = Object.keys(sheets).find(name => {
       const lowerName = name.toLowerCase().trim();
       return (lowerName.includes('category') && lowerName.includes('master')) ||
-             lowerName === 'category master' ||
-             lowerName === 'categorymaster';
+        lowerName === 'category master' ||
+        lowerName === 'categorymaster';
     });
 
     // Process unified "Category Master" sheet if it exists
@@ -1384,7 +1398,7 @@ const uploadCategories = async (req, res, next) => {
       // Re-parse the Category Master sheet with explicit headers and range
       const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
       const worksheet = workbook.Sheets[categoryMasterSheetName];
-      
+
       // Find the header row by looking for "Product Category" in the first few rows
       let dataStartRow = 2; // Default: start from row 3 (0-based index 2) to skip title and header
       const maxSearchRows = 5;
@@ -1396,7 +1410,7 @@ const uploadCategories = async (req, res, next) => {
           break;
         }
       }
-      
+
       // Parse with explicit headers, starting from the row after headers
       const unifiedData = xlsx.utils.sheet_to_json(worksheet, {
         header: [
@@ -1410,20 +1424,20 @@ const uploadCategories = async (req, res, next) => {
         defval: null,
         blankrows: false,
       });
-      
+
       // Explicitly skip empty rows
       const dataRows = unifiedData.filter(row =>
         (row['Product Category'] && row['Product Category'].toString().trim()) ||
         (row['Item Category'] && row['Item Category'].toString().trim()) ||
         (row['Sub Category'] && row['Sub Category'].toString().trim())
       );
-      
+
       // Extract unique product categories
       // Use Maps to preserve original case while using lowercase for deduplication
       const productCategoryMap = new Map(); // lowercase -> original case
       const itemCategoryMap = new Map(); // productCategory (lowercase) -> Map(itemCategory lowercase -> original case)
       const subCategoryMap = new Map(); // itemCategoryKey -> Map(subCategory lowercase -> {name, hsnCode, gstRate})
-      
+
       for (let i = 0; i < dataRows.length; i++) {
         const row = dataRows[i];
         const productCat = (row['Product Category'] || '').toString().trim();
@@ -1432,7 +1446,7 @@ const uploadCategories = async (req, res, next) => {
         const hsnCode = (row['HSN Code'] || '').toString().trim() || null;
         const gstRateStr = (row['GST Rate (%)'] || '').toString().trim();
         let gstRate = null;
-        
+
         // Parse GST Rate - can be number or string like "18", "18%", "5", etc.
         if (gstRateStr) {
           const parsed = parseFloat(gstRateStr.replace('%', '').trim());
@@ -1443,7 +1457,7 @@ const uploadCategories = async (req, res, next) => {
             }
           }
         }
-        
+
         if (productCat) {
           const key = productCat.toLowerCase();
           // Preserve original case - use first occurrence
@@ -1451,7 +1465,7 @@ const uploadCategories = async (req, res, next) => {
             productCategoryMap.set(key, productCat);
           }
         }
-        
+
         if (productCat && itemCat) {
           const productKey = productCat.toLowerCase().trim();
           if (!itemCategoryMap.has(productKey)) {
@@ -1463,7 +1477,7 @@ const uploadCategories = async (req, res, next) => {
             itemCategoryMap.get(productKey).set(itemKey, itemCat.trim());
           }
         }
-        
+
         if (productCat && itemCat && subCat) {
           const key = `${productCat.toLowerCase().trim()}|${itemCat.toLowerCase().trim()}`;
           if (!subCategoryMap.has(key)) {
@@ -1480,14 +1494,14 @@ const uploadCategories = async (req, res, next) => {
           }
         }
       }
-      
+
       // Process Product Categories from unified sheet
       const processedProductNames = new Set();
       for (const [lowercaseKey, originalName] of productCategoryMap) {
         try {
           if (processedProductNames.has(lowercaseKey)) continue;
           processedProductNames.add(lowercaseKey);
-          
+
           // Store with original case (trimmed)
           await CategoryModel.createProductCategory({
             name: originalName.trim(),
@@ -1498,7 +1512,7 @@ const uploadCategories = async (req, res, next) => {
           productCategoriesResult.errorDetails.push({ row: 'N/A', error: error.message });
         }
       }
-      
+
       // Refresh product categories lookup - use client to see newly created items in transaction
       const productCategoriesResultQuery = await client.query(
         'SELECT id, name FROM product_categories WHERE company_id = $1 AND is_active = true ORDER BY name',
@@ -1508,7 +1522,7 @@ const uploadCategories = async (req, res, next) => {
       const productCategoryLookupMap = new Map(
         productCategories.map(pc => [(pc.name || '').toLowerCase().trim(), pc.id])
       );
-      
+
       // Process Item Categories from unified sheet
       const processedItemKeys = new Set();
       for (const [productCatKey, itemCatsMap] of itemCategoryMap) {
@@ -1518,13 +1532,13 @@ const uploadCategories = async (req, res, next) => {
           itemCategoriesResult.errorDetails.push({ row: 'N/A', error: `Product Category "${productCatKey}" not found` });
           continue;
         }
-        
+
         for (const [itemCatLowercase, itemCatOriginal] of itemCatsMap) {
           try {
             const itemKey = `${productCategoryId}-${itemCatLowercase}`;
             if (processedItemKeys.has(itemKey)) continue;
             processedItemKeys.add(itemKey);
-            
+
             // Store with original case (trimmed)
             await CategoryModel.createItemCategory({
               name: itemCatOriginal.trim(),
@@ -1537,7 +1551,7 @@ const uploadCategories = async (req, res, next) => {
           }
         }
       }
-      
+
       // Refresh item categories lookup AFTER processing Item Categories
       // Query directly from database using the client to ensure we see newly created items in the same transaction
       const itemCategoriesResultQuery = await client.query(
@@ -1545,14 +1559,14 @@ const uploadCategories = async (req, res, next) => {
         [companyId.toUpperCase()]
       );
       const itemCategories = itemCategoriesResultQuery.rows;
-      
+
       const itemCategoryMapForSub = new Map();
       // Create a map of product category IDs to names (lowercase for matching)
       // Use the refreshed productCategories from line 1000
       const productCategoryIdToName = new Map(
         productCategories.map(pc => [pc.id, pc.name.toLowerCase().trim()])
       );
-      
+
       // Build lookup map: "productName|itemName" -> itemCategoryId
       for (const ic of itemCategories) {
         const productCatName = productCategoryIdToName.get(ic.product_category_id);
@@ -1562,7 +1576,7 @@ const uploadCategories = async (req, res, next) => {
           itemCategoryMapForSub.set(key, ic.id);
         }
       }
-      
+
       // Process Sub Categories from unified sheet
       const processedSubKeys = new Set();
       for (const [itemCatKey, subCatsMap] of subCategoryMap) {
@@ -1573,24 +1587,24 @@ const uploadCategories = async (req, res, next) => {
           // Try to provide more helpful error message
           const [productKey, itemKey] = itemCatKey.split('|');
           const availableKeys = Array.from(itemCategoryMapForSub.keys()).slice(0, 10).join(', ');
-          subCategoriesResult.errorDetails.push({ 
-            row: 'N/A', 
-            error: `Item Category combination "${productKey} > ${itemKey}" not found. Available: ${availableKeys || 'none'}` 
+          subCategoriesResult.errorDetails.push({
+            row: 'N/A',
+            error: `Item Category combination "${productKey} > ${itemKey}" not found. Available: ${availableKeys || 'none'}`
           });
           continue;
         }
-        
+
         for (const [subCatLowercase, subCatData] of subCatsMap) {
           try {
             const subKey = `${itemCategoryId}-${subCatLowercase}`;
             if (processedSubKeys.has(subKey)) continue;
             processedSubKeys.add(subKey);
-            
+
             // subCatData can be either a string (old format) or an object (new format with HSN/GST)
             const subCatName = typeof subCatData === 'string' ? subCatData.trim() : subCatData.name.trim();
             const hsnCode = typeof subCatData === 'object' ? subCatData.hsnCode : null;
             const gstRate = typeof subCatData === 'object' ? subCatData.gstRate : null;
-            
+
             // Store with original case (trimmed) and HSN/GST data
             await CategoryModel.createSubCategory({
               name: subCatName,
@@ -1608,171 +1622,171 @@ const uploadCategories = async (req, res, next) => {
     } else {
       // Process separate sheets (original logic)
       // Process Product Categories sheet
-      const productSheetName = Object.keys(sheets).find(name => 
+      const productSheetName = Object.keys(sheets).find(name =>
         name.toLowerCase().includes('product') && name.toLowerCase().includes('categor')
-      ) || 'Product Categories'; 
-    
-    const processedProductNames = new Set(); // Track processed names to avoid duplicates in same upload
-    
-    if (sheets[productSheetName]) {
-      const productData = sheets[productSheetName];
-      for (let i = 0; i < productData.length; i++) {
-        const row = productData[i];
-        try {
-          if (!row.name || !row.name.toString().trim()) {
+      ) || 'Product Categories';
+
+      const processedProductNames = new Set(); // Track processed names to avoid duplicates in same upload
+
+      if (sheets[productSheetName]) {
+        const productData = sheets[productSheetName];
+        for (let i = 0; i < productData.length; i++) {
+          const row = productData[i];
+          try {
+            if (!row.name || !row.name.toString().trim()) {
+              productCategoriesResult.errors++;
+              productCategoriesResult.errorDetails.push({ row: i + 2, error: 'Name is required' });
+              continue;
+            }
+
+            const categoryName = row.name.toString().trim();
+            const categoryNameLower = categoryName.toLowerCase();
+
+            // Skip if already processed in this upload
+            if (processedProductNames.has(categoryNameLower)) {
+              productCategoriesResult.errors++;
+              productCategoriesResult.errorDetails.push({ row: i + 2, error: `Duplicate category "${categoryName}" in upload file` });
+              continue;
+            }
+            processedProductNames.add(categoryNameLower);
+
+            // Always insert, don't check for existing
+            const category = await CategoryModel.createProductCategory({
+              name: categoryName,
+            }, companyId);
+            productCategoriesResult.inserted++;
+          } catch (error) {
             productCategoriesResult.errors++;
-            productCategoriesResult.errorDetails.push({ row: i + 2, error: 'Name is required' });
-            continue;
+            productCategoriesResult.errorDetails.push({ row: i + 2, error: error.message });
           }
-
-          const categoryName = row.name.toString().trim();
-          const categoryNameLower = categoryName.toLowerCase();
-          
-          // Skip if already processed in this upload
-          if (processedProductNames.has(categoryNameLower)) {
-            productCategoriesResult.errors++;
-            productCategoriesResult.errorDetails.push({ row: i + 2, error: `Duplicate category "${categoryName}" in upload file` });
-            continue;
-          }
-          processedProductNames.add(categoryNameLower);
-
-          // Always insert, don't check for existing
-          const category = await CategoryModel.createProductCategory({
-            name: categoryName,
-          }, companyId);
-          productCategoriesResult.inserted++;
-        } catch (error) {
-          productCategoriesResult.errors++;
-          productCategoriesResult.errorDetails.push({ row: i + 2, error: error.message });
         }
       }
-    }
 
-    // Process Item Categories sheet - Refresh lookup after Product Categories are created
-    const itemSheetName = Object.keys(sheets).find(name => 
-      name.toLowerCase().includes('item') && name.toLowerCase().includes('categor')
-    ) || 'Item Categories';
-    
-    if (sheets[itemSheetName]) {
-      const itemData = sheets[itemSheetName];
-      
-      // Refresh product categories lookup AFTER processing Product Categories sheet
-      const productCategories = await CategoryModel.getProductCategories(companyId);
-      const productCategoryMap = new Map(
-        productCategories.map(pc => [pc.name.toLowerCase().trim(), pc.id])
-      );
+      // Process Item Categories sheet - Refresh lookup after Product Categories are created
+      const itemSheetName = Object.keys(sheets).find(name =>
+        name.toLowerCase().includes('item') && name.toLowerCase().includes('categor')
+      ) || 'Item Categories';
 
-      const processedItemKeys = new Set(); // Track processed (productCategoryId, name) pairs
+      if (sheets[itemSheetName]) {
+        const itemData = sheets[itemSheetName];
 
-      for (let i = 0; i < itemData.length; i++) {
-        const row = itemData[i];
-        try {
-          if (!row.name || !row.name.toString().trim()) {
+        // Refresh product categories lookup AFTER processing Product Categories sheet
+        const productCategories = await CategoryModel.getProductCategories(companyId);
+        const productCategoryMap = new Map(
+          productCategories.map(pc => [pc.name.toLowerCase().trim(), pc.id])
+        );
+
+        const processedItemKeys = new Set(); // Track processed (productCategoryId, name) pairs
+
+        for (let i = 0; i < itemData.length; i++) {
+          const row = itemData[i];
+          try {
+            if (!row.name || !row.name.toString().trim()) {
+              itemCategoriesResult.errors++;
+              itemCategoriesResult.errorDetails.push({ row: i + 2, error: 'Name is required' });
+              continue;
+            }
+
+            const categoryName = row.name.toString().trim();
+            const productCategoryName = (row.product_category || row['Product Category'] || '').toString().trim();
+
+            if (!productCategoryName) {
+              itemCategoriesResult.errors++;
+              itemCategoriesResult.errorDetails.push({ row: i + 2, error: 'Product Category is required' });
+              continue;
+            }
+
+            const productCategoryId = productCategoryMap.get(productCategoryName.toLowerCase());
+            if (!productCategoryId) {
+              itemCategoriesResult.errors++;
+              itemCategoriesResult.errorDetails.push({ row: i + 2, error: `Product Category "${productCategoryName}" not found` });
+              continue;
+            }
+
+            // Skip if already processed in this upload
+            const itemKey = `${productCategoryId}-${categoryName.toLowerCase()}`;
+            if (processedItemKeys.has(itemKey)) {
+              itemCategoriesResult.errors++;
+              itemCategoriesResult.errorDetails.push({ row: i + 2, error: `Duplicate item category "${categoryName}" for product category "${productCategoryName}" in upload file` });
+              continue;
+            }
+            processedItemKeys.add(itemKey);
+
+            // Always insert, don't check for existing
+            const category = await CategoryModel.createItemCategory({
+              name: categoryName,
+              productCategoryId: productCategoryId,
+            }, companyId);
+            itemCategoriesResult.inserted++;
+          } catch (error) {
             itemCategoriesResult.errors++;
-            itemCategoriesResult.errorDetails.push({ row: i + 2, error: 'Name is required' });
-            continue;
+            itemCategoriesResult.errorDetails.push({ row: i + 2, error: error.message });
           }
-
-          const categoryName = row.name.toString().trim();
-          const productCategoryName = (row.product_category || row['Product Category'] || '').toString().trim();
-          
-          if (!productCategoryName) {
-            itemCategoriesResult.errors++;
-            itemCategoriesResult.errorDetails.push({ row: i + 2, error: 'Product Category is required' });
-            continue;
-          }
-
-          const productCategoryId = productCategoryMap.get(productCategoryName.toLowerCase());
-          if (!productCategoryId) {
-            itemCategoriesResult.errors++;
-            itemCategoriesResult.errorDetails.push({ row: i + 2, error: `Product Category "${productCategoryName}" not found` });
-            continue;
-          }
-
-          // Skip if already processed in this upload
-          const itemKey = `${productCategoryId}-${categoryName.toLowerCase()}`;
-          if (processedItemKeys.has(itemKey)) {
-            itemCategoriesResult.errors++;
-            itemCategoriesResult.errorDetails.push({ row: i + 2, error: `Duplicate item category "${categoryName}" for product category "${productCategoryName}" in upload file` });
-            continue;
-          }
-          processedItemKeys.add(itemKey);
-
-          // Always insert, don't check for existing
-          const category = await CategoryModel.createItemCategory({
-            name: categoryName,
-            productCategoryId: productCategoryId,
-          }, companyId);
-          itemCategoriesResult.inserted++;
-        } catch (error) {
-          itemCategoriesResult.errors++;
-          itemCategoriesResult.errorDetails.push({ row: i + 2, error: error.message });
         }
       }
-    }
 
-    // Process Sub Categories sheet - Refresh lookup after Item Categories are created
-    const subSheetName = Object.keys(sheets).find(name => 
-      name.toLowerCase().includes('sub') && name.toLowerCase().includes('categor')
-    ) || 'Sub Categories';
-    
-    if (sheets[subSheetName]) {
-      const subData = sheets[subSheetName];
-      
-      // Refresh item categories lookup AFTER processing Item Categories sheet
-      const itemCategories = await CategoryModel.getItemCategories(companyId);
-      const itemCategoryMap = new Map(
-        itemCategories.map(ic => [ic.name.toLowerCase().trim(), ic.id])
-      );
+      // Process Sub Categories sheet - Refresh lookup after Item Categories are created
+      const subSheetName = Object.keys(sheets).find(name =>
+        name.toLowerCase().includes('sub') && name.toLowerCase().includes('categor')
+      ) || 'Sub Categories';
 
-      const processedSubKeys = new Set(); // Track processed (itemCategoryId, name) pairs
+      if (sheets[subSheetName]) {
+        const subData = sheets[subSheetName];
 
-      for (let i = 0; i < subData.length; i++) {
-        const row = subData[i];
-        try {
-          if (!row.name || !row.name.toString().trim()) {
+        // Refresh item categories lookup AFTER processing Item Categories sheet
+        const itemCategories = await CategoryModel.getItemCategories(companyId);
+        const itemCategoryMap = new Map(
+          itemCategories.map(ic => [ic.name.toLowerCase().trim(), ic.id])
+        );
+
+        const processedSubKeys = new Set(); // Track processed (itemCategoryId, name) pairs
+
+        for (let i = 0; i < subData.length; i++) {
+          const row = subData[i];
+          try {
+            if (!row.name || !row.name.toString().trim()) {
+              subCategoriesResult.errors++;
+              subCategoriesResult.errorDetails.push({ row: i + 2, error: 'Name is required' });
+              continue;
+            }
+
+            const categoryName = row.name.toString().trim();
+            const itemCategoryName = (row.item_category || row['Item Category'] || '').toString().trim();
+
+            if (!itemCategoryName) {
+              subCategoriesResult.errors++;
+              subCategoriesResult.errorDetails.push({ row: i + 2, error: 'Item Category is required' });
+              continue;
+            }
+
+            const itemCategoryId = itemCategoryMap.get(itemCategoryName.toLowerCase());
+            if (!itemCategoryId) {
+              subCategoriesResult.errors++;
+              subCategoriesResult.errorDetails.push({ row: i + 2, error: `Item Category "${itemCategoryName}" not found` });
+              continue;
+            }
+
+            // Skip if already processed in this upload
+            const subKey = `${itemCategoryId}-${categoryName.toLowerCase()}`;
+            if (processedSubKeys.has(subKey)) {
+              subCategoriesResult.errors++;
+              subCategoriesResult.errorDetails.push({ row: i + 2, error: `Duplicate sub category "${categoryName}" for item category "${itemCategoryName}" in upload file` });
+              continue;
+            }
+            processedSubKeys.add(subKey);
+
+            // Always insert, don't check for existing
+            const category = await CategoryModel.createSubCategory({
+              name: categoryName,
+              itemCategoryId: itemCategoryId,
+            }, companyId);
+            subCategoriesResult.inserted++;
+          } catch (error) {
             subCategoriesResult.errors++;
-            subCategoriesResult.errorDetails.push({ row: i + 2, error: 'Name is required' });
-            continue;
+            subCategoriesResult.errorDetails.push({ row: i + 2, error: error.message });
           }
-
-          const categoryName = row.name.toString().trim();
-          const itemCategoryName = (row.item_category || row['Item Category'] || '').toString().trim();
-          
-          if (!itemCategoryName) {
-            subCategoriesResult.errors++;
-            subCategoriesResult.errorDetails.push({ row: i + 2, error: 'Item Category is required' });
-            continue;
-          }
-
-          const itemCategoryId = itemCategoryMap.get(itemCategoryName.toLowerCase());
-          if (!itemCategoryId) {
-            subCategoriesResult.errors++;
-            subCategoriesResult.errorDetails.push({ row: i + 2, error: `Item Category "${itemCategoryName}" not found` });
-            continue;
-          }
-
-          // Skip if already processed in this upload
-          const subKey = `${itemCategoryId}-${categoryName.toLowerCase()}`;
-          if (processedSubKeys.has(subKey)) {
-            subCategoriesResult.errors++;
-            subCategoriesResult.errorDetails.push({ row: i + 2, error: `Duplicate sub category "${categoryName}" for item category "${itemCategoryName}" in upload file` });
-            continue;
-          }
-          processedSubKeys.add(subKey);
-
-          // Always insert, don't check for existing
-          const category = await CategoryModel.createSubCategory({
-            name: categoryName,
-            itemCategoryId: itemCategoryId,
-          }, companyId);
-          subCategoriesResult.inserted++;
-        } catch (error) {
-          subCategoriesResult.errors++;
-          subCategoriesResult.errorDetails.push({ row: i + 2, error: error.message });
         }
       }
-    }
     }
 
     await client.query('COMMIT');
@@ -1813,7 +1827,7 @@ const updateTeam = async (req, res, next) => {
     await client.query('BEGIN');
     const companyId = getCompanyId(req);
     const team = await TeamModel.update(req.params.id, req.body, companyId);
-    
+
     if (!team) {
       await client.query('ROLLBACK');
       throw new NotFoundError('Team member not found');
@@ -1833,11 +1847,11 @@ const deleteTeam = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
     const result = await TeamModel.delete(req.params.id, companyId);
-    
+
     if (!result) {
       throw new NotFoundError('Team member not found');
     }
-    
+
     res.json({ success: true, message: 'Team member deleted successfully' });
   } catch (error) {
     next(error);
@@ -1881,7 +1895,7 @@ const updateWarehouse = async (req, res, next) => {
     await client.query('BEGIN');
     const companyId = getCompanyId(req);
     const warehouse = await WarehouseModel.update(req.params.id, req.body, companyId);
-    
+
     if (!warehouse) {
       await client.query('ROLLBACK');
       throw new NotFoundError('Warehouse not found');
@@ -1901,11 +1915,11 @@ const deleteWarehouse = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
     const result = await WarehouseModel.delete(req.params.id, companyId);
-    
+
     if (!result) {
       throw new NotFoundError('Warehouse not found');
     }
-    
+
     res.json({ success: true, message: 'Warehouse deleted successfully' });
   } catch (error) {
     next(error);
@@ -2004,7 +2018,7 @@ const updateMaterial = async (req, res, next) => {
     await client.query('BEGIN');
     const companyId = getCompanyId(req);
     const material = await MaterialModel.update(req.params.id, req.body, companyId);
-    
+
     if (!material) {
       await client.query('ROLLBACK');
       throw new NotFoundError('Material not found');
@@ -2024,11 +2038,11 @@ const deleteMaterial = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
     const result = await MaterialModel.delete(req.params.id, companyId);
-    
+
     if (!result) {
       throw new NotFoundError('Material not found');
     }
-    
+
     res.json({ success: true, message: 'Material deleted successfully' });
   } catch (error) {
     next(error);
@@ -2121,7 +2135,7 @@ const updateColour = async (req, res, next) => {
     await client.query('BEGIN');
     const companyId = getCompanyId(req);
     const colour = await ColourModel.update(req.params.id, req.body, companyId);
-    
+
     if (!colour) {
       await client.query('ROLLBACK');
       throw new NotFoundError('Colour not found');
@@ -2141,11 +2155,11 @@ const deleteColour = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
     const result = await ColourModel.delete(req.params.id, companyId);
-    
+
     if (!result) {
       throw new NotFoundError('Colour not found');
     }
-    
+
     res.json({ success: true, message: 'Colour deleted successfully' });
   } catch (error) {
     next(error);
