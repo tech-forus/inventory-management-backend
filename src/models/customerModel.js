@@ -68,9 +68,9 @@ class CustomerModel {
                 birthday, anniversary, interests, tags, loyalty_tier, 
                 preferred_categories, notes, whatsapp_number, contact_person,
                 date_of_birth, personal_address, credit_period, state,
-                customer_type, source, is_active
+                customer_type, source, is_active, department, designation
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
             RETURNING *
         `;
 
@@ -100,7 +100,9 @@ class CustomerModel {
       data.state || null,                                       // state
       data.customerType || data.customer_type || null,          // customer_type
       data.source || null,                                      // source
-      data.isActive !== undefined ? data.isActive : true        // is_active
+      data.isActive !== undefined ? data.isActive : true,       // is_active
+      data.department || null,                                  // department
+      data.designation || null                                  // designation
     ];
 
     const result = await pool.query(query, params);
@@ -161,7 +163,9 @@ class CustomerModel {
       source: 'source',
       preferred_categories: 'preferred_categories',
       notes: 'notes',
-      isActive: 'is_active'
+      isActive: 'is_active',
+      department: 'department',
+      designation: 'designation'
     };
 
     for (const [key, value] of Object.entries(data)) {
