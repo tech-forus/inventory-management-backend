@@ -179,16 +179,22 @@ class CustomerModel {
       designation: 'designation'
     };
 
+    const updates = new Map();
     for (const [key, value] of Object.entries(data)) {
-      if (mappings[key]) {
-        sets.push(`${mappings[key]} = $${paramIndex}`);
-        if (key === 'interests' || key === 'tags') {
-          params.push(JSON.stringify(value));
-        } else {
-          params.push(value);
-        }
-        paramIndex++;
+      const dbCol = mappings[key];
+      if (dbCol && value !== undefined) {
+        updates.set(dbCol, value);
       }
+    }
+
+    for (const [dbCol, value] of updates.entries()) {
+      sets.push(`${dbCol} = $${paramIndex}`);
+      if (dbCol === 'interests' || dbCol === 'tags') {
+        params.push(Array.isArray(value) ? JSON.stringify(value) : value);
+      } else {
+        params.push(value);
+      }
+      paramIndex++;
     }
 
     if (sets.length === 0) return null;
