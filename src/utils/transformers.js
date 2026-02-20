@@ -191,6 +191,8 @@ const transformCustomer = (customer) => {
     tags: parseJsonArray(customer.tags),
     loyaltyTier: customer.loyalty_tier,
     source: customer.source,
+    department: customer.department,
+    designation: customer.designation,
     assignedTo: customer.assigned_to,
     assignedToName: customer.assigned_to_name,
     createdAt: customer.created_at,
