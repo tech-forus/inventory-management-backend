@@ -183,7 +183,9 @@ class CustomerModel {
     for (const [key, value] of Object.entries(data)) {
       const dbCol = mappings[key];
       if (dbCol && value !== undefined) {
-        updates.set(dbCol, value);
+        // Convert empty strings to null for the database
+        const processedValue = value === '' ? null : value;
+        updates.set(dbCol, processedValue);
       }
     }
 
