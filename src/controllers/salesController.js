@@ -1,3 +1,4 @@
+const { z } = require('zod');
 const CustomerModel = require('../models/customerModel');
 const LeadModel = require('../models/leadModel');
 const { getCompanyId } = require('../middlewares/auth');
@@ -142,21 +143,42 @@ const deleteLead = async (req, res, next) => {
     }
 };
 
+// Follow-ups
+
+const createFollowupSchema = z.object({
+    scheduledAt: z.string().datetime(), // ISO string
+    note: z.string().optional(),
+});
+
 const addFollowUp = async (req, res, next) => {
     try {
         const { id } = req.params; // leadId
-        const followUp = await LeadModel.addFollowUp(id, req.body);
+        const { userId } = req.user;
+
+        const validated = createFollowupSchema.parse({
+            scheduledAt: req.body.scheduled_at,
+            note: req.body.note
+        });
+
+        const followUp = await LeadModel.addFollowUp(id, {
+            scheduled_at: validated.scheduledAt,
+            note: validated.note
+        }, userId);
+
         res.status(201).json({ success: true, data: followUp });
     } catch (error) {
+        if (error instanceof z.ZodError) {
+            return next(new ValidationError(error.errors[0].message));
+        }
         next(error);
     }
 };
 
-const markFollowUpDone = async (req, res, next) => {
+const completeFollowup = async (req, res, next) => {
     try {
         const { fid } = req.params; // followUpId
-        const updated = await LeadModel.markFollowUpDone(fid, true);
-        if (!updated) throw new NotFoundError('Follow up not found');
+        const updated = await LeadModel.completeFollowUp(fid);
+        if (!updated) throw new NotFoundError('Follow up not found or already closed');
         res.json({ success: true, data: updated });
     } catch (error) {
         next(error);
@@ -188,6 +210,6 @@ module.exports = {
     updateLead,
     deleteLead,
     addFollowUp,
-    markFollowUpDone,
+    completeFollowup,
     getDashboardStats
 };

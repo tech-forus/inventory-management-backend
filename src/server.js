@@ -8,16 +8,16 @@ const PORT = process.env.PORT || 5000;
 // Graceful shutdown handler
 const gracefulShutdown = async (signal) => {
   logger.info({ signal }, 'Graceful shutdown initiated');
-  
+
   // Stop accepting new connections
   server.close(async () => {
     logger.info({}, 'HTTP server closed');
-    
+
     try {
       // Close database pool
       await pool.end();
       logger.info({}, 'Database pool closed');
-      
+
       logger.info({}, 'Graceful shutdown completed');
       process.exit(0);
     } catch (error) {
@@ -25,7 +25,7 @@ const gracefulShutdown = async (signal) => {
       process.exit(1);
     }
   });
-  
+
   // Force shutdown after 10 seconds
   setTimeout(() => {
     logger.error({}, 'Forced shutdown after timeout');
@@ -51,11 +51,29 @@ const server = app.listen(PORT, async () => {
     },
     'CORS_ORIGINS environment value'
   );
-  
+
   // Check database connection
   try {
     await pool.query('SELECT 1 as test');
     logger.info({}, 'Database connection established');
+
+    // Start background job for follow-ups
+    setInterval(async () => {
+      try {
+        const result = await pool.query(`
+          UPDATE lead_followups
+          SET status = 'MISSED'
+          WHERE status = 'PENDING'
+            AND scheduled_at < now() - interval '2 hours'
+        `);
+        if (result.rowCount > 0) {
+          logger.info({ rowCount: result.rowCount }, 'Marked follow-ups as MISSED');
+        }
+      } catch (err) {
+        logger.error({ error: err.message }, 'Background follow-up job failed');
+      }
+    }, 10 * 60 * 1000); // Every 10 minutes
+
   } catch (error) {
     logger.error({ error: error.message }, 'Database connection failed');
     process.exit(1);

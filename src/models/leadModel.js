@@ -11,19 +11,29 @@ class LeadModel {
                    c.customer_name as linked_customer_name,
                    c.company_name as customer_company,
                    c.contact_person as customer_contact_person,
+                   fu.scheduled_at AS next_followup_at,
+                   fu.id AS next_followup_id,
+                   fu.note AS next_followup_note,
+                   CASE
+                     WHEN fu.scheduled_at IS NULL THEN 'NO_FOLLOWUP'
+                     WHEN fu.scheduled_at < now() THEN 'OVERDUE'
+                     WHEN fu.scheduled_at <= now() + interval '1 hour' THEN 'DUE_SOON'
+                     ELSE 'PENDING'
+                   END AS followup_state,
                    (SELECT COUNT(*) FROM lead_items li WHERE li.lead_id = l.id) as item_count,
                    (SELECT json_agg(json_build_object('id', li.id, 'item_name', li.item_name, 'quantity', li.quantity, 'estimated_value', li.estimated_value)) 
-                    FROM lead_items li WHERE li.lead_id = l.id) as items,
-                   (SELECT json_agg(json_build_object(
-                       'id', f.id, 
-                       'follow_up_date', f.follow_up_date,
-                       'follow_up_time', f.follow_up_time, 
-                       'note', f.note, 
-                       'is_done', f.is_done
-                   )) FROM lead_follow_ups f WHERE f.lead_id = l.id) as follow_ups
+                    FROM lead_items li WHERE li.lead_id = l.id) as items
             FROM leads l
             LEFT JOIN users u ON l.assigned_to = u.id
             LEFT JOIN customers c ON l.customer_id = c.id
+            LEFT JOIN LATERAL (
+              SELECT id, scheduled_at, note
+              FROM lead_followups
+              WHERE lead_id = l.id
+                AND status = 'PENDING'
+              ORDER BY scheduled_at ASC
+              LIMIT 1
+            ) fu ON true
             WHERE l.company_id = $1 AND l.deleted_at IS NULL
         `;
         const params = [companyId];
@@ -45,7 +55,9 @@ class LeadModel {
             query += ` AND (
                 l.customer_name ILIKE $${paramIndex} OR 
                 l.customer_phone ILIKE $${paramIndex} OR
-                l.notes ILIKE $${paramIndex}
+                l.notes ILIKE $${paramIndex} OR
+                c.company_name ILIKE $${paramIndex} OR
+                c.customer_name ILIKE $${paramIndex}
             )`;
             params.push(`%${filters.search}%`);
             paramIndex++;
@@ -75,8 +87,6 @@ class LeadModel {
         const client = await pool.connect();
         try {
             await client.query('BEGIN');
-
-            console.log('Inserting lead:', data);
 
             // Insert Lead
             const leadQuery = `
@@ -122,17 +132,17 @@ class LeadModel {
                 }
             }
 
-            // Insert Follow Up if provided (optional convenience)
+            // Insert Follow Up if provided (using new table)
             if (data.initial_follow_up) {
                 const followQuery = `
-                    INSERT INTO lead_follow_ups (lead_id, follow_up_date, follow_up_time, note)
+                    INSERT INTO lead_followups (lead_id, scheduled_at, note, created_by)
                     VALUES ($1, $2, $3, $4)
                 `;
                 await client.query(followQuery, [
                     lead.id,
-                    data.initial_follow_up.date,
-                    data.initial_follow_up.time,
-                    data.initial_follow_up.note
+                    data.initial_follow_up.scheduled_at,
+                    data.initial_follow_up.note,
+                    assignedTo
                 ]);
             }
 
@@ -165,11 +175,11 @@ class LeadModel {
                    )) FROM lead_items li WHERE li.lead_id = l.id) as items,
                    (SELECT json_agg(json_build_object(
                        'id', f.id, 
-                       'follow_up_date', f.follow_up_date,
-                       'follow_up_time', f.follow_up_time, 
+                       'scheduled_at', f.scheduled_at,
                        'note', f.note, 
-                       'is_done', f.is_done
-                   )) FROM lead_follow_ups f WHERE f.lead_id = l.id) as follow_ups
+                       'status', f.status,
+                       'completed_at', f.completed_at
+                   ) ORDER BY f.scheduled_at DESC) FROM lead_followups f WHERE f.lead_id = l.id) as follow_ups
             FROM leads l
             LEFT JOIN users u ON l.assigned_to = u.id
             LEFT JOIN customers c ON l.customer_id = c.id
@@ -185,10 +195,10 @@ class LeadModel {
     static async update(id, data, companyId) {
         // Implement simple dynamic update for lead fields
         const sets = [];
-        const params = [id, companyId]; // Note: update generally doesn't check assigned_to, allows admins/users to update if they have access (controller checks permissions)
+        const params = [id, companyId];
         let paramIndex = 3;
 
-        const allowedFields = ['status', 'priority', 'notes', 'estimated_value', 'closed_reason', 'closed_at']; // Add others as needed
+        const allowedFields = ['status', 'priority', 'notes', 'estimated_value', 'closed_reason', 'closed_at'];
 
         for (const key of Object.keys(data)) {
             if (allowedFields.includes(key)) {
@@ -198,22 +208,24 @@ class LeadModel {
             }
         }
 
-        if (sets.length === 0) return null;
+        if (sets.length === 0 && !data.items) return this.getById(id, companyId);
 
-        const query = `
-            UPDATE leads
-            SET ${sets.join(', ')}, updated_at = CURRENT_TIMESTAMP
-            WHERE id = $1 AND company_id = $2 AND deleted_at IS NULL
-            RETURNING *
-        `;
-        const result = await pool.query(query, params);
+        if (sets.length > 0) {
+            const query = `
+                UPDATE leads
+                SET ${sets.join(', ')}, updated_at = CURRENT_TIMESTAMP
+                WHERE id = $1 AND company_id = $2 AND deleted_at IS NULL
+                RETURNING *
+            `;
+            await pool.query(query, params);
+        }
 
         // If items are provided, update them in a transaction
-        if (result.rows[0] && data.items) {
+        if (data.items) {
             await this.updateItems(id, data.items);
         }
 
-        return result.rows[0];
+        return this.getById(id, companyId);
     }
 
     /**
@@ -223,11 +235,7 @@ class LeadModel {
         const client = await pool.connect();
         try {
             await client.query('BEGIN');
-
-            // 1. Delete existing items
             await client.query('DELETE FROM lead_items WHERE lead_id = $1', [leadId]);
-
-            // 2. Insert new items
             if (items && items.length > 0) {
                 const itemQuery = `
                     INSERT INTO lead_items (lead_id, sku_code, item_name, quantity, estimated_value)
@@ -243,7 +251,6 @@ class LeadModel {
                     ]);
                 }
             }
-
             await client.query('COMMIT');
         } catch (e) {
             await client.query('ROLLBACK');
@@ -270,27 +277,47 @@ class LeadModel {
     /**
      * Add Follow-up
      */
-    static async addFollowUp(leadId, data) {
-        const query = `
-            INSERT INTO lead_follow_ups (lead_id, follow_up_date, follow_up_time, note)
-            VALUES ($1, $2, $3, $4)
-            RETURNING *
-        `;
-        const result = await pool.query(query, [leadId, data.date, data.time, data.note]);
-        return result.rows[0];
+    static async addFollowUp(leadId, data, userId) {
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+
+            // Business rule: one active follow-up per lead
+            await client.query(`
+                UPDATE lead_followups
+                SET status = 'CANCELLED'
+                WHERE lead_id = $1 AND status = 'PENDING'
+            `, [leadId]);
+
+            const query = `
+                INSERT INTO lead_followups (lead_id, scheduled_at, note, created_by)
+                VALUES ($1, $2, $3, $4)
+                RETURNING *
+            `;
+            const result = await client.query(query, [leadId, data.scheduled_at, data.note, userId]);
+
+            await client.query('COMMIT');
+            return result.rows[0];
+        } catch (e) {
+            await client.query('ROLLBACK');
+            throw e;
+        } finally {
+            client.release();
+        }
     }
 
     /**
-     * Mark Follow-up as Done
+     * Mark Follow-up as Completed
      */
-    static async markFollowUpDone(followUpId, isDone = true) {
+    static async completeFollowUp(followUpId) {
         const query = `
-            UPDATE lead_follow_ups
-            SET is_done = $1
-            WHERE id = $2
+            UPDATE lead_followups
+            SET status = 'COMPLETED',
+                completed_at = now()
+            WHERE id = $1 AND status = 'PENDING'
             RETURNING *
         `;
-        const result = await pool.query(query, [isDone, followUpId]);
+        const result = await pool.query(query, [followUpId]);
         return result.rows[0];
     }
 
@@ -317,21 +344,21 @@ class LeadModel {
             wonValue: `SELECT COALESCE(SUM(estimated_value), 0) FROM leads l ${whereClause} AND status = 'closed_won'`,
             upcomingFollowUps: `
                 SELECT COUNT(*) 
-                FROM lead_follow_ups f
+                FROM lead_followups f
                 JOIN leads l ON f.lead_id = l.id
                 ${whereClause} 
-                AND f.follow_up_date BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '7 days')
-                AND f.is_done = FALSE
+                AND f.scheduled_at BETWEEN now() AND (now() + INTERVAL '7 days')
+                AND f.status = 'PENDING'
             `,
             totalCustomers: `SELECT COUNT(*) FROM customers WHERE company_id = $1`,
             upcomingFollowUpsList: `
                 SELECT f.*, l.customer_name, l.id as lead_id
-                FROM lead_follow_ups f
+                FROM lead_followups f
                 JOIN leads l ON f.lead_id = l.id
                 ${whereClause}
-                AND f.follow_up_date BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '7 days')
-                AND f.is_done = FALSE
-                ORDER BY f.follow_up_date ASC, f.follow_up_time ASC
+                AND f.scheduled_at BETWEEN now() AND (now() + INTERVAL '7 days')
+                AND f.status = 'PENDING'
+                ORDER BY f.scheduled_at ASC
                 LIMIT 10
             `
         };

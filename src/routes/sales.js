@@ -20,8 +20,8 @@ router.put('/leads/:id', salesController.updateLead);
 router.delete('/leads/:id', salesController.deleteLead);
 
 // Follow-ups
-router.post('/leads/:id/follow-ups', salesController.addFollowUp);
-router.put('/leads/:id/follow-ups/:fid', salesController.markFollowUpDone);
+router.post('/leads/:id/followups', salesController.addFollowUp);
+router.patch('/followups/:fid/complete', salesController.completeFollowup);
 
 // --- Dashboard ---
 router.get('/dashboard/stats', salesController.getDashboardStats);
