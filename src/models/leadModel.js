@@ -20,6 +20,7 @@ class LeadModel {
                    c.customer_name as linked_customer_name,
                    c.company_name as customer_company,
                    c.contact_person as customer_contact_person,
+                   c.email as customer_email,
                    fu.scheduled_at AS next_followup_at,
                    fu.id AS next_followup_id,
                    fu.note AS next_followup_note,
