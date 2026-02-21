@@ -188,7 +188,7 @@ class LeadModel {
         const params = [id, companyId]; // Note: update generally doesn't check assigned_to, allows admins/users to update if they have access (controller checks permissions)
         let paramIndex = 3;
 
-        const allowedFields = ['status', 'priority', 'notes', 'estimated_value', 'closed_reason', 'closed_at', 'follow_up_date']; // Add others as needed
+        const allowedFields = ['status', 'priority', 'notes', 'estimated_value', 'closed_reason', 'closed_at']; // Add others as needed
 
         for (const key of Object.keys(data)) {
             if (allowedFields.includes(key)) {
