@@ -2,10 +2,9 @@ const pool = require('./database');
 const { ValidationError } = require('../middlewares/errorHandler');
 
 const LEAD_STATUS_TRANSITIONS = {
-    'OPEN': ['QUALIFIED', 'NEGOTIATION', 'LOST', 'CLOSED_NO_RESPONSE'],
-    'QUALIFIED': ['NEGOTIATION', 'LOST', 'CLOSED_NO_RESPONSE'],
-    'NEGOTIATION': ['WON', 'LOST', 'OPEN'],
-    'CLOSED_NO_RESPONSE': ['OPEN', 'LOST'],
+    'OPEN': ['NEGOTIATION', 'LOST', 'NOT_RESPONSE'],
+    'NEGOTIATION': ['WON', 'LOST', 'OPEN', 'NOT_RESPONSE'],
+    'NOT_RESPONSE': ['OPEN', 'LOST'],
     'WON': [],
     'LOST': []
 };
@@ -374,7 +373,7 @@ class LeadModel {
 
         const queries = {
             totalLeads: `SELECT COUNT(*) FROM leads l ${whereClause}`,
-            openLeads: `SELECT COUNT(*) FROM leads l ${whereClause} AND status = 'OPEN'`,
+            openLeads: `SELECT COUNT(*) FROM leads l ${whereClause} AND status IN ('OPEN', 'NEGOTIATION', 'NOT_RESPONSE')`,
             wonLeads: `SELECT COUNT(*) FROM leads l ${whereClause} AND status = 'WON'`,
             totalValue: `SELECT COALESCE(SUM(estimated_value), 0) FROM leads l ${whereClause}`,
             wonValue: `SELECT COALESCE(SUM(estimated_value), 0) FROM leads l ${whereClause} AND status = 'WON'`,
