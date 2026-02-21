@@ -78,10 +78,15 @@ async function runMigrations() {
     console.log('✅ All migrations completed successfully!');
   } catch (error) {
     console.error('❌ Migration error:', error.message);
-    if (client) await client.end().catch(() => {});
+    if (client) await client.end().catch(() => { });
     process.exit(1);
   }
 }
 
-runMigrations();
+// Run migrations if called directly
+if (require.main === module) {
+  runMigrations();
+}
+
+module.exports = { runMigrations };
 

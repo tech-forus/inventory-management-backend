@@ -1,5 +1,6 @@
 require('dotenv').config();
 const app = require('./app');
+const { runMigrations } = require('../scripts/database/migrate');
 const pool = require('./models/database');
 const { logger } = require('./utils/logger');
 
@@ -52,10 +53,11 @@ const server = app.listen(PORT, async () => {
     'CORS_ORIGINS environment value'
   );
 
-  // Check database connection
+  // Check database connection and run migrations
   try {
+    await runMigrations();
     await pool.query('SELECT 1 as test');
-    logger.info({}, 'Database connection established');
+    logger.info({}, 'Database connection established and migrations synced');
 
     // Start background job for follow-ups
     setInterval(async () => {
