@@ -1,4 +1,14 @@
 const pool = require('./database');
+const { ValidationError } = require('../middlewares/errorHandler');
+
+const LEAD_STATUS_TRANSITIONS = {
+    'OPEN': ['QUALIFIED', 'NEGOTIATION', 'LOST', 'CLOSED_NO_RESPONSE'],
+    'QUALIFIED': ['NEGOTIATION', 'LOST', 'CLOSED_NO_RESPONSE'],
+    'NEGOTIATION': ['WON', 'LOST', 'OPEN'],
+    'CLOSED_NO_RESPONSE': ['OPEN', 'LOST'],
+    'WON': [],
+    'LOST': []
+};
 
 class LeadModel {
     /**
@@ -46,9 +56,13 @@ class LeadModel {
         }
 
         if (filters.status) {
-            query += ` AND l.status = $${paramIndex}`;
-            params.push(filters.status);
-            paramIndex++;
+            if (filters.status === 'NEGLECTED') {
+                query += ` AND fu.id IS NULL AND l.status NOT IN ('WON', 'LOST')`;
+            } else {
+                query += ` AND l.status = $${paramIndex}`;
+                params.push(filters.status);
+                paramIndex++;
+            }
         }
 
         if (filters.search) {
@@ -105,7 +119,7 @@ class LeadModel {
                 data.customer_name,
                 data.customer_phone,
                 data.type || 'purchase',
-                data.status || 'open',
+                data.status || 'OPEN',
                 data.source || 'walk_in',
                 data.priority || 'medium',
                 data.estimated_value || 0,
@@ -211,6 +225,20 @@ class LeadModel {
         if (sets.length === 0 && !data.items) return this.getById(id, companyId);
 
         if (sets.length > 0) {
+            // State Machine Validation
+            if (data.status) {
+                const currentRes = await pool.query('SELECT status FROM leads WHERE id = $1 AND company_id = $2', [id, companyId]);
+                if (currentRes.rows.length === 0) return null;
+                const currentStatus = currentRes.rows[0].status;
+
+                if (currentStatus !== data.status) {
+                    const allowed = LEAD_STATUS_TRANSITIONS[currentStatus] || [];
+                    if (!allowed.includes(data.status)) {
+                        throw new ValidationError(`Invalid progression: Cannot move from ${currentStatus} to ${data.status}`);
+                    }
+                }
+            }
+
             const query = `
                 UPDATE leads
                 SET ${sets.join(', ')}, updated_at = CURRENT_TIMESTAMP
@@ -280,6 +308,14 @@ class LeadModel {
     static async addFollowUp(leadId, data, userId) {
         const client = await pool.connect();
         try {
+            const leadRes = await client.query('SELECT status FROM leads WHERE id = $1', [leadId]);
+            if (leadRes.rows.length === 0) throw new Error('Lead not found');
+            const leadStatus = leadRes.rows[0].status;
+
+            if (['WON', 'LOST'].includes(leadStatus)) {
+                throw new ValidationError('Cannot schedule follow-up for a closed deal (WON/LOST)');
+            }
+
             await client.query('BEGIN');
 
             // Business rule: one active follow-up per lead
@@ -338,10 +374,10 @@ class LeadModel {
 
         const queries = {
             totalLeads: `SELECT COUNT(*) FROM leads l ${whereClause}`,
-            openLeads: `SELECT COUNT(*) FROM leads l ${whereClause} AND status = 'open'`,
-            wonLeads: `SELECT COUNT(*) FROM leads l ${whereClause} AND status = 'closed_won'`,
+            openLeads: `SELECT COUNT(*) FROM leads l ${whereClause} AND status = 'OPEN'`,
+            wonLeads: `SELECT COUNT(*) FROM leads l ${whereClause} AND status = 'WON'`,
             totalValue: `SELECT COALESCE(SUM(estimated_value), 0) FROM leads l ${whereClause}`,
-            wonValue: `SELECT COALESCE(SUM(estimated_value), 0) FROM leads l ${whereClause} AND status = 'closed_won'`,
+            wonValue: `SELECT COALESCE(SUM(estimated_value), 0) FROM leads l ${whereClause} AND status = 'WON'`,
             upcomingFollowUps: `
                 SELECT COUNT(*) 
                 FROM lead_followups f
