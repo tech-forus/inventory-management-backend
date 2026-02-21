@@ -11,10 +11,7 @@ const app = express();
 // ----------------------
 // Security middleware - Helmet (must be first)
 // ----------------------
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: "cross-origin" },
-  crossOriginEmbedderPolicy: false
-}));
+app.use(helmet());
 
 // ----------------------
 // Request logging middleware (after helmet, before other middleware)
@@ -39,47 +36,57 @@ console.log('[CORS] allowedOrigins parsed:', allowedOrigins);
 
 const corsOptions = {
   origin: (origin, callback) => {
+    // Log what origin we are evaluating
+    console.log('[CORS] Incoming Origin:', origin || '(no origin)');
+
     // 1. Allow no-origin requests (curl, server-to-server, some mobile apps)
     if (!origin) {
+      console.log('[CORS] Allowing request with no Origin header');
       return callback(null, true);
     }
 
-    // 2. Always allow local React dev server explicitly
-    const isLocalhost = origin.includes('localhost') || origin.includes('127.0.0.1');
-    if (isLocalhost) {
+    // 2. Always allow local React dev server explicitly (for development)
+    if (origin === 'http://localhost:3000' || origin === 'http://localhost:5173') {
+      console.log('[CORS] Allowing local dev server:', origin);
       return callback(null, true);
     }
 
-    // 3. Known production origins
-    const knownOrigins = [
-      'https://inventory-management-frontend-1ip7hw67t-tech-forus-projects.vercel.app',
-      'https://forusbiz.ai',
-      'https://www.forusbiz.ai'
-    ];
-
-    if (knownOrigins.includes(origin)) {
+    // 2.5. Always allow Vercel frontend deployment
+    if (origin === 'https://inventory-management-frontend-1ip7hw67t-tech-forus-projects.vercel.app') {
+      console.log('[CORS] Allowing Vercel frontend:', origin);
       return callback(null, true);
     }
 
-    // 4. If no allowedOrigins configured, allow all (for development flexibility)
+    // 2.6. Always allow forusbiz.ai and www.forusbiz.ai frontend deployments
+    if (origin === 'https://forusbiz.ai' || origin === 'https://www.forusbiz.ai') {
+      console.log('[CORS] Allowing forusbiz frontend:', origin);
+      return callback(null, true);
+    }
+
+    // 3. If no allowedOrigins configured, allow all (for development flexibility)
     if (allowedOrigins.length === 0) {
+      console.warn(
+        '[CORS] allowedOrigins is empty. Allowing all origins. ' +
+        'Set CORS_ORIGINS in env for stricter control.'
+      );
       return callback(null, true);
     }
 
-    // 5. Check against allowedOrigins from env
+    // 4. Check against allowedOrigins from env
     if (allowedOrigins.includes(origin)) {
+      console.log('[CORS] Origin is in allowedOrigins → allowed');
       return callback(null, true);
     }
 
-    // 6. Origin not allowed: deny CORS (no header)
-    console.warn('[CORS] Origin NOT allowed by CORS:', origin);
+    // 5. Origin not allowed: deny CORS (no header)
+    console.warn('[CORS] Origin NOT allowed by CORS:', origin, 'Allowed:', allowedOrigins);
     return callback(null, false);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-company-id', 'X-Requested-With', 'Accept'],
-  exposedHeaders: ['Content-Type', 'Authorization', 'x-company-id'],
-  optionsSuccessStatus: 200,
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-company-id'],
+  exposedHeaders: ['Content-Type', 'Authorization'],
+  optionsSuccessStatus: 200, // For older browsers
   preflightContinue: false,
 };
 
