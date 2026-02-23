@@ -21,6 +21,7 @@ class LeadModel {
                    c.company_name as customer_company,
                    c.contact_person as customer_contact_person,
                    c.email as customer_email,
+                   c.city as customer_city,
                    fu.scheduled_at AS next_followup_at,
                    fu.id AS next_followup_id,
                    fu.note AS next_followup_note,
@@ -175,11 +176,14 @@ class LeadModel {
      */
     static async getById(id, companyId) {
         const query = `
-            SELECT l.*, 
+            SELECT l.*,
                    u.full_name as assigned_to_name,
                    c.customer_name as linked_customer_name,
                    c.company_name as customer_company,
                    c.contact_person as customer_contact_person,
+                   c.email as customer_email,
+                   c.city as customer_city,
+                   c.phone as customer_phone_alt,
                    (SELECT json_agg(json_build_object(
                        'id', li.id, 
                        'sku_code', li.sku_code,
