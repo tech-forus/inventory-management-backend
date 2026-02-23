@@ -185,6 +185,28 @@ const completeFollowup = async (req, res, next) => {
     }
 };
 
+// Activity Log
+
+const VALID_ACTIVITY_TYPES = ['CALL', 'MAIL', 'MEET', 'CHAT', 'QUOTE'];
+
+const addActivity = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const { userId } = req.user;
+        const companyId = getCompanyId(req);
+        const { type, note, logged_at } = req.body;
+
+        if (!VALID_ACTIVITY_TYPES.includes(type)) {
+            throw new ValidationError(`Invalid activity type. Must be one of: ${VALID_ACTIVITY_TYPES.join(', ')}`);
+        }
+
+        const activity = await LeadModel.addActivity(id, { type, note, logged_at }, userId, companyId);
+        res.status(201).json({ success: true, data: activity });
+    } catch (error) {
+        next(error);
+    }
+};
+
 // --- Dashboard ---
 
 const getDashboardStats = async (req, res, next) => {
@@ -211,5 +233,6 @@ module.exports = {
     deleteLead,
     addFollowUp,
     completeFollowup,
+    addActivity,
     getDashboardStats
 };

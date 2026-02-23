@@ -15,7 +15,7 @@ class LeadModel {
      */
     static async getAll(companyId, userId, role, filters = {}) {
         let query = `
-            SELECT l.*, 
+            SELECT l.*,
                    u.full_name as assigned_to_name,
                    c.customer_name as linked_customer_name,
                    c.company_name as customer_company,
@@ -31,8 +31,11 @@ class LeadModel {
                      WHEN fu.scheduled_at <= now() + interval '1 hour' THEN 'DUE_SOON'
                      ELSE 'PENDING'
                    END AS followup_state,
+                   la.type  AS last_activity_type,
+                   la.note  AS last_activity_note,
+                   la.logged_at AS last_activity_at,
                    (SELECT COUNT(*) FROM lead_items li WHERE li.lead_id = l.id) as item_count,
-                   (SELECT json_agg(json_build_object('id', li.id, 'item_name', li.item_name, 'quantity', li.quantity, 'estimated_value', li.estimated_value)) 
+                   (SELECT json_agg(json_build_object('id', li.id, 'item_name', li.item_name, 'quantity', li.quantity, 'estimated_value', li.estimated_value))
                     FROM lead_items li WHERE li.lead_id = l.id) as items
             FROM leads l
             LEFT JOIN users u ON l.assigned_to = u.id
@@ -45,6 +48,13 @@ class LeadModel {
               ORDER BY scheduled_at ASC
               LIMIT 1
             ) fu ON true
+            LEFT JOIN LATERAL (
+              SELECT type, note, logged_at
+              FROM lead_activities
+              WHERE lead_id = l.id
+              ORDER BY logged_at DESC
+              LIMIT 1
+            ) la ON true
             WHERE l.company_id = $1 AND l.deleted_at IS NULL
         `;
         const params = [companyId];
@@ -192,12 +202,19 @@ class LeadModel {
                        'estimated_value', li.estimated_value
                    )) FROM lead_items li WHERE li.lead_id = l.id) as items,
                    (SELECT json_agg(json_build_object(
-                       'id', f.id, 
+                       'id', f.id,
                        'scheduled_at', f.scheduled_at,
-                       'note', f.note, 
+                       'note', f.note,
                        'status', f.status,
                        'completed_at', f.completed_at
-                   ) ORDER BY f.scheduled_at DESC) FROM lead_followups f WHERE f.lead_id = l.id) as follow_ups
+                   ) ORDER BY f.scheduled_at DESC) FROM lead_followups f WHERE f.lead_id = l.id) as follow_ups,
+                   (SELECT json_agg(json_build_object(
+                       'id', a.id,
+                       'type', a.type,
+                       'note', a.note,
+                       'logged_at', a.logged_at,
+                       'logged_by', a.logged_by
+                   ) ORDER BY a.logged_at DESC) FROM lead_activities a WHERE a.lead_id = l.id) as activities
             FROM leads l
             LEFT JOIN users u ON l.assigned_to = u.id
             LEFT JOIN customers c ON l.customer_id = c.id
@@ -358,6 +375,22 @@ class LeadModel {
             RETURNING *
         `;
         const result = await pool.query(query, [followUpId]);
+        return result.rows[0];
+    }
+
+    /**
+     * Add Activity Log entry
+     */
+    static async addActivity(leadId, data, userId, companyId) {
+        const query = `
+            INSERT INTO lead_activities (lead_id, company_id, type, note, logged_by, logged_at)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING *
+        `;
+        const loggedAt = data.logged_at || new Date().toISOString();
+        const result = await pool.query(query, [
+            leadId, companyId, data.type, data.note || null, userId, loggedAt
+        ]);
         return result.rows[0];
     }
 

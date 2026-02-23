@@ -23,6 +23,9 @@ router.delete('/leads/:id', salesController.deleteLead);
 router.post('/leads/:id/followups', salesController.addFollowUp);
 router.patch('/followups/:fid/complete', salesController.completeFollowup);
 
+// Activities
+router.post('/leads/:id/activities', salesController.addActivity);
+
 // --- Dashboard ---
 router.get('/dashboard/stats', salesController.getDashboardStats);
 
