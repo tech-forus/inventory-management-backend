@@ -194,6 +194,8 @@ class LeadModel {
                    c.email as customer_email,
                    c.city as customer_city,
                    c.phone as customer_phone_alt,
+                   fu.scheduled_at AS next_followup_at,
+                   fu.note AS next_followup_note,
                    (SELECT json_agg(json_build_object(
                        'id', li.id, 
                        'sku_code', li.sku_code,
@@ -218,6 +220,14 @@ class LeadModel {
             FROM leads l
             LEFT JOIN users u ON l.assigned_to = u.id
             LEFT JOIN customers c ON l.customer_id = c.id
+            LEFT JOIN LATERAL (
+              SELECT scheduled_at, note
+              FROM lead_followups
+              WHERE lead_id = l.id
+                AND status = 'PENDING'
+              ORDER BY scheduled_at ASC
+              LIMIT 1
+            ) fu ON true
             WHERE l.id = $1 AND l.company_id = $2 AND l.deleted_at IS NULL
         `;
         const result = await pool.query(query, [id, companyId]);
