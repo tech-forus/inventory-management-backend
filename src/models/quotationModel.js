@@ -2,38 +2,53 @@ const pool = require('./database');
 
 /**
  * Generates the next quote number for a company and returns it.
- * Uses SELECT ... FOR UPDATE to safely increment even under concurrent requests.
+ * Mirrors the PO number pattern: queries the quotations table for the last
+ * number with this month's prefix, then increments by 1.
  *
- * Format: Q-YYMM-<initials>-<seq 001-999>
+ * Format: Q-YYMM-<COMPANY_INITIALS>-<seq 001-999>
+ * Example: Q-2602-FEPL-0001
  */
-async function nextQuoteNo(client, companyId, userFullName) {
-    // Upsert the sequence row
-    await client.query(`
-        INSERT INTO quotation_sequence (company_id, last_seq)
-        VALUES ($1, 0)
-        ON CONFLICT (company_id) DO NOTHING
-    `, [companyId]);
+async function nextQuoteNo(client, companyId) {
+    // Get company initials from companies table (same as PO pattern)
+    const companyRes = await client.query(
+        'SELECT company_name FROM companies WHERE company_id = $1',
+        [companyId.toUpperCase()]
+    );
 
-    const seqRes = await client.query(`
-        UPDATE quotation_sequence
-        SET last_seq = last_seq + 1
-        WHERE company_id = $1
-        RETURNING last_seq
-    `, [companyId]);
-
-    const seq = seqRes.rows[0].last_seq;
+    let initials = 'FC'; // Fallback
+    if (companyRes.rows.length > 0 && companyRes.rows[0].company_name) {
+        const name = companyRes.rows[0].company_name;
+        initials = name.trim().split(/\s+/)
+            .map(word => word[0])
+            .join('')
+            .toUpperCase()
+            .replace(/[^A-Z0-9]/g, '');
+    }
 
     const now = new Date();
     const yy = String(now.getFullYear()).slice(-2);
     const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const prefix = `Q-${yy}${mm}-${initials}-`;
 
-    const parts = (userFullName || '').trim().split(/\s+/);
-    const initials = parts.length >= 2
-        ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-        : (userFullName || 'XX').substring(0, 2).toUpperCase();
+    // Find the last quote_no with this prefix for this company
+    const result = await client.query(`
+        SELECT quote_no FROM quotations
+        WHERE quote_no LIKE $1 AND company_id = $2
+        ORDER BY LENGTH(quote_no) DESC, quote_no DESC
+        LIMIT 1
+    `, [`${prefix}%`, companyId.toUpperCase()]);
 
-    const seqStr = String(seq).padStart(3, '0');
-    return `Q-${yy}${mm}-${initials}-${seqStr}`;
+    let sequence = 1;
+    if (result.rows.length > 0) {
+        const lastNo = result.rows[0].quote_no;
+        const lastSeqStr = lastNo.replace(prefix, '');
+        const lastSeq = parseInt(lastSeqStr, 10);
+        if (!isNaN(lastSeq)) {
+            sequence = lastSeq + 1;
+        }
+    }
+
+    return `${prefix}${String(sequence).padStart(3, '0')}`;
 }
 
 class QuotationModel {
@@ -47,7 +62,7 @@ class QuotationModel {
         try {
             await client.query('BEGIN');
 
-            const quoteNo = await nextQuoteNo(client, companyId, userFullName);
+            const quoteNo = await nextQuoteNo(client, companyId);
 
             const qRes = await client.query(`
                 INSERT INTO quotations (
