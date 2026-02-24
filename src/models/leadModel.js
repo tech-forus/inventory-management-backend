@@ -194,6 +194,12 @@ class LeadModel {
                    c.email as customer_email,
                    c.city as customer_city,
                    c.phone as customer_phone_alt,
+                   c.gst_number as customer_gst_number,
+                   c.address_line1 as customer_address_line1,
+                   c.address_line2 as customer_address_line2,
+                   c.state as customer_state,
+                   c.country as customer_country,
+                   c.postal_code as customer_postal_code,
                    fu.scheduled_at AS next_followup_at,
                    fu.note AS next_followup_note,
                    (SELECT json_agg(json_build_object(
