@@ -36,7 +36,8 @@ class LeadModel {
                    la.logged_at AS last_activity_at,
                    (SELECT COUNT(*) FROM lead_items li WHERE li.lead_id = l.id) as item_count,
                    (SELECT json_agg(json_build_object('id', li.id, 'item_name', li.item_name, 'quantity', li.quantity, 'estimated_value', li.estimated_value))
-                    FROM lead_items li WHERE li.lead_id = l.id) as items
+                    FROM lead_items li WHERE li.lead_id = l.id) as items,
+                   COUNT(*) OVER() AS total_count
             FROM leads l
             LEFT JOIN users u ON l.assigned_to = u.id
             LEFT JOIN customers c ON l.customer_id = c.id
@@ -69,6 +70,8 @@ class LeadModel {
         if (filters.status) {
             if (filters.status === 'NEGLECTED') {
                 query += ` AND fu.id IS NULL AND l.status NOT IN ('WON', 'LOST')`;
+            } else if (filters.status === 'CLOSED') {
+                query += ` AND l.status IN ('WON', 'LOST', 'NOT_RESPONSE')`;
             } else {
                 query += ` AND l.status = $${paramIndex}`;
                 params.push(filters.status);
@@ -78,7 +81,7 @@ class LeadModel {
 
         if (filters.search) {
             query += ` AND (
-                l.customer_name ILIKE $${paramIndex} OR 
+                l.customer_name ILIKE $${paramIndex} OR
                 l.customer_phone ILIKE $${paramIndex} OR
                 l.notes ILIKE $${paramIndex} OR
                 c.company_name ILIKE $${paramIndex} OR
@@ -88,21 +91,78 @@ class LeadModel {
             paramIndex++;
         }
 
+        // Filter by followup_state (used for MISSED tab)
+        if (filters.followup_state === 'OVERDUE') {
+            query += ` AND fu.scheduled_at IS NOT NULL AND fu.scheduled_at < NOW()`;
+        } else if (filters.followup_state === 'DUE_SOON') {
+            query += ` AND fu.scheduled_at IS NOT NULL AND fu.scheduled_at >= NOW() AND fu.scheduled_at <= NOW() + interval '1 hour'`;
+        } else if (filters.followup_state === 'NO_FOLLOWUP') {
+            query += ` AND fu.id IS NULL`;
+        }
+
+        // Filter by today's followups (used for TODAY tab)
+        if (filters.today === 'true') {
+            query += ` AND DATE(fu.scheduled_at) = CURRENT_DATE`;
+        }
+
         query += ` ORDER BY l.created_at DESC`;
 
-        if (filters.limit) {
-            query += ` LIMIT $${paramIndex}`;
-            params.push(filters.limit);
-            paramIndex++;
-        }
-        if (filters.offset) {
-            query += ` OFFSET $${paramIndex}`;
-            params.push(filters.offset);
-            paramIndex++;
-        }
+        const limit = Math.min(parseInt(filters.limit) || 50, 200);
+        const offset = parseInt(filters.offset) || 0;
+        query += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+        params.push(limit, offset);
 
         const result = await pool.query(query, params);
-        return result.rows;
+        const total = parseInt(result.rows[0]?.total_count) || 0;
+        const leads = result.rows.map(({ total_count, ...lead }) => lead);
+        return { leads, total };
+    }
+
+    /**
+     * Get per-status lead counts for tab badges (single fast query)
+     */
+    static async getCounts(companyId, userId, role) {
+        let query = `
+            SELECT
+                COUNT(*)                                                                          AS total,
+                COUNT(*) FILTER (WHERE l.status = 'OPEN')                                        AS open,
+                COUNT(*) FILTER (WHERE l.status = 'NEGOTIATION')                                 AS negotiation,
+                COUNT(*) FILTER (WHERE l.status = 'WON')                                         AS won,
+                COUNT(*) FILTER (WHERE l.status = 'LOST')                                        AS lost,
+                COUNT(*) FILTER (WHERE l.status = 'NOT_RESPONSE')                                AS not_response,
+                COUNT(*) FILTER (WHERE DATE(fu.scheduled_at) = CURRENT_DATE)                     AS today,
+                COUNT(*) FILTER (WHERE fu.scheduled_at IS NOT NULL AND fu.scheduled_at < NOW())  AS missed
+            FROM leads l
+            LEFT JOIN LATERAL (
+                SELECT scheduled_at
+                FROM lead_followups
+                WHERE lead_id = l.id AND status = 'PENDING'
+                ORDER BY scheduled_at ASC
+                LIMIT 1
+            ) fu ON true
+            WHERE l.company_id = $1 AND l.deleted_at IS NULL
+        `;
+        const params = [companyId];
+        if (role === 'user') {
+            query += ` AND l.assigned_to = $2`;
+            params.push(userId);
+        }
+        const result = await pool.query(query, params);
+        const row = result.rows[0];
+        const won          = parseInt(row.won)          || 0;
+        const lost         = parseInt(row.lost)         || 0;
+        const not_response = parseInt(row.not_response) || 0;
+        return {
+            ALL:          parseInt(row.total)        || 0,
+            OPEN:         parseInt(row.open)         || 0,
+            NEGOTIATION:  parseInt(row.negotiation)  || 0,
+            WON:          won,
+            LOST:         lost,
+            NOT_RESPONSE: not_response,
+            CLOSED:       won + lost + not_response,
+            TODAY:        parseInt(row.today)        || 0,
+            MISSED:       parseInt(row.missed)       || 0,
+        };
     }
 
     /**

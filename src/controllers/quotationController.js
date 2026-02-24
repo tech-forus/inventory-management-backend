@@ -44,8 +44,8 @@ const getAllQuotations = async (req, res, next) => {
             limit:    req.query.limit,
             offset:   req.query.offset,
         };
-        const quotations = await QuotationModel.getAll(companyId, filters);
-        res.json({ success: true, data: quotations });
+        const { quotations, total } = await QuotationModel.getAll(companyId, filters);
+        res.json({ success: true, data: { quotations, total } });
     } catch (err) {
         next(err);
     }
@@ -121,7 +121,7 @@ const deleteQuotation = async (req, res, next) => {
 const getLeadQuotations = async (req, res, next) => {
     try {
         const companyId = getCompanyId(req);
-        const quotations = await QuotationModel.getAll(companyId, { lead_id: req.params.id });
+        const { quotations } = await QuotationModel.getAll(companyId, { lead_id: req.params.id });
         res.json({ success: true, data: quotations });
     } catch (err) {
         next(err);

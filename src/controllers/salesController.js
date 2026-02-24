@@ -81,14 +81,26 @@ const getAllLeads = async (req, res, next) => {
         const companyId = getCompanyId(req);
         const { userId, role } = req.user;
         const filters = {
-            status: req.query.status,
-            search: req.query.search,
-            limit: req.query.limit,
-            page: req.query.page,
-            offset: req.query.offset
+            status:         req.query.status,
+            search:         req.query.search,
+            limit:          req.query.limit,
+            offset:         req.query.offset,
+            followup_state: req.query.followup_state,
+            today:          req.query.today,
         };
-        const leads = await LeadModel.getAll(companyId, userId, role, filters);
-        res.json({ success: true, data: leads });
+        const { leads, total } = await LeadModel.getAll(companyId, userId, role, filters);
+        res.json({ success: true, data: { leads, total } });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const getLeadCounts = async (req, res, next) => {
+    try {
+        const companyId = getCompanyId(req);
+        const { userId, role } = req.user;
+        const counts = await LeadModel.getCounts(companyId, userId, role);
+        res.json({ success: true, data: counts });
     } catch (error) {
         next(error);
     }
@@ -227,6 +239,7 @@ module.exports = {
     updateCustomer,
     reassignCustomer,
     getAllLeads,
+    getLeadCounts,
     getLead,
     createLead,
     updateLead,

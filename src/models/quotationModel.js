@@ -266,7 +266,8 @@ class QuotationModel {
             SELECT
                 q.*,
                 u.full_name AS assigned_to_name,
-                (SELECT COUNT(*) FROM quotation_items qi WHERE qi.quotation_id = q.id) AS item_count
+                (SELECT COUNT(*) FROM quotation_items qi WHERE qi.quotation_id = q.id) AS item_count,
+                COUNT(*) OVER() AS total_count
             FROM quotations q
             LEFT JOIN users u ON u.id = q.assigned_to
             WHERE ${where}
@@ -274,7 +275,9 @@ class QuotationModel {
             LIMIT $${idx} OFFSET $${idx + 1}
         `, [...params, limit, offset]);
 
-        return result.rows;
+        const total = parseInt(result.rows[0]?.total_count) || 0;
+        const quotations = result.rows.map(({ total_count, ...q }) => q);
+        return { quotations, total };
     }
 
     /**

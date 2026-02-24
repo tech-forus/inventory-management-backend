@@ -15,6 +15,7 @@ router.put('/customers/:id/reassign', salesController.reassignCustomer);
 
 // --- Leads ---
 router.get('/leads', salesController.getAllLeads);
+router.get('/leads/counts', salesController.getLeadCounts);
 router.get('/leads/:id', salesController.getLead);
 router.post('/leads', salesController.createLead);
 router.put('/leads/:id', salesController.updateLead);
