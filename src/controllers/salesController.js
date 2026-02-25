@@ -81,12 +81,12 @@ const getAllLeads = async (req, res, next) => {
         const companyId = getCompanyId(req);
         const { userId, role } = req.user;
         const filters = {
-            status:         req.query.status,
-            search:         req.query.search,
-            limit:          req.query.limit,
-            offset:         req.query.offset,
+            status: req.query.status,
+            search: req.query.search,
+            limit: req.query.limit,
+            offset: req.query.offset,
             followup_state: req.query.followup_state,
-            today:          req.query.today,
+            today: req.query.today,
         };
         const { leads, total } = await LeadModel.getAll(companyId, userId, role, filters);
         res.json({ success: true, data: { leads, total } });
@@ -137,6 +137,17 @@ const updateLead = async (req, res, next) => {
 
         const lead = await LeadModel.update(id, req.body, companyId);
         if (!lead) throw new NotFoundError('Lead not found');
+
+        // Auto-promote customer: potential → existing when lead is WON
+        if (lead.status === 'WON' && lead.customer_id) {
+            try {
+                await CustomerModel.update(null, lead.customer_id, { customer_stage: 'existing' }, companyId);
+            } catch (promoteErr) {
+                console.error('[updateLead] Failed to auto-promote customer:', promoteErr.message);
+                // Non-blocking: lead update still succeeds even if promotion fails
+            }
+        }
+
         res.json({ success: true, data: lead });
     } catch (error) {
         next(error);

@@ -79,9 +79,10 @@ class CustomerModel {
                 preferred_categories, notes, whatsapp_number, contact_person,
                 date_of_birth, personal_address, credit_period, state,
                 customer_type, source, is_active, department, designation,
-                payment_terms, consignee_address, is_consignee_same_as_billing
+                payment_terms, consignee_address, is_consignee_same_as_billing,
+                customer_stage
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32)
             RETURNING *
         `;
 
@@ -116,7 +117,8 @@ class CustomerModel {
       data.designation || null,                                 // designation
       data.paymentTerms || 'Open Credit',                       // payment_terms
       data.consigneeAddress || null,                            // consignee_address
-      data.isConsigneeSameAsBilling !== undefined ? data.isConsigneeSameAsBilling : false // is_consignee_same_as_billing
+      data.isConsigneeSameAsBilling !== undefined ? data.isConsigneeSameAsBilling : false, // is_consignee_same_as_billing
+      data.customerStage || data.customer_stage || 'potential'  // customer_stage
     ];
 
     const result = await db.query(query, params);
@@ -184,7 +186,9 @@ class CustomerModel {
       billingAddress: 'address_line1',
       consigneeAddress: 'consignee_address',
       isConsigneeSameAsBilling: 'is_consignee_same_as_billing',
-      paymentTerms: 'payment_terms'
+      paymentTerms: 'payment_terms',
+      customerStage: 'customer_stage',
+      customer_stage: 'customer_stage'
     };
 
     const updates = new Map();
