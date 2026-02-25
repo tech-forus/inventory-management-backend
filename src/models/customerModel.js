@@ -233,6 +233,19 @@ class CustomerModel {
     const result = await pool.query(query, [newUserId, id, companyId]);
     return result.rows[0];
   }
+
+  /**
+   * Delete a customer (hard delete)
+   */
+  static async delete(id, companyId) {
+    const query = `
+            DELETE FROM customers
+            WHERE id = $1 AND company_id = $2
+            RETURNING *
+        `;
+    const result = await pool.query(query, [id, companyId]);
+    return result.rows[0] || null;
+  }
 }
 
 module.exports = CustomerModel;
