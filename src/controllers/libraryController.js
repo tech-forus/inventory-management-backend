@@ -1007,7 +1007,11 @@ const getCustomers = async (req, res, next) => {
       customTo,
       notContactedDays,
       notContactedFrom,
-      notContactedTo
+      notContactedTo,
+      assignedTo,
+      state,
+      hasGst,
+      sortBy
     } = req.query;
 
     const filters = {
@@ -1021,7 +1025,11 @@ const getCustomers = async (req, res, next) => {
       customTo,
       notContactedDays,
       notContactedFrom,
-      notContactedTo
+      notContactedTo,
+      assignedTo,
+      state,
+      hasGst,
+      sortBy
     };
 
     const { customers, total } = await CustomerModel.getAll(companyId, userId, role, filters);

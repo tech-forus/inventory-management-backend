@@ -73,16 +73,68 @@ class CustomerModel {
       paramIndex++;
     }
 
+    // NEW FILTERS
+    if (filters.assignedTo) {
+      whereClause += ` AND c.assigned_to = $${paramIndex}`;
+      params.push(filters.assignedTo);
+      paramIndex++;
+    }
+
+    if (filters.state) {
+      whereClause += ` AND c.state = $${paramIndex}`;
+      params.push(filters.state);
+      paramIndex++;
+    }
+
+    if (filters.hasGst !== undefined && filters.hasGst !== null && filters.hasGst !== '') {
+      if (filters.hasGst === 'true' || filters.hasGst === true) {
+        whereClause += ` AND (c.gst_number IS NOT NULL AND c.gst_number != '')`;
+      } else {
+        whereClause += ` AND (c.gst_number IS NULL OR c.gst_number = '')`;
+      }
+    }
+
     const countQuery = `SELECT COUNT(*) FROM customers c ${whereClause}`;
     const totalResult = await pool.query(countQuery, params);
     const total = parseInt(totalResult.rows[0].count);
 
+    // Sorting logic
+    let orderBy = 'c.created_at DESC';
+    if (filters.sortBy) {
+      switch (filters.sortBy) {
+        case 'ALPHABETICAL':
+          orderBy = 'c.company_name ASC';
+          break;
+        case 'CITY':
+          orderBy = 'c.city ASC';
+          break;
+        case 'LAST_INTERACTED':
+          orderBy = 'stats.last_interaction_at DESC NULLS LAST';
+          break;
+        case 'TOTAL_REVENUE':
+          orderBy = 'stats.total_revenue DESC NULLS LAST';
+          break;
+        default:
+          orderBy = 'c.created_at DESC';
+      }
+    }
+
     let query = `
-            SELECT c.*, u.full_name as assigned_to_name
+            SELECT c.*, u.full_name as assigned_to_name,
+                   stats.last_interaction_at,
+                   stats.total_revenue
             FROM customers c
             LEFT JOIN users u ON c.assigned_to = u.id
+            LEFT JOIN (
+              SELECT 
+                customer_id, 
+                MAX(created_at) as last_interaction_at,
+                SUM(CASE WHEN status = 'WON' THEN estimated_value ELSE 0 END) as total_revenue
+              FROM leads
+              GROUP BY customer_id
+            ) stats ON c.id = stats.customer_id
             ${whereClause}
-            ORDER BY c.created_at DESC
+            ORDER BY ${orderBy}
         `;
 
     // Pagination
