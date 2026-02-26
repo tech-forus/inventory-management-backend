@@ -28,6 +28,7 @@ const getAllCustomers = async (req, res, next) => {
             assignedTo: req.query.assignedTo,
             state: req.query.state,
             hasGst: req.query.hasGst,
+            customerStage: req.query.customerStage,
             sortBy: req.query.sortBy
         };
         const { customers, total } = await CustomerModel.getAll(companyId, userId, role, filters);

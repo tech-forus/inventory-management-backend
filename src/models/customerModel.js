@@ -94,6 +94,12 @@ class CustomerModel {
       }
     }
 
+    if (filters.customerStage) {
+      whereClause += ` AND c.customer_stage = $${paramIndex}`;
+      params.push(filters.customerStage.toLowerCase());
+      paramIndex++;
+    }
+
     const countQuery = `SELECT COUNT(*) FROM customers c ${whereClause}`;
     const totalResult = await pool.query(countQuery, params);
     const total = parseInt(totalResult.rows[0].count);
