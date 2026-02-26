@@ -9,6 +9,7 @@ router.use(authenticate);
 
 // --- Customers ---
 router.get('/customers', salesController.getAllCustomers);
+router.get('/customers/counts', salesController.getCustomerCounts);
 router.post('/customers', salesController.createCustomer);
 router.put('/customers/:id', salesController.updateCustomer);
 router.put('/customers/:id/reassign', salesController.reassignCustomer);
@@ -32,12 +33,12 @@ router.post('/leads/:id/activities', salesController.addActivity);
 router.get('/leads/:id/quotations', quotationController.getLeadQuotations);
 
 // --- Quotations ---
-router.get('/quotations',          quotationController.getAllQuotations);
-router.post('/quotations',         quotationController.createQuotation);
-router.get('/quotations/:id',      quotationController.getQuotation);
-router.put('/quotations/:id',      quotationController.updateQuotation);
+router.get('/quotations', quotationController.getAllQuotations);
+router.post('/quotations', quotationController.createQuotation);
+router.get('/quotations/:id', quotationController.getQuotation);
+router.put('/quotations/:id', quotationController.updateQuotation);
 router.patch('/quotations/:id/status', quotationController.updateStatus);
-router.delete('/quotations/:id',   quotationController.deleteQuotation);
+router.delete('/quotations/:id', quotationController.deleteQuotation);
 
 // --- Dashboard ---
 router.get('/dashboard/stats', salesController.getDashboardStats);

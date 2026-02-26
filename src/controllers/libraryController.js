@@ -996,31 +996,54 @@ const getCustomers = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
     const { userId, role } = req.user;
-    const { page = 1, limit = 25, search, status } = req.query;
-    const offset = (page - 1) * limit;
+    const {
+      search,
+      status,
+      limit = 25,
+      offset = 0,
+      stage,
+      newlyAddedDays,
+      customFrom,
+      customTo,
+      notContactedDays,
+      notContactedFrom,
+      notContactedTo
+    } = req.query;
 
-    const customers = await measure('getCustomers', () =>
-      CustomerModel.getAll(companyId, userId, role, {
-        limit: parseInt(limit),
-        offset: parseInt(offset),
-        search,
-        status
-      })
-    );
+    const filters = {
+      search,
+      status,
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+      stage,
+      newlyAddedDays,
+      customFrom,
+      customTo,
+      notContactedDays,
+      notContactedFrom,
+      notContactedTo
+    };
 
-    const transformedData = transformArray(customers, transformCustomer);
-    const totalCount = customers.length > 0 ? parseInt(customers[0].total_count || 0) : 0;
+    const { customers, total } = await CustomerModel.getAll(companyId, userId, role, filters);
 
     res.json({
       success: true,
-      data: transformedData,
-      pagination: {
-        total: totalCount,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        totalPages: Math.ceil(totalCount / limit)
+      data: {
+        customers: transformArray(customers, transformCustomer),
+        total
       }
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getCustomerCounts = async (req, res, next) => {
+  try {
+    const companyId = getCompanyId(req);
+    const { userId, role } = req.user;
+    const counts = await CustomerModel.getCounts(companyId, userId, role);
+    res.json({ success: true, data: counts });
   } catch (error) {
     next(error);
   }
@@ -2266,6 +2289,7 @@ module.exports = {
   deleteTeam,
   // Customers
   getCustomers,
+  getCustomerCounts,
   createCustomer,
   uploadCustomers,
   updateCustomer,

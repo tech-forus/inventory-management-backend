@@ -13,14 +13,32 @@ const { NotFoundError, ValidationError } = require('../middlewares/errorHandler'
 const getAllCustomers = async (req, res, next) => {
     try {
         const companyId = getCompanyId(req);
-        const { userId, role } = req.user; // Assuming req.user populated by auth middleware
+        const { userId, role } = req.user;
         const filters = {
             search: req.query.search,
             limit: req.query.limit,
-            offset: req.query.offset
+            offset: req.query.offset,
+            stage: req.query.stage,
+            newlyAddedDays: req.query.newlyAddedDays,
+            customFrom: req.query.customFrom,
+            customTo: req.query.customTo,
+            notContactedDays: req.query.notContactedDays,
+            notContactedFrom: req.query.notContactedFrom,
+            notContactedTo: req.query.notContactedTo
         };
-        const customers = await CustomerModel.getAll(companyId, userId, role, filters);
-        res.json({ success: true, data: customers });
+        const { customers, total } = await CustomerModel.getAll(companyId, userId, role, filters);
+        res.json({ success: true, data: { customers, total } });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const getCustomerCounts = async (req, res, next) => {
+    try {
+        const companyId = getCompanyId(req);
+        const { userId, role } = req.user;
+        const counts = await CustomerModel.getCounts(companyId, userId, role);
+        res.json({ success: true, data: counts });
     } catch (error) {
         next(error);
     }
@@ -246,6 +264,7 @@ const getDashboardStats = async (req, res, next) => {
 
 module.exports = {
     getAllCustomers,
+    getCustomerCounts,
     createCustomer,
     updateCustomer,
     reassignCustomer,

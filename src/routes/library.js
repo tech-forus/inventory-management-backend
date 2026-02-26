@@ -19,14 +19,14 @@ const upload = multer({
       'application/x-zip-compressed', // Some browsers send this for .xlsx
       'text/csv',
     ];
-    
+
     // Check file extension as fallback
     const validExtensions = ['.xlsx', '.xls', '.csv'];
     const fileExtension = file.originalname.toLowerCase().substring(file.originalname.lastIndexOf('.'));
-    
+
     const isValidMimeType = validMimeTypes.includes(file.mimetype);
     const isValidExtension = validExtensions.includes(fileExtension);
-    
+
     if (isValidMimeType || isValidExtension) {
       cb(null, true);
     } else {
@@ -167,6 +167,7 @@ router.delete('/teams/:id', libraryController.deleteTeam);
  * CUSTOMERS ROUTES
  * All routes delegate to libraryController
  */
+router.get('/customers/counts', libraryController.getCustomerCounts);
 router.get('/customers', libraryController.getCustomers);
 router.post('/customers', libraryController.createCustomer);
 router.post('/customers/upload', upload.single('file'), libraryController.uploadCustomers);

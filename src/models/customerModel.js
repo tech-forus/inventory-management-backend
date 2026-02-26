@@ -5,29 +5,62 @@ class CustomerModel {
    * Get all customers with filters and role-based access control
    */
   static async getAll(companyId, userId, role, filters = {}) {
-    let query = `
-            SELECT c.*, u.full_name as assigned_to_name
-            FROM customers c
-            LEFT JOIN users u ON c.assigned_to = u.id
-            WHERE c.company_id = $1
-        `;
+    let whereClause = `WHERE c.company_id = $1`;
     const params = [companyId];
     let paramIndex = 2;
 
     // Role-based filtering
     if (role === 'user') {
-      query += ` AND c.assigned_to = $${paramIndex}`;
+      whereClause += ` AND c.assigned_to = $${paramIndex}`;
       params.push(userId);
       paramIndex++;
     }
 
+    // Stage filter
+    if (filters.stage && filters.stage !== 'ALL' && filters.stage !== 'NEWLY_ADDED' && filters.stage !== 'NOT_CONTACTED') {
+      whereClause += ` AND c.customer_stage = $${paramIndex}`;
+      params.push(filters.stage.toLowerCase());
+      paramIndex++;
+    }
+
+    // Newly Added filter
+    if (filters.newlyAddedDays) {
+      whereClause += ` AND c.created_at > NOW() - (INTERVAL '1 day' * $${paramIndex})`;
+      params.push(parseInt(filters.newlyAddedDays));
+      paramIndex++;
+    } else if (filters.customFrom && filters.customTo) {
+      whereClause += ` AND c.created_at BETWEEN $${paramIndex} AND $${paramIndex + 1}`;
+      params.push(filters.customFrom, filters.customTo);
+      paramIndex += 2;
+    }
+
+    // Not Contacted filter (No leads in last X days)
+    if (filters.notContactedDays) {
+      whereClause += ` AND NOT EXISTS (
+        SELECT 1 FROM leads l 
+        WHERE l.customer_id = c.id 
+        AND l.created_at > NOW() - (INTERVAL '1 day' * $${paramIndex})
+      )`;
+      params.push(parseInt(filters.notContactedDays));
+      paramIndex++;
+    } else if (filters.notContactedFrom && filters.notContactedTo) {
+      whereClause += ` AND NOT EXISTS (
+        SELECT 1 FROM leads l 
+        WHERE l.customer_id = c.id 
+        AND l.created_at BETWEEN $${paramIndex} AND $${paramIndex + 1}
+      )`;
+      params.push(filters.notContactedFrom, filters.notContactedTo);
+      paramIndex += 2;
+    }
+
     // Search filter
     if (filters.search) {
-      query += ` AND (
+      whereClause += ` AND (
                 c.customer_name ILIKE $${paramIndex} OR 
                 c.phone ILIKE $${paramIndex} OR 
                 c.email ILIKE $${paramIndex} OR 
-                c.company_name ILIKE $${paramIndex}
+                c.company_name ILIKE $${paramIndex} OR
+                c.gst_number ILIKE $${paramIndex}
             )`;
       params.push(`%${filters.search}%`);
       paramIndex++;
@@ -35,30 +68,75 @@ class CustomerModel {
 
     // Status filter
     if (filters.status) {
-      query += ` AND c.is_active = $${paramIndex}`;
+      whereClause += ` AND c.is_active = $${paramIndex}`;
       params.push(filters.status === 'active');
       paramIndex++;
     }
 
-    // Count query for pagination meta
-    const countQuery = `SELECT COUNT(*) OVER() as total_count FROM customers c WHERE c.company_id = $1 ${query.split('WHERE c.company_id = $1')[1].split('ORDER BY')[0]}`;
+    const countQuery = `SELECT COUNT(*) FROM customers c ${whereClause}`;
+    const totalResult = await pool.query(countQuery, params);
+    const total = parseInt(totalResult.rows[0].count);
 
-    query += ` ORDER BY c.created_at DESC`;
+    let query = `
+            SELECT c.*, u.full_name as assigned_to_name
+            FROM customers c
+            LEFT JOIN users u ON c.assigned_to = u.id
+            ${whereClause}
+            ORDER BY c.created_at DESC
+        `;
 
     // Pagination
     if (filters.limit) {
       query += ` LIMIT $${paramIndex}`;
-      params.push(filters.limit);
+      params.push(parseInt(filters.limit));
       paramIndex++;
     }
     if (filters.offset) {
       query += ` OFFSET $${paramIndex}`;
-      params.push(filters.offset);
+      params.push(parseInt(filters.offset));
       paramIndex++;
     }
 
     const result = await pool.query(query, params);
-    return result.rows;
+    return { customers: result.rows, total };
+  }
+
+  /**
+   * Get counts for different customer buckets
+   */
+  static async getCounts(companyId, userId, role) {
+    let whereClause = `WHERE company_id = $1`;
+    const params = [companyId];
+
+    if (role === 'user') {
+      whereClause += ` AND assigned_to = $2`;
+      params.push(userId);
+    }
+
+    const query = `
+      SELECT 
+        COUNT(*) as "ALL",
+        COUNT(*) FILTER (WHERE customer_stage = 'potential') as "POTENTIAL",
+        COUNT(*) FILTER (WHERE customer_stage = 'existing') as "EXISTING",
+        COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '30 days') as "NEWLY_ADDED",
+        COUNT(*) FILTER (WHERE NOT EXISTS (
+          SELECT 1 FROM leads l 
+          WHERE l.customer_id = customers.id 
+          AND l.created_at > NOW() - INTERVAL '30 days'
+        )) as "NOT_CONTACTED"
+      FROM customers
+      ${whereClause}
+    `;
+
+    const result = await pool.query(query, params);
+    const row = result.rows[0];
+    return {
+      ALL: parseInt(row.ALL || 0),
+      POTENTIAL: parseInt(row.POTENTIAL || 0),
+      EXISTING: parseInt(row.EXISTING || 0),
+      NEWLY_ADDED: parseInt(row.NEWLY_ADDED || 0),
+      NOT_CONTACTED: parseInt(row.NOT_CONTACTED || 0)
+    };
   }
 
   /**
