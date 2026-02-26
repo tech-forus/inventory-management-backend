@@ -85,9 +85,36 @@ class LeadModel {
                 l.customer_phone ILIKE $${paramIndex} OR
                 l.notes ILIKE $${paramIndex} OR
                 c.company_name ILIKE $${paramIndex} OR
-                c.customer_name ILIKE $${paramIndex}
+                c.customer_name ILIKE $${paramIndex} OR
+                c.city ILIKE $${paramIndex} OR
+                c.state ILIKE $${paramIndex} OR
+                EXISTS (SELECT 1 FROM lead_items li WHERE li.lead_id = l.id AND (li.item_name ILIKE $${paramIndex} OR li.sku_code ILIKE $${paramIndex}))
             )`;
             params.push(`%${filters.search}%`);
+            paramIndex++;
+        }
+
+        if (filters.priority) {
+            query += ` AND l.priority = $${paramIndex}`;
+            params.push(filters.priority);
+            paramIndex++;
+        }
+
+        if (filters.source) {
+            query += ` AND l.source = $${paramIndex}`;
+            params.push(filters.source);
+            paramIndex++;
+        }
+
+        if (filters.min_value) {
+            query += ` AND l.estimated_value >= $${paramIndex}`;
+            params.push(filters.min_value);
+            paramIndex++;
+        }
+
+        if (filters.max_value) {
+            query += ` AND l.estimated_value <= $${paramIndex}`;
+            params.push(filters.max_value);
             paramIndex++;
         }
 
@@ -105,7 +132,22 @@ class LeadModel {
             query += ` AND DATE(fu.scheduled_at) = CURRENT_DATE`;
         }
 
-        query += ` ORDER BY l.created_at DESC`;
+        // --- DYNAMIC SORTING ---
+        const allowedSortFields = {
+            created: 'l.created_at',
+            value: 'l.estimated_value',
+            activity: 'la.logged_at',
+            followup: 'fu.scheduled_at',
+            priority: 'CASE l.priority WHEN \'high\' THEN 1 WHEN \'medium\' THEN 2 ELSE 3 END'
+        };
+
+        const sortField = allowedSortFields[filters.sortBy] || 'l.created_at';
+        const sortOrder = filters.sortOrder === 'asc' ? 'ASC' : 'DESC';
+
+        // Ensure nulls come last for dates
+        const nullsOrder = (filters.sortBy === 'followup' || filters.sortBy === 'activity') ? ' NULLS LAST' : '';
+
+        query += ` ORDER BY ${sortField} ${sortOrder}${nullsOrder}`;
 
         const limit = Math.min(parseInt(filters.limit) || 50, 200);
         const offset = parseInt(filters.offset) || 0;
@@ -149,19 +191,19 @@ class LeadModel {
         }
         const result = await pool.query(query, params);
         const row = result.rows[0];
-        const won          = parseInt(row.won)          || 0;
-        const lost         = parseInt(row.lost)         || 0;
+        const won = parseInt(row.won) || 0;
+        const lost = parseInt(row.lost) || 0;
         const not_response = parseInt(row.not_response) || 0;
         return {
-            ALL:          parseInt(row.total)        || 0,
-            OPEN:         parseInt(row.open)         || 0,
-            NEGOTIATION:  parseInt(row.negotiation)  || 0,
-            WON:          won,
-            LOST:         lost,
+            ALL: parseInt(row.total) || 0,
+            OPEN: parseInt(row.open) || 0,
+            NEGOTIATION: parseInt(row.negotiation) || 0,
+            WON: won,
+            LOST: lost,
             NOT_RESPONSE: not_response,
-            CLOSED:       won + lost + not_response,
-            TODAY:        parseInt(row.today)        || 0,
-            MISSED:       parseInt(row.missed)       || 0,
+            CLOSED: won + lost + not_response,
+            TODAY: parseInt(row.today) || 0,
+            MISSED: parseInt(row.missed) || 0,
         };
     }
 
