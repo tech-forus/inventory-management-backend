@@ -60,7 +60,8 @@ class CustomerModel {
                 c.phone ILIKE $${paramIndex} OR 
                 c.email ILIKE $${paramIndex} OR 
                 c.company_name ILIKE $${paramIndex} OR
-                c.gst_number ILIKE $${paramIndex}
+                c.gst_number ILIKE $${paramIndex} OR
+                c.customer_code ILIKE $${paramIndex}
             )`;
       params.push(`%${filters.search}%`);
       paramIndex++;
@@ -192,6 +193,18 @@ class CustomerModel {
   }
 
   /**
+   * Generate the next customer code (CUST-001, POT-001, etc.)
+   */
+  static async generateCustomerCode(db, companyId, stage) {
+    const prefix = stage === 'existing' ? 'CUST' : 'POT';
+    const result = await db.query(
+      `SELECT generate_customer_code($1, $2) as code`,
+      [companyId, prefix]
+    );
+    return result.rows[0].code;
+  }
+
+  /**
    * Create a new customer
    */
   static async create(client, data, companyId, assignedTo) {
@@ -200,6 +213,9 @@ class CustomerModel {
     // DB Columns from migration 086 + 031:
     // customer_name, phone, email, company_name, city, postal_code, address_line1 (address), gst_number (gstin)
     // assigned_to, birthday, anniversary, interests, tags, loyalty_tier, preferred_categories, notes
+
+    const stage = data.customerStage || data.customer_stage || 'potential';
+    const customerCode = await CustomerModel.generateCustomerCode(db, companyId, stage);
 
     const query = `
             INSERT INTO customers (
@@ -210,9 +226,9 @@ class CustomerModel {
                 date_of_birth, personal_address, credit_period, state,
                 customer_type, source, is_active, department, designation,
                 payment_terms, consignee_address, is_consignee_same_as_billing,
-                customer_stage
+                customer_stage, customer_code
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
             RETURNING *
         `;
 
@@ -248,7 +264,8 @@ class CustomerModel {
       data.paymentTerms || 'Open Credit',                       // payment_terms
       data.consigneeAddress || null,                            // consignee_address
       data.isConsigneeSameAsBilling !== undefined ? data.isConsigneeSameAsBilling : false, // is_consignee_same_as_billing
-      data.customerStage || data.customer_stage || 'potential'  // customer_stage
+      stage,                                                    // customer_stage
+      customerCode                                              // customer_code
     ];
 
     const result = await db.query(query, params);
@@ -318,7 +335,9 @@ class CustomerModel {
       isConsigneeSameAsBilling: 'is_consignee_same_as_billing',
       paymentTerms: 'payment_terms',
       customerStage: 'customer_stage',
-      customer_stage: 'customer_stage'
+      customer_stage: 'customer_stage',
+      customerCode: 'customer_code',
+      customer_code: 'customer_code'
     };
 
     const updates = new Map();
@@ -342,6 +361,24 @@ class CustomerModel {
     }
 
     if (sets.length === 0) return null;
+
+    // If customer_stage is being changed to 'existing', auto-generate a new CUST code
+    const newStage = updates.get('customer_stage');
+    if (newStage === 'existing') {
+      // Check if customer currently has a POT code (meaning they're being promoted)
+      const currentCustomer = await db.query(
+        'SELECT customer_code, customer_stage FROM customers WHERE id = $1 AND company_id = $2',
+        [id, companyId]
+      );
+      const current = currentCustomer.rows[0];
+      if (current && current.customer_stage === 'potential' && current.customer_code && current.customer_code.startsWith('POT-')) {
+        // Generate a new CUST code
+        const newCode = await CustomerModel.generateCustomerCode(db, companyId, 'existing');
+        sets.push(`customer_code = $${paramIndex}`);
+        params.push(newCode);
+        paramIndex++;
+      }
+    }
 
     const query = `
             UPDATE customers

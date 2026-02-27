@@ -203,6 +203,10 @@ const transformCustomer = (customer) => {
     updatedAt: customer.updated_at,
     createdBy: customer.created_by,
     updatedBy: customer.updated_by,
+    customerStage: customer.customer_stage,
+    customer_stage: customer.customer_stage,
+    customerCode: customer.customer_code,
+    customer_code: customer.customer_code,
   };
 };
 
