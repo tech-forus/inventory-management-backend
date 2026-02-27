@@ -371,7 +371,7 @@ class CustomerModel {
         [id, companyId]
       );
       const current = currentCustomer.rows[0];
-      if (current && current.customer_stage === 'potential' && current.customer_code && (current.customer_code.startsWith('POT-') || current.customer_code.includes('/PT'))) {
+      if (current && current.customer_stage === 'potential' && current.customer_code && (current.customer_code.startsWith('POT-') || current.customer_code.includes('/PT') || current.customer_code.includes('/PID'))) {
         // Generate a new CUST code
         const newCode = await CustomerModel.generateCustomerCode(db, companyId, 'existing');
         sets.push(`customer_code = $${paramIndex}`);
