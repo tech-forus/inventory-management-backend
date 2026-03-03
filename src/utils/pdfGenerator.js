@@ -62,23 +62,23 @@ async function generateQuotationPDF(data) {
         // --- Items Table Header ---
         const tableTop = y;
         doc.fillColor(primaryColor).rect(40, tableTop, 515, 20).fill();
-        doc.fillColor('#ffffff').fontSize(8).font('Helvetica-Bold');
+        doc.fillColor('#ffffff').fontSize(7.5).font('Helvetica-Bold');
 
-        doc.text('#', 45, tableTop + 6, { width: 20 });
-        doc.text('Item Description', 70, tableTop + 6, { width: 110 });
-        doc.text('Brand', 185, tableTop + 6, { width: 50 });
+        doc.text('#', 45, tableTop + 6, { width: 15 });
+        doc.text('Item Description', 65, tableTop + 6, { width: 110 });
+        doc.text('Brand', 180, tableTop + 6, { width: 50 });
         doc.text('HSN', 235, tableTop + 6, { width: 40, align: 'center' });
-        doc.text('Qty', 275, tableTop + 6, { width: 30, align: 'center' });
-        doc.text('Unit', 310, tableTop + 6, { width: 35, align: 'center' });
-        doc.text('Rate', 350, tableTop + 6, { width: 50, align: 'right' });
-        doc.text('Disc%', 405, tableTop + 6, { width: 35, align: 'center' });
-        doc.text('GST%', 445, tableTop + 6, { width: 35, align: 'center' });
-        doc.text('Amount', 485, tableTop + 6, { width: 65, align: 'right' });
+        doc.text('Qty', 275, tableTop + 6, { width: 45, align: 'center' });
+        doc.text('Unit', 325, tableTop + 6, { width: 35, align: 'center' });
+        doc.text('Rate', 365, tableTop + 6, { width: 50, align: 'right' });
+        doc.text('Disc%', 420, tableTop + 6, { width: 35, align: 'center' });
+        doc.text('GST%', 460, tableTop + 6, { width: 35, align: 'center' });
+        doc.text('Amount', 500, tableTop + 6, { width: 55, align: 'right' });
 
         y = tableTop + 20;
 
         // --- Items Table Rows ---
-        doc.fillColor(textColor).font('Helvetica').fontSize(8);
+        doc.fillColor(textColor).font('Helvetica').fontSize(7.5);
         const items = data.items || [];
 
         items.forEach((item, i) => {
@@ -94,20 +94,23 @@ async function generateQuotationPDF(data) {
 
             doc.fillColor(textColor);
             doc.text(i + 1, 45, y + 6);
-            doc.text(item.item_name || '—', 70, y + 6, { width: 110, height: rowHeight, ellipsis: true });
-            doc.text(item.brand || '—', 185, y + 6, { width: 50, height: rowHeight, ellipsis: true });
+            doc.text(item.item_name || '—', 65, y + 6, { width: 110, height: rowHeight, ellipsis: true });
+            doc.text(item.brand || '—', 180, y + 6, { width: 50, height: rowHeight, ellipsis: true });
             doc.text(item.hsn || '—', 235, y + 6, { width: 40, align: 'center' });
-            doc.text(item.qty || 0, 275, y + 6, { width: 30, align: 'center' });
-            doc.text(item.unit || '—', 310, y + 6, { width: 35, align: 'center' });
-            doc.text((Number(item.rate) || 0).toLocaleString('en-IN'), 350, y + 6, { width: 50, align: 'right' });
 
-            // Show discount/gst even if 0, but as "—" if truly null/undefined
+            // Format Qty to avoid decimals if they are .000
+            const qtyStr = Number(item.qty || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+            doc.text(qtyStr, 275, y + 6, { width: 45, align: 'center' });
+
+            doc.text(item.unit || '—', 325, y + 6, { width: 35, align: 'center' });
+            doc.text(Number(item.rate || 0).toLocaleString('en-IN'), 365, y + 6, { width: 50, align: 'right' });
+
             const dVal = (item.discount_pct !== undefined && item.discount_pct !== null) ? `${item.discount_pct}%` : '—';
             const gVal = (item.gst_pct !== undefined && item.gst_pct !== null) ? `${item.gst_pct}%` : '—';
 
-            doc.text(dVal, 405, y + 6, { width: 35, align: 'center' });
-            doc.text(gVal, 445, y + 6, { width: 35, align: 'center' });
-            doc.text((Number(item.amount) || 0).toLocaleString('en-IN'), 485, y + 6, { width: 65, align: 'right' });
+            doc.text(dVal, 420, y + 6, { width: 35, align: 'center' });
+            doc.text(gVal, 460, y + 6, { width: 35, align: 'center' });
+            doc.text(Number(item.amount || 0).toLocaleString('en-IN'), 500, y + 6, { width: 55, align: 'right' });
 
             doc.strokeColor(borderColor).lineWidth(0.5).moveTo(40, y + rowHeight).lineTo(555, y + rowHeight).stroke();
             y += rowHeight;
@@ -116,8 +119,8 @@ async function generateQuotationPDF(data) {
         y += 15;
 
         // --- Totals Section ---
-        const totalsX = 350;
-        const fmt = (v) => (v || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+        const totalsX = 330;
+        const fmt = (v) => Math.round(v || 0).toLocaleString('en-IN');
 
         const rows = [
             ['Subtotal', fmt(data.subtotal)],
@@ -127,12 +130,12 @@ async function generateQuotationPDF(data) {
         ];
 
         rows.forEach(([label, val]) => {
-            doc.fillColor(lightTextColor).fontSize(9).font('Helvetica').text(label, totalsX, y);
-            doc.fillColor(textColor).font('Helvetica-Bold').text(`₹${val}`, 510, y, { align: 'right', width: 45 });
+            doc.fillColor(lightTextColor).fontSize(9).font('Helvetica').text(label, totalsX, y, { width: 140 });
+            doc.fillColor(textColor).font('Helvetica-Bold').text(`₹${val}`, 470, y, { align: 'right', width: 85 });
             y += 18;
         });
 
-        doc.fillColor(primaryColor).rect(totalsX - 10, y - 5, 215, 25).fill();
+        doc.fillColor(primaryColor).rect(totalsX - 10, y - 5, 235, 25).fill();
         doc.fillColor('#ffffff').fontSize(11).font('Helvetica-Bold').text('Grand Total', totalsX, y + 3);
         doc.fontSize(13).text(`₹${fmt(data.grand_total)}`, 450, y + 2, { align: 'right', width: 105 });
 
