@@ -34,6 +34,8 @@ class LeadModel {
                    la.type  AS last_activity_type,
                    la.note  AS last_activity_note,
                    la.logged_at AS last_activity_at,
+                   l.lead_type,
+                   l.closure_time,
                    (SELECT COUNT(*) FROM lead_items li WHERE li.lead_id = l.id) as item_count,
                    (SELECT json_agg(json_build_object('id', li.id, 'item_name', li.item_name, 'quantity', li.quantity, 'estimated_value', li.estimated_value))
                     FROM lead_items li WHERE li.lead_id = l.id) as items,
@@ -220,9 +222,10 @@ class LeadModel {
                 INSERT INTO leads (
                     company_id, assigned_to, customer_id, 
                     customer_name, customer_phone, type, status, 
-                    source, priority, estimated_value, notes
+                    source, priority, estimated_value, notes,
+                    lead_type, closure_time
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                 RETURNING *
             `;
             const leadParams = [
@@ -236,7 +239,9 @@ class LeadModel {
                 data.source || 'walk_in',
                 data.priority || 'medium',
                 data.estimated_value || 0,
-                data.notes
+                data.notes,
+                data.lead_type || null,
+                data.closure_time || null
             ];
 
             const leadResult = await client.query(leadQuery, leadParams);
@@ -351,7 +356,7 @@ class LeadModel {
         const params = [id, companyId];
         let paramIndex = 3;
 
-        const allowedFields = ['status', 'priority', 'notes', 'estimated_value', 'closed_reason', 'closed_at'];
+        const allowedFields = ['status', 'priority', 'notes', 'estimated_value', 'closed_reason', 'closed_at', 'lead_type', 'closure_time'];
 
         for (const key of Object.keys(data)) {
             if (allowedFields.includes(key)) {
