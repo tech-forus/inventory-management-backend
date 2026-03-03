@@ -249,4 +249,13 @@ module.exports = {
     deleteQuotation,
     getLeadQuotations,
     sendQuotationEmail,
+    getQuotationCounts: async (req, res) => {
+        try {
+            const counts = await QuotationModel.getCounts(req.user.company_id);
+            res.json(counts);
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ error: 'Failed to get quotation counts' });
+        }
+    }
 };

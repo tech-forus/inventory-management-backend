@@ -34,6 +34,7 @@ router.get('/leads/:id/quotations', quotationController.getLeadQuotations);
 
 // --- Quotations ---
 router.get('/quotations', quotationController.getAllQuotations);
+router.get('/quotations/counts', quotationController.getQuotationCounts);
 router.post('/quotations', quotationController.createQuotation);
 router.get('/quotations/:id', quotationController.getQuotation);
 router.put('/quotations/:id', quotationController.updateQuotation);

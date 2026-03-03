@@ -333,6 +333,22 @@ class QuotationModel {
         `, [id, companyId]);
         return result.rows[0] || null;
     }
+
+    /**
+     * Get counts by status.
+     */
+    static async getCounts(companyId) {
+        const result = await pool.query(`
+            SELECT 
+                COUNT(*) as total,
+                COUNT(*) FILTER (WHERE status = 'DRAFT') as draft,
+                COUNT(*) FILTER (WHERE status = 'SENT') as sent,
+                COUNT(*) FILTER (WHERE status = 'ACCEPTED') as accepted
+            FROM quotations
+            WHERE company_id = $1
+        `, [companyId]);
+        return result.rows[0];
+    }
 }
 
 module.exports = QuotationModel;
