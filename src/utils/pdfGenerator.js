@@ -65,14 +65,15 @@ async function generateQuotationPDF(data) {
         doc.fillColor('#ffffff').fontSize(8).font('Helvetica-Bold');
 
         doc.text('#', 45, tableTop + 6, { width: 20 });
-        doc.text('Item Description', 70, tableTop + 6, { width: 140 });
-        doc.text('HSN', 215, tableTop + 6, { width: 40, align: 'center' });
-        doc.text('Qty', 260, tableTop + 6, { width: 30, align: 'center' });
-        doc.text('Unit', 295, tableTop + 6, { width: 35, align: 'center' });
-        doc.text('Rate', 335, tableTop + 6, { width: 50, align: 'right' });
-        doc.text('Disc%', 390, tableTop + 6, { width: 35, align: 'center' });
-        doc.text('GST%', 430, tableTop + 6, { width: 35, align: 'center' });
-        doc.text('Amount', 470, tableTop + 6, { width: 80, align: 'right' });
+        doc.text('Item Description', 70, tableTop + 6, { width: 110 });
+        doc.text('Brand', 185, tableTop + 6, { width: 50 });
+        doc.text('HSN', 235, tableTop + 6, { width: 40, align: 'center' });
+        doc.text('Qty', 275, tableTop + 6, { width: 30, align: 'center' });
+        doc.text('Unit', 310, tableTop + 6, { width: 35, align: 'center' });
+        doc.text('Rate', 350, tableTop + 6, { width: 50, align: 'right' });
+        doc.text('Disc%', 405, tableTop + 6, { width: 35, align: 'center' });
+        doc.text('GST%', 445, tableTop + 6, { width: 35, align: 'center' });
+        doc.text('Amount', 485, tableTop + 6, { width: 65, align: 'right' });
 
         y = tableTop + 20;
 
@@ -93,14 +94,20 @@ async function generateQuotationPDF(data) {
 
             doc.fillColor(textColor);
             doc.text(i + 1, 45, y + 6);
-            doc.text(item.item_name || '—', 70, y + 6, { width: 140, height: rowHeight, ellipsis: true });
-            doc.text(item.hsn || '—', 215, y + 6, { width: 40, align: 'center' });
-            doc.text(item.qty || 0, 260, y + 6, { width: 30, align: 'center' });
-            doc.text(item.unit || '—', 295, y + 6, { width: 35, align: 'center' });
-            doc.text((item.rate || 0).toLocaleString('en-IN'), 335, y + 6, { width: 50, align: 'right' });
-            doc.text(item.discount_pct ? `${item.discount_pct}%` : '—', 390, y + 6, { width: 35, align: 'center' });
-            doc.text(item.gst_pct ? `${item.gst_pct}%` : '—', 430, y + 6, { width: 35, align: 'center' });
-            doc.text((item.amount || 0).toLocaleString('en-IN'), 470, y + 6, { width: 80, align: 'right' });
+            doc.text(item.item_name || '—', 70, y + 6, { width: 110, height: rowHeight, ellipsis: true });
+            doc.text(item.brand || '—', 185, y + 6, { width: 50, height: rowHeight, ellipsis: true });
+            doc.text(item.hsn || '—', 235, y + 6, { width: 40, align: 'center' });
+            doc.text(item.qty || 0, 275, y + 6, { width: 30, align: 'center' });
+            doc.text(item.unit || '—', 310, y + 6, { width: 35, align: 'center' });
+            doc.text((Number(item.rate) || 0).toLocaleString('en-IN'), 350, y + 6, { width: 50, align: 'right' });
+
+            // Show discount/gst even if 0, but as "—" if truly null/undefined
+            const dVal = (item.discount_pct !== undefined && item.discount_pct !== null) ? `${item.discount_pct}%` : '—';
+            const gVal = (item.gst_pct !== undefined && item.gst_pct !== null) ? `${item.gst_pct}%` : '—';
+
+            doc.text(dVal, 405, y + 6, { width: 35, align: 'center' });
+            doc.text(gVal, 445, y + 6, { width: 35, align: 'center' });
+            doc.text((Number(item.amount) || 0).toLocaleString('en-IN'), 485, y + 6, { width: 65, align: 'right' });
 
             doc.strokeColor(borderColor).lineWidth(0.5).moveTo(40, y + rowHeight).lineTo(555, y + rowHeight).stroke();
             y += rowHeight;

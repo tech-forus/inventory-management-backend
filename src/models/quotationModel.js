@@ -119,12 +119,13 @@ class QuotationModel {
                 const it = items[i];
                 await client.query(`
                     INSERT INTO quotation_items
-                        (quotation_id, sort_order, sku_code, item_name, hsn, qty, unit, rate, discount_pct, gst_pct, amount)
-                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+                        (quotation_id, sort_order, sku_code, item_name, brand, hsn, qty, unit, rate, discount_pct, gst_pct, amount)
+                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
                 `, [
                     quotation.id, i,
                     it.sku_code || null,
                     it.item_name || null,
+                    it.brand || null,
                     it.hsn || null,
                     it.qty || 0,
                     it.unit || 'Pcs',
@@ -210,12 +211,13 @@ class QuotationModel {
                 const it = items[i];
                 await client.query(`
                     INSERT INTO quotation_items
-                        (quotation_id, sort_order, sku_code, item_name, hsn, qty, unit, rate, discount_pct, gst_pct, amount)
-                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+                        (quotation_id, sort_order, sku_code, item_name, brand, hsn, qty, unit, rate, discount_pct, gst_pct, amount)
+                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
                 `, [
                     id, i,
                     it.sku_code || null,
                     it.item_name || null,
+                    it.brand || null,
                     it.hsn || null,
                     it.qty || 0,
                     it.unit || 'Pcs',

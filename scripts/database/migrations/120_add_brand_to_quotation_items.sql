@@ -1,0 +1,5 @@
+BEGIN;
+
+ALTER TABLE quotation_items ADD COLUMN brand VARCHAR(100);
+
+COMMIT;
