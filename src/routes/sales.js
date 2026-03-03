@@ -39,6 +39,7 @@ router.get('/quotations/:id', quotationController.getQuotation);
 router.put('/quotations/:id', quotationController.updateQuotation);
 router.patch('/quotations/:id/status', quotationController.updateStatus);
 router.delete('/quotations/:id', quotationController.deleteQuotation);
+router.post('/quotations/:id/send-email', quotationController.sendQuotationEmail);
 
 // --- Dashboard ---
 router.get('/dashboard/stats', salesController.getDashboardStats);

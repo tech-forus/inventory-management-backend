@@ -6,7 +6,7 @@ let resend = null;
 
 const initializeEmailService = () => {
   const apiKey = process.env.RESEND_API_KEY;
-  
+
   if (apiKey) {
     resend = new Resend(apiKey);
     logger.info({
@@ -34,7 +34,7 @@ setTimeout(() => {
 /**
  * Send email using Resend HTTP API
  */
-const sendEmail = async ({ to, subject, html, text, replyTo }) => {
+const sendEmail = async ({ to, subject, html, text, replyTo, attachments }) => {
   if (!resend) {
     logger.error({
       message: 'Email service not configured. Cannot send email.'
@@ -50,6 +50,7 @@ const sendEmail = async ({ to, subject, html, text, replyTo }) => {
       html,
       text,
       ...(replyTo && { reply_to: replyTo }),
+      ...(attachments && { attachments }),
     });
 
     if (error) {
@@ -68,7 +69,7 @@ const sendEmail = async ({ to, subject, html, text, replyTo }) => {
       to,
       subject
     }, 'Email sent successfully');
-    
+
     return data;
   } catch (error) {
     logger.error({
@@ -97,17 +98,17 @@ const sendInvitationEmail = async ({ email, firstName, lastName, token, companyI
   // Determine frontend URL based on environment
   // In development, use localhost:3000, in production use www.forusbiz.ai
   const isDevelopment = process.env.NODE_ENV === 'development' || process.env.NODE_ENV !== 'production';
-  let frontendUrl = process.env.FRONTEND_URL || 
-    (isDevelopment 
-      ? 'http://localhost:3000' 
+  let frontendUrl = process.env.FRONTEND_URL ||
+    (isDevelopment
+      ? 'http://localhost:3000'
       : 'https://www.forusbiz.ai');
-  
+
   // Ensure we always use forusbiz.ai instead of forusbiz.com
   if (frontendUrl && frontendUrl.includes('forusbiz.com')) {
     frontendUrl = frontendUrl.replace('forusbiz.com', 'forusbiz.ai');
     logger.info({ frontendUrl }, 'Frontend URL updated from forusbiz.com to forusbiz.ai');
   }
-  
+
   const setPasswordUrl = `${frontendUrl}/set-password/${token}`;
   const currentYear = new Date().getFullYear();
 

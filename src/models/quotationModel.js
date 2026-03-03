@@ -285,9 +285,10 @@ class QuotationModel {
      */
     static async getById(id, companyId) {
         const qRes = await pool.query(`
-            SELECT q.*, u.full_name AS assigned_to_name
+            SELECT q.*, u.full_name AS assigned_to_name, c.company_name
             FROM quotations q
             LEFT JOIN users u ON u.id = q.assigned_to
+            LEFT JOIN companies c ON c.company_id = q.company_id
             WHERE q.id = $1 AND q.company_id = $2
         `, [id, companyId]);
 
