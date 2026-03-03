@@ -37,7 +37,7 @@ class LeadModel {
                    l.lead_type,
                    l.closure_time,
                    (SELECT COUNT(*) FROM lead_items li WHERE li.lead_id = l.id) as item_count,
-                   (SELECT json_agg(json_build_object('id', li.id, 'item_name', li.item_name, 'quantity', li.quantity, 'estimated_value', li.estimated_value))
+                   (SELECT json_agg(json_build_object('id', li.id, 'item_name', li.item_name, 'quantity', li.quantity, 'unit', li.unit, 'estimated_value', li.estimated_value))
                     FROM lead_items li WHERE li.lead_id = l.id) as items,
                    COUNT(*) OVER() AS total_count
             FROM leads l
@@ -250,8 +250,8 @@ class LeadModel {
             // Insert Lead Items if any
             if (data.items && data.items.length > 0) {
                 const itemQuery = `
-                    INSERT INTO lead_items (lead_id, sku_code, item_name, quantity, estimated_value)
-                    VALUES ($1, $2, $3, $4, $5)
+                    INSERT INTO lead_items (lead_id, sku_code, item_name, quantity, unit, estimated_value)
+                    VALUES ($1, $2, $3, $4, $5, $6)
                 `;
                 for (const item of data.items) {
                     await client.query(itemQuery, [
@@ -259,6 +259,7 @@ class LeadModel {
                         item.sku_code || null,
                         item.item_name,
                         item.quantity || 1,
+                        item.unit || null,
                         item.estimated_value || 0
                     ]);
                 }
@@ -314,6 +315,7 @@ class LeadModel {
                        'sku_code', li.sku_code,
                        'item_name', li.item_name, 
                        'quantity', li.quantity, 
+                       'unit', li.unit,
                        'estimated_value', li.estimated_value
                    )) FROM lead_items li WHERE li.lead_id = l.id) as items,
                    (SELECT json_agg(json_build_object(
@@ -410,8 +412,8 @@ class LeadModel {
             await client.query('DELETE FROM lead_items WHERE lead_id = $1', [leadId]);
             if (items && items.length > 0) {
                 const itemQuery = `
-                    INSERT INTO lead_items (lead_id, sku_code, item_name, quantity, estimated_value)
-                    VALUES ($1, $2, $3, $4, $5)
+                    INSERT INTO lead_items (lead_id, sku_code, item_name, quantity, unit, estimated_value)
+                    VALUES ($1, $2, $3, $4, $5, $6)
                 `;
                 for (const item of items) {
                     await client.query(itemQuery, [
@@ -419,6 +421,7 @@ class LeadModel {
                         item.sku_code || null,
                         item.item_name,
                         item.quantity || 1,
+                        item.unit || null,
                         item.estimated_value || 0
                     ]);
                 }
