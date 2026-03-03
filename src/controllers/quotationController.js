@@ -3,6 +3,7 @@ const { getCompanyId } = require('../middlewares/auth');
 const { NotFoundError, ValidationError } = require('../middlewares/errorHandler');
 const { generateQuotationPDF } = require('../utils/pdfGenerator');
 const emailService = require('../utils/emailService');
+const { format } = require('date-fns');
 
 // ─── Create ───────────────────────────────────────────────────────────────────
 
@@ -152,21 +153,66 @@ const sendQuotationEmail = async (req, res, next) => {
         const companyName = quotation.company_name || 'ForusBiz';
         const subject = `Quotation #${quotation.quote_no} from ${companyName}`;
 
+        const formatDate = (dateStr) => {
+            if (!dateStr) return '—';
+            try {
+                return format(new Date(dateStr), 'dd MMMM yyyy');
+            } catch {
+                return dateStr;
+            }
+        };
+
+        const formatCurrency = (amount) => {
+            return new Intl.NumberFormat('en-IN', {
+                style: 'currency',
+                currency: 'INR',
+                maximumFractionDigits: 0
+            }).format(amount || 0);
+        };
+
         const html = `
-            <div style="font-family: sans-serif; line-height: 1.6; color: #374151; max-width: 600px;">
-                <h2 style="color: #4f46e5;">Quotation #${quotation.quote_no}</h2>
-                <p>Dear ${quotation.customer_name || 'Customer'},</p>
-                <p>Please find attached the quotation as discussed. Below is a brief summary:</p>
-                <div style="background: #f9fafb; padding: 16px; border-radius: 8px; margin: 20px 0;">
-                    <table style="width: 100%;">
-                        <tr><td style="color: #6b7280; width: 120px;">Date:</td><td><strong>${quotation.quote_date}</strong></td></tr>
-                        <tr><td style="color: #6b7280;">Valid Until:</td><td><strong>${quotation.valid_until || '—'}</strong></td></tr>
-                        <tr><td style="color: #6b7280;">Grand Total:</td><td style="font-size: 18px; color: #4f46e5;"><strong>₹${quotation.grand_total.toLocaleString('en-IN')}</strong></td></tr>
-                    </table>
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #374151; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; background-color: #ffffff;">
+                <div style="background-color: #4f46e5; padding: 24px; text-align: left;">
+                    <h1 style="color: #ffffff; margin: 0; font-size: 20px; font-weight: 800; letter-spacing: 0.05em;">QUOTATION</h1>
+                    <p style="color: #c7d2fe; margin: 4px 0 0; font-size: 13px; font-weight: 500;">#${quotation.quote_no}</p>
                 </div>
-                <p>If you have any questions or would like to proceed, please feel free to reply to this email.</p>
-                <hr style="border: 0; border-top: 1px solid #e5e7eb; margin: 30px 0;">
-                <p style="font-size: 14px; color: #6b7280;">Best Regards,<br><strong>${quotation.assigned_to_name || 'Sales Department'}</strong><br>${companyName}</p>
+                
+                <div style="padding: 32px 24px;">
+                    <p style="margin-top: 0; font-size: 16px; font-weight: 500;">Dear ${quotation.customer_name || 'Customer/Partner'},</p>
+                    <p style="color: #4b5563; font-size: 15px;">Please find attached the quotation as discussed. We've included a summary of the details below for your quick reference:</p>
+                    
+                    <div style="background-color: #f9fafb; border: 1px solid #f3f4f6; border-radius: 8px; padding: 20px; margin: 24px 0;">
+                        <h2 style="margin: 0 0 16px; font-size: 12px; font-weight: 800; color: #6b7280; letter-spacing: 0.08em; text-transform: uppercase;">Quotation Summary</h2>
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <tr>
+                                <td style="padding: 6px 0; color: #6b7280; font-size: 14px; width: 140px;">Quote Date</td>
+                                <td style="padding: 6px 0; color: #111827; font-size: 14px; font-weight: 600;">${formatDate(quotation.quote_date)}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 6px 0; color: #6b7280; font-size: 14px;">Valid Until</td>
+                                <td style="padding: 6px 0; color: #111827; font-size: 14px; font-weight: 600;">${formatDate(quotation.valid_until)}</td>
+                            </tr>
+                            <tr style="border-top: 1px solid #e5e7eb;">
+                                <td style="padding: 12px 0 0; color: #4f46e5; font-size: 15px; font-weight: 700;">Grand Total</td>
+                                <td style="padding: 12px 0 0; color: #4f46e5; font-size: 20px; font-weight: 800;">${formatCurrency(quotation.grand_total)}</td>
+                            </tr>
+                        </table>
+                    </div>
+                    
+                    <p style="color: #4b5563; font-size: 14px;">The complete breakdown of items and terms is available in the attached PDF invoice.</p>
+                    <p style="color: #4b5563; font-size: 14px; margin-bottom: 0;">If you have any questions, feel free to reply to this email.</p>
+                </div>
+                
+                <div style="padding: 0 24px 32px;">
+                    <hr style="border: 0; border-top: 1px solid #e5e7eb; margin: 0 0 24px;">
+                    <p style="margin: 0; font-size: 15px; font-weight: 700; color: #111827;">Best Regards,</p>
+                    <p style="margin: 4px 0 0; font-size: 14px; font-weight: 600; color: #374151;">${quotation.assigned_to_name || 'Sales Department'}</p>
+                    <p style="margin: 2px 0 0; font-size: 13px; color: #6b7280;">${companyName}</p>
+                </div>
+                
+                <div style="background-color: #f9fafb; padding: 16px 24px; text-align: center; border-top: 1px solid #f3f4f6;">
+                    <p style="margin: 0; font-size: 11px; color: #9ca3af;">This is an automated quotation delivery from ${companyName}.</p>
+                </div>
             </div>
         `;
 
