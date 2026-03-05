@@ -39,6 +39,14 @@ const upload = multer({
 router.use(authenticate);
 
 /**
+ * LIBRARY COMPANIES ROUTES
+ */
+router.get('/companies', libraryController.getLibraryCompanies);
+router.post('/companies', libraryController.createLibraryCompany);
+router.put('/companies/:id', libraryController.updateLibraryCompany);
+router.delete('/companies/:id', libraryController.deleteLibraryCompany);
+
+/**
  * VENDORS ROUTES
  * All routes delegate to libraryController
  */

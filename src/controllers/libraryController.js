@@ -7,6 +7,7 @@ const TransportorModel = require('../models/transportorModel');
 const WarehouseModel = require('../models/warehouseModel');
 const MaterialModel = require('../models/materialModel');
 const ColourModel = require('../models/colourModel');
+const LibraryCompanyModel = require('../models/libraryCompanyModel');
 const { getCompanyId } = require('../middlewares/auth');
 const { getUserCategoryAccess } = require('../utils/rbac');
 const { parseExcelFile, parseExcelFileAllSheets } = require('../utils/helpers');
@@ -19,6 +20,63 @@ const xlsx = require('xlsx');
  * Library Controller
  * Handles all library-related operations (vendors, brands, categories, teams)
  */
+
+// ==================== LIBRARY COMPANIES ====================
+
+const getLibraryCompanies = async (req, res, next) => {
+  try {
+    const companyId = getCompanyId(req);
+    const companies = await LibraryCompanyModel.getAll(companyId);
+    res.json({ success: true, data: companies });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const createLibraryCompany = async (req, res, next) => {
+  const pool = require('../models/database');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const companyId = getCompanyId(req);
+    const userId = req.user.id;
+
+    // units are passed in the request body
+    const { units, ...companyData } = req.body;
+
+    const company = await LibraryCompanyModel.create(companyId, companyData, units, userId, client);
+
+    await client.query('COMMIT');
+    res.json({ success: true, data: company });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    next(error);
+  } finally {
+    client.release();
+  }
+};
+
+const updateLibraryCompany = async (req, res, next) => {
+  try {
+    const companyId = getCompanyId(req);
+    const company = await LibraryCompanyModel.update(req.params.id, companyId, req.body);
+    if (!company) throw new NotFoundError('Company not found');
+    res.json({ success: true, data: company });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const deleteLibraryCompany = async (req, res, next) => {
+  try {
+    const companyId = getCompanyId(req);
+    const result = await LibraryCompanyModel.delete(req.params.id, companyId);
+    if (!result) throw new NotFoundError('Company not found');
+    res.json({ success: true, message: 'Company deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
 
 // ==================== VENDORS ====================
 
@@ -2250,6 +2308,11 @@ const uploadColours = async (req, res, next) => {
 };
 
 module.exports = {
+  // Library Companies
+  getLibraryCompanies,
+  createLibraryCompany,
+  updateLibraryCompany,
+  deleteLibraryCompany,
   // Vendors
   getVendors,
   createVendor,
