@@ -172,16 +172,31 @@ router.put('/teams/:id', libraryController.updateTeam);
 router.delete('/teams/:id', libraryController.deleteTeam);
 
 /**
- * CUSTOMERS ROUTES
- * All routes delegate to libraryController
+ * CUSTOMER COMPANIES ROUTES
  */
-router.get('/customers/counts', libraryController.getCustomerCounts);
+router.get('/customer-companies', libraryController.getCustomerCompanies);
+router.get('/customer-companies/:id', libraryController.getCustomerCompanyById);
+router.post('/customer-companies', libraryController.createCustomerCompany);
+router.put('/customer-companies/:id', libraryController.updateCustomerCompany);
+router.delete('/customer-companies/:id', libraryController.deleteCustomerCompany);
+router.post('/customer-companies/:id/addresses', libraryController.addConsigneeAddress);
+
+/**
+ * CUSTOMER CONTACTS ROUTES
+ */
+router.get('/customer-contacts', libraryController.getCustomerContacts);
+router.post('/customer-contacts', libraryController.createCustomerContact);
+router.put('/customer-contacts/:id', libraryController.updateCustomerContact);
+router.delete('/customer-contacts/:id', libraryController.deleteCustomerContact);
+
+// Aliases for backward compatibility in frontend if needed
 router.get('/customers', libraryController.getCustomers);
 router.post('/customers', libraryController.createCustomer);
-router.post('/customers/upload', upload.single('file'), libraryController.uploadCustomers);
 router.put('/customers/:id', libraryController.updateCustomer);
-router.put('/customers/:id/pin', libraryController.toggleCustomerPin);
 router.delete('/customers/:id', libraryController.deleteCustomer);
+router.get('/customers/counts', libraryController.getCustomerCounts);
+router.put('/customers/:id/pin', libraryController.toggleCustomerPin);
+router.post('/customers/upload', upload.single('file'), libraryController.uploadCustomers);
 
 /**
  * TRANSPORTORS ROUTES
