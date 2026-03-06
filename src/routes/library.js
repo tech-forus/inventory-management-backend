@@ -41,34 +41,6 @@ const customerContactModel = require('../models/customerContactModel');
 // Apply authenticate middleware to all routes in this router
 router.use(authenticate);
 
-/**
- * CUSTOMER COMPANIES ROUTES (replaces old Library Companies)
- */
-
-router.get('/companies', async (req, res, next) => {
-  try {
-    const result = await customerCompanyModel.getAll(req.query);
-    res.json({ success: true, data: result.data, total: result.total });
-  } catch (err) { next(err); }
-});
-router.post('/companies', async (req, res, next) => {
-  try {
-    const company = await customerCompanyModel.create(req.body);
-    res.status(201).json({ success: true, company });
-  } catch (err) { next(err); }
-});
-router.put('/companies/:id', async (req, res, next) => {
-  try {
-    const company = await customerCompanyModel.update(req.params.id, req.body);
-    res.json({ success: true, company });
-  } catch (err) { next(err); }
-});
-router.delete('/companies/:id', async (req, res, next) => {
-  try {
-    await customerCompanyModel.delete(req.params.id);
-    res.json({ success: true });
-  } catch (err) { next(err); }
-});
 
 /**
  * VENDORS ROUTES
@@ -198,8 +170,6 @@ router.delete('/teams/:id', libraryController.deleteTeam);
 /**
  * CUSTOMER COMPANIES ROUTES
  */
-const customerCompanyModel = require('../models/customerCompanyModel');
-const customerContactModel = require('../models/customerContactModel');
 
 router.get('/customer-companies', async (req, res, next) => {
   try {
@@ -262,12 +232,12 @@ router.delete('/customer-contacts/:id', async (req, res, next) => {
 
 // Aliases for backward compatibility
 router.get('/customers', libraryController.getCustomers);
-router.post('/customers', libraryController.createCustomer);
-router.put('/customers/:id', libraryController.updateCustomer);
-router.delete('/customers/:id', libraryController.deleteCustomer);
 router.get('/customers/counts', libraryController.getCustomerCounts);
-router.put('/customers/:id/pin', libraryController.toggleCustomerPin);
+router.post('/customers', libraryController.createCustomer);
 router.post('/customers/upload', upload.single('file'), libraryController.uploadCustomers);
+router.put('/customers/:id', libraryController.updateCustomer);
+router.put('/customers/:id/pin', libraryController.toggleCustomerPin);
+router.delete('/customers/:id', libraryController.deleteCustomer);
 
 /**
  * TRANSPORTORS ROUTES
