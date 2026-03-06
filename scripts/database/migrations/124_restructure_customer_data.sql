@@ -70,16 +70,19 @@ CREATE INDEX IF NOT EXISTS idx_cust_contact_comp ON customer_contacts(customer_c
 CREATE INDEX IF NOT EXISTS idx_cust_addr_comp ON customer_consignee_addresses(customer_company_id);
 
 -- Trigger for updated_at
+DROP TRIGGER IF EXISTS update_customer_companies_updated_at ON customer_companies;
 CREATE TRIGGER update_customer_companies_updated_at
     BEFORE UPDATE ON customer_companies
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_customer_contacts_updated_at ON customer_contacts;
 CREATE TRIGGER update_customer_contacts_updated_at
     BEFORE UPDATE ON customer_contacts
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_customer_consignee_addresses_updated_at ON customer_consignee_addresses;
 CREATE TRIGGER update_customer_consignee_addresses_updated_at
     BEFORE UPDATE ON customer_consignee_addresses
     FOR EACH ROW
