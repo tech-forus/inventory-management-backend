@@ -39,12 +39,34 @@ const upload = multer({
 router.use(authenticate);
 
 /**
- * LIBRARY COMPANIES ROUTES
+ * CUSTOMER COMPANIES ROUTES (replaces old Library Companies)
  */
-router.get('/companies', libraryController.getLibraryCompanies);
-router.post('/companies', libraryController.createLibraryCompany);
-router.put('/companies/:id', libraryController.updateLibraryCompany);
-router.delete('/companies/:id', libraryController.deleteLibraryCompany);
+const customerCompanyModel = require('../models/customerCompanyModel');
+
+router.get('/companies', async (req, res, next) => {
+  try {
+    const result = await customerCompanyModel.getAll(req.query);
+    res.json({ success: true, data: result.data, total: result.total });
+  } catch (err) { next(err); }
+});
+router.post('/companies', async (req, res, next) => {
+  try {
+    const company = await customerCompanyModel.create(req.body);
+    res.status(201).json({ success: true, company });
+  } catch (err) { next(err); }
+});
+router.put('/companies/:id', async (req, res, next) => {
+  try {
+    const company = await customerCompanyModel.update(req.params.id, req.body);
+    res.json({ success: true, company });
+  } catch (err) { next(err); }
+});
+router.delete('/companies/:id', async (req, res, next) => {
+  try {
+    await customerCompanyModel.delete(req.params.id);
+    res.json({ success: true });
+  } catch (err) { next(err); }
+});
 
 /**
  * VENDORS ROUTES
