@@ -2,11 +2,23 @@ const pool = require('./database');
 const { ValidationError } = require('../middlewares/errorHandler');
 
 const LEAD_STATUS_TRANSITIONS = {
-    'OPEN': ['NEGOTIATION', 'LOST', 'NOT_RESPONSE'],
+    'OPEN': ['MEETING', 'LOST', 'NOT_RESPONSE'],
+    'MEETING': ['QUOTATION', 'LOST', 'OPEN', 'NOT_RESPONSE'],
+    'QUOTATION': ['NEGOTIATION', 'LOST', 'OPEN', 'NOT_RESPONSE'],
     'NEGOTIATION': ['WON', 'LOST', 'OPEN', 'NOT_RESPONSE'],
     'NOT_RESPONSE': ['OPEN', 'LOST'],
     'WON': [],
     'LOST': []
+};
+
+const STAGE_PROBABILITY = {
+    'OPEN': 5,
+    'MEETING': 10,
+    'QUOTATION': 25,
+    'NEGOTIATION': 50,
+    'WON': 99,
+    'LOST': 0,
+    'NOT_RESPONSE': 1
 };
 
 class LeadModel {
@@ -120,6 +132,18 @@ class LeadModel {
             paramIndex++;
         }
 
+        if (filters.min_probability) {
+            query += ` AND EXISTS (
+                SELECT 1 FROM (
+                    SELECT 'OPEN' as s, 5 as p UNION SELECT 'MEETING', 10 UNION 
+                    SELECT 'QUOTATION', 25 UNION SELECT 'NEGOTIATION', 50 UNION 
+                    SELECT 'WON', 99 UNION SELECT 'LOST', 0 UNION SELECT 'NOT_RESPONSE', 1
+                ) prob_map WHERE prob_map.s = l.status AND prob_map.p >= $${paramIndex}
+            )`;
+            params.push(filters.min_probability);
+            paramIndex++;
+        }
+
         // Filter by followup_state (used for MISSED tab)
         if (filters.followup_state === 'OVERDUE') {
             query += ` AND fu.scheduled_at IS NOT NULL AND fu.scheduled_at < NOW()`;
@@ -170,6 +194,8 @@ class LeadModel {
             SELECT
                 COUNT(*)                                                                          AS total,
                 COUNT(*) FILTER (WHERE l.status = 'OPEN')                                        AS open,
+                COUNT(*) FILTER (WHERE l.status = 'MEETING')                                     AS meeting,
+                COUNT(*) FILTER (WHERE l.status = 'QUOTATION')                                   AS quotation,
                 COUNT(*) FILTER (WHERE l.status = 'NEGOTIATION')                                 AS negotiation,
                 COUNT(*) FILTER (WHERE l.status = 'WON')                                         AS won,
                 COUNT(*) FILTER (WHERE l.status = 'LOST')                                        AS lost,
@@ -199,6 +225,8 @@ class LeadModel {
         return {
             ALL: parseInt(row.total) || 0,
             OPEN: parseInt(row.open) || 0,
+            MEETING: parseInt(row.meeting) || 0,
+            QUOTATION: parseInt(row.quotation) || 0,
             NEGOTIATION: parseInt(row.negotiation) || 0,
             WON: won,
             LOST: lost,
@@ -383,6 +411,16 @@ class LeadModel {
                         throw new ValidationError(`Invalid progression: Cannot move from ${currentStatus} to ${data.status}`);
                     }
                 }
+            }
+
+            // AUTO-REENGAGEMENT LOOP: If moving to NOT_RESPONSE, schedule a follow-up in 7 days
+            if (data.status === 'NOT_RESPONSE') {
+                const reengageDate = new Date();
+                reengageDate.setDate(reengageDate.getDate() + 7);
+                await this.addFollowUp(id, {
+                    scheduled_at: reengageDate.toISOString(),
+                    note: 'SYSTEM: Re-engagement loop - checking back with non-responded lead'
+                }, 'SYSTEM');
             }
 
             const query = `
