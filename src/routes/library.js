@@ -35,13 +35,15 @@ const upload = multer({
   },
 });
 
+const customerCompanyModel = require('../models/customerCompanyModel');
+const customerContactModel = require('../models/customerContactModel');
+
 // Apply authenticate middleware to all routes in this router
 router.use(authenticate);
 
 /**
  * CUSTOMER COMPANIES ROUTES (replaces old Library Companies)
  */
-const customerCompanyModel = require('../models/customerCompanyModel');
 
 router.get('/companies', async (req, res, next) => {
   try {
@@ -196,22 +198,69 @@ router.delete('/teams/:id', libraryController.deleteTeam);
 /**
  * CUSTOMER COMPANIES ROUTES
  */
-router.get('/customer-companies', libraryController.getCustomerCompanies);
-router.get('/customer-companies/:id', libraryController.getCustomerCompanyById);
-router.post('/customer-companies', libraryController.createCustomerCompany);
-router.put('/customer-companies/:id', libraryController.updateCustomerCompany);
-router.delete('/customer-companies/:id', libraryController.deleteCustomerCompany);
-router.post('/customer-companies/:id/addresses', libraryController.addConsigneeAddress);
+const customerCompanyModel = require('../models/customerCompanyModel');
+const customerContactModel = require('../models/customerContactModel');
+
+router.get('/customer-companies', async (req, res, next) => {
+  try {
+    const result = await customerCompanyModel.getAll(req.query);
+    res.json({ success: true, data: result.data, total: result.total });
+  } catch (err) { next(err); }
+});
+router.get('/customer-companies/:id', async (req, res, next) => {
+  try {
+    const company = await customerCompanyModel.getById(req.params.id);
+    res.json({ success: true, data: company });
+  } catch (err) { next(err); }
+});
+router.post('/customer-companies', async (req, res, next) => {
+  try {
+    const company = await customerCompanyModel.create(req.body);
+    res.status(201).json({ success: true, company });
+  } catch (err) { next(err); }
+});
+router.put('/customer-companies/:id', async (req, res, next) => {
+  try {
+    const company = await customerCompanyModel.update(req.params.id, req.body);
+    res.json({ success: true, company });
+  } catch (err) { next(err); }
+});
+router.delete('/customer-companies/:id', async (req, res, next) => {
+  try {
+    await customerCompanyModel.delete(req.params.id);
+    res.json({ success: true });
+  } catch (err) { next(err); }
+});
 
 /**
  * CUSTOMER CONTACTS ROUTES
  */
-router.get('/customer-contacts', libraryController.getCustomerContacts);
-router.post('/customer-contacts', libraryController.createCustomerContact);
-router.put('/customer-contacts/:id', libraryController.updateCustomerContact);
-router.delete('/customer-contacts/:id', libraryController.deleteCustomerContact);
+router.get('/customer-contacts', async (req, res, next) => {
+  try {
+    const result = await customerContactModel.getAll(req.query);
+    res.json({ success: true, data: result.data, total: result.total });
+  } catch (err) { next(err); }
+});
+router.post('/customer-contacts', async (req, res, next) => {
+  try {
+    const contact = await customerContactModel.create(req.body);
+    res.status(201).json({ success: true, contact });
+  } catch (err) { next(err); }
+});
+router.put('/customer-contacts/:id', async (req, res, next) => {
+  try {
+    const contact = await customerContactModel.update(req.params.id, req.body);
+    res.json({ success: true, contact });
+  } catch (err) { next(err); }
+});
+router.delete('/customer-contacts/:id', async (req, res, next) => {
+  try {
+    await customerContactModel.delete(req.params.id);
+    res.json({ success: true });
+  } catch (err) { next(err); }
+});
 
-// Aliases for backward compatibility in frontend if needed
+// Aliases for backward compatibility
 router.get('/customers', libraryController.getCustomers);
 router.post('/customers', libraryController.createCustomer);
 router.put('/customers/:id', libraryController.updateCustomer);
