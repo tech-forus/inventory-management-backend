@@ -2204,11 +2204,6 @@ const uploadColours = async (req, res, next) => {
 };
 
 module.exports = {
-  // Library Companies
-  getLibraryCompanies,
-  createLibraryCompany,
-  updateLibraryCompany,
-  deleteLibraryCompany,
   // Vendors
   getVendors,
   createVendor,
