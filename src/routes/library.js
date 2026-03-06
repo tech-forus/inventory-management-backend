@@ -170,34 +170,44 @@ router.delete('/teams/:id', libraryController.deleteTeam);
 /**
  * CUSTOMER COMPANIES ROUTES
  */
-
 router.get('/customer-companies', async (req, res, next) => {
   try {
-    const result = await customerCompanyModel.getAll(req.query);
-    res.json({ success: true, data: result.data, total: result.total });
+    const companyId = req.user.companyId;
+    const rows = await customerCompanyModel.getAll(companyId, req.query);
+    res.json({ success: true, data: rows, total: rows.length });
   } catch (err) { next(err); }
 });
+
 router.get('/customer-companies/:id', async (req, res, next) => {
   try {
-    const company = await customerCompanyModel.getById(req.params.id);
+    const companyId = req.user.companyId;
+    const company = await customerCompanyModel.getById(req.params.id, companyId);
+    if (!company) return res.status(404).json({ success: false, error: 'Company not found' });
     res.json({ success: true, data: company });
   } catch (err) { next(err); }
 });
+
 router.post('/customer-companies', async (req, res, next) => {
   try {
-    const company = await customerCompanyModel.create(req.body);
+    const companyId = req.user.companyId;
+    const { consignee_addresses, ...data } = req.body;
+    const company = await customerCompanyModel.create(companyId, data, consignee_addresses || []);
     res.status(201).json({ success: true, company });
   } catch (err) { next(err); }
 });
+
 router.put('/customer-companies/:id', async (req, res, next) => {
   try {
-    const company = await customerCompanyModel.update(req.params.id, req.body);
+    const companyId = req.user.companyId;
+    const company = await customerCompanyModel.update(req.params.id, companyId, req.body);
     res.json({ success: true, company });
   } catch (err) { next(err); }
 });
+
 router.delete('/customer-companies/:id', async (req, res, next) => {
   try {
-    await customerCompanyModel.delete(req.params.id);
+    const companyId = req.user.companyId;
+    await customerCompanyModel.delete(req.params.id, companyId);
     res.json({ success: true });
   } catch (err) { next(err); }
 });
@@ -207,25 +217,33 @@ router.delete('/customer-companies/:id', async (req, res, next) => {
  */
 router.get('/customer-contacts', async (req, res, next) => {
   try {
-    const result = await customerContactModel.getAll(req.query);
-    res.json({ success: true, data: result.data, total: result.total });
+    const companyId = req.user.companyId;
+    const rows = await customerContactModel.getAll(companyId, req.query);
+    res.json({ success: true, data: rows, total: rows.length });
   } catch (err) { next(err); }
 });
+
 router.post('/customer-contacts', async (req, res, next) => {
   try {
-    const contact = await customerContactModel.create(req.body);
+    const companyId = req.user.companyId;
+    const { customer_company_id, ...data } = req.body;
+    const contact = await customerContactModel.create(customer_company_id, companyId, data);
     res.status(201).json({ success: true, contact });
   } catch (err) { next(err); }
 });
+
 router.put('/customer-contacts/:id', async (req, res, next) => {
   try {
-    const contact = await customerContactModel.update(req.params.id, req.body);
+    const companyId = req.user.companyId;
+    const contact = await customerContactModel.update(req.params.id, companyId, req.body);
     res.json({ success: true, contact });
   } catch (err) { next(err); }
 });
+
 router.delete('/customer-contacts/:id', async (req, res, next) => {
   try {
-    await customerContactModel.delete(req.params.id);
+    const companyId = req.user.companyId;
+    await customerContactModel.delete(req.params.id, companyId);
     res.json({ success: true });
   } catch (err) { next(err); }
 });
