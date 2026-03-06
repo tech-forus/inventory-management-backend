@@ -180,6 +180,7 @@ router.get('/customers', libraryController.getCustomers);
 router.post('/customers', libraryController.createCustomer);
 router.post('/customers/upload', upload.single('file'), libraryController.uploadCustomers);
 router.put('/customers/:id', libraryController.updateCustomer);
+router.put('/customers/:id/pin', libraryController.toggleCustomerPin);
 router.delete('/customers/:id', libraryController.deleteCustomer);
 
 /**

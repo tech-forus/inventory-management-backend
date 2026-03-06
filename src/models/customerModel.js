@@ -100,23 +100,23 @@ class CustomerModel {
     const total = parseInt(totalResult.rows[0].count);
 
     // Sorting logic
-    let orderBy = 'c.created_at DESC';
+    let orderBy = 'c.is_pinned DESC, c.created_at DESC';
     if (filters.sortBy) {
       switch (filters.sortBy) {
         case 'ALPHABETICAL':
-          orderBy = 'c.company_name ASC';
+          orderBy = 'c.is_pinned DESC, c.company_name ASC';
           break;
         case 'CITY':
-          orderBy = 'c.city ASC';
+          orderBy = 'c.is_pinned DESC, c.city ASC';
           break;
         case 'LAST_INTERACTED':
-          orderBy = 'stats.last_interaction_at DESC NULLS LAST';
+          orderBy = 'c.is_pinned DESC, stats.last_interaction_at DESC NULLS LAST';
           break;
         case 'TOTAL_REVENUE':
-          orderBy = 'stats.total_revenue DESC NULLS LAST';
+          orderBy = 'c.is_pinned DESC, stats.total_revenue DESC NULLS LAST';
           break;
         default:
-          orderBy = 'c.created_at DESC';
+          orderBy = 'c.is_pinned DESC, c.created_at DESC';
       }
     }
 
@@ -337,7 +337,9 @@ class CustomerModel {
       customerStage: 'customer_stage',
       customer_stage: 'customer_stage',
       customerCode: 'customer_code',
-      customer_code: 'customer_code'
+      customer_code: 'customer_code',
+      isPinned: 'is_pinned',
+      is_pinned: 'is_pinned'
     };
 
     const updates = new Map();

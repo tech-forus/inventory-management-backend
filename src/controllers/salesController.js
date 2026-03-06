@@ -65,7 +65,7 @@ const updateCustomer = async (req, res, next) => {
     try {
         const companyId = getCompanyId(req);
         const { id } = req.params;
-        const customer = await CustomerModel.update(id, req.body, companyId);
+        const customer = await CustomerModel.update(null, id, req.body, companyId);
         if (!customer) throw new NotFoundError('Customer not found');
         res.json({ success: true, data: customer });
     } catch (error) {
@@ -90,6 +90,19 @@ const reassignCustomer = async (req, res, next) => {
         const customer = await CustomerModel.reassign(id, assigned_to, companyId);
         if (!customer) throw new NotFoundError('Customer not found');
 
+        res.json({ success: true, data: customer });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const toggleCustomerPin = async (req, res, next) => {
+    try {
+        const companyId = getCompanyId(req);
+        const { id } = req.params;
+        const { is_pinned } = req.body;
+        const customer = await CustomerModel.update(null, id, { is_pinned }, companyId);
+        if (!customer) throw new NotFoundError('Customer not found');
         res.json({ success: true, data: customer });
     } catch (error) {
         next(error);
@@ -157,7 +170,7 @@ const updateLead = async (req, res, next) => {
         const companyId = getCompanyId(req);
         const { id } = req.params;
 
-        const lead = await LeadModel.update(id, req.body, companyId);
+        const lead = await LeadModel.update(id, companyId, req.body);
         if (!lead) throw new NotFoundError('Lead not found');
 
         // Auto-promote customer: potential → existing when lead is WON
@@ -183,6 +196,19 @@ const deleteLead = async (req, res, next) => {
         const lead = await LeadModel.delete(id, companyId);
         if (!lead) throw new NotFoundError('Lead not found');
         res.json({ success: true, data: lead, message: 'Lead deleted successfully' });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const toggleLeadPin = async (req, res, next) => {
+    try {
+        const companyId = getCompanyId(req);
+        const { id } = req.params;
+        const { is_pinned } = req.body;
+        const lead = await LeadModel.togglePin(id, companyId, is_pinned);
+        if (!lead) throw new NotFoundError('Lead not found');
+        res.json({ success: true, data: lead });
     } catch (error) {
         next(error);
     }
@@ -281,5 +307,7 @@ module.exports = {
     addFollowUp,
     completeFollowup,
     addActivity,
-    getDashboardStats
+    getDashboardStats,
+    toggleCustomerPin,
+    toggleLeadPin
 };

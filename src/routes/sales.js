@@ -13,6 +13,7 @@ router.get('/customers/counts', salesController.getCustomerCounts);
 router.post('/customers', salesController.createCustomer);
 router.put('/customers/:id', salesController.updateCustomer);
 router.put('/customers/:id/reassign', salesController.reassignCustomer);
+router.put('/customers/:id/pin', salesController.toggleCustomerPin);
 
 // --- Leads ---
 router.get('/leads', salesController.getAllLeads);
@@ -21,6 +22,7 @@ router.get('/leads/:id', salesController.getLead);
 router.post('/leads', salesController.createLead);
 router.put('/leads/:id', salesController.updateLead);
 router.delete('/leads/:id', salesController.deleteLead);
+router.put('/leads/:id/pin', salesController.toggleLeadPin);
 
 // Follow-ups
 router.post('/leads/:id/followups', salesController.addFollowUp);

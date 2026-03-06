@@ -34,6 +34,7 @@ class LeadModel {
                    c.contact_person as customer_contact_person,
                    c.email as customer_email,
                    c.city as customer_city,
+                   l.is_pinned,
                    fu.scheduled_at AS next_followup_at,
                    fu.id AS next_followup_id,
                    fu.note AS next_followup_note,
@@ -173,7 +174,8 @@ class LeadModel {
         // Ensure nulls come last for dates
         const nullsOrder = (filters.sortBy === 'followup' || filters.sortBy === 'activity') ? ' NULLS LAST' : '';
 
-        query += ` ORDER BY ${sortField} ${sortOrder}${nullsOrder}`;
+        // Added is_pinned DESC to always keep pinned leads at the top
+        query += ` ORDER BY l.is_pinned DESC, ${sortField} ${sortOrder}${nullsOrder}`;
 
         const limit = Math.min(parseInt(filters.limit) || 50, 200);
         const offset = parseInt(filters.offset) || 0;
@@ -378,20 +380,36 @@ class LeadModel {
     }
 
     /**
-     * Update Lead
+     * Update lead
      */
-    static async update(id, data, companyId) {
-        // Implement simple dynamic update for lead fields
+    static async update(id, companyId, data) {
         const sets = [];
         const params = [id, companyId];
         let paramIndex = 3;
 
-        const allowedFields = ['status', 'priority', 'notes', 'estimated_value', 'closed_reason', 'closed_at', 'lead_type', 'closure_time'];
+        const updatableFields = [
+            'status', 'probability', 'estimated_value', 'notes', 'priority',
+            'lead_type', 'closure_time', 'is_pinned'
+        ];
 
-        for (const key of Object.keys(data)) {
-            if (allowedFields.includes(key)) {
-                sets.push(`${key} = $${paramIndex}`);
-                params.push(data[key]);
+        for (const field of updatableFields) {
+            if (data[field] !== undefined) {
+                // State Machine Validation for status moves
+                if (field === 'status') {
+                    const currentRes = await pool.query('SELECT status FROM leads WHERE id = $1 AND company_id = $2', [id, companyId]);
+                    if (currentRes.rows.length === 0) return null;
+                    const currentStatus = currentRes.rows[0].status;
+
+                    if (currentStatus !== data.status) {
+                        const allowed = LEAD_STATUS_TRANSITIONS[currentStatus] || [];
+                        if (!allowed.includes(data.status)) {
+                            throw new ValidationError(`Invalid progression: Cannot move from ${currentStatus} to ${data.status}`);
+                        }
+                    }
+                }
+
+                sets.push(`${field} = $${paramIndex}`);
+                params.push(data[field]);
                 paramIndex++;
             }
         }
@@ -399,30 +417,6 @@ class LeadModel {
         if (sets.length === 0 && !data.items) return this.getById(id, companyId);
 
         if (sets.length > 0) {
-            // State Machine Validation
-            if (data.status) {
-                const currentRes = await pool.query('SELECT status FROM leads WHERE id = $1 AND company_id = $2', [id, companyId]);
-                if (currentRes.rows.length === 0) return null;
-                const currentStatus = currentRes.rows[0].status;
-
-                if (currentStatus !== data.status) {
-                    const allowed = LEAD_STATUS_TRANSITIONS[currentStatus] || [];
-                    if (!allowed.includes(data.status)) {
-                        throw new ValidationError(`Invalid progression: Cannot move from ${currentStatus} to ${data.status}`);
-                    }
-                }
-            }
-
-            // AUTO-REENGAGEMENT LOOP: If moving to NOT_RESPONSE, schedule a follow-up in 7 days
-            if (data.status === 'NOT_RESPONSE') {
-                const reengageDate = new Date();
-                reengageDate.setDate(reengageDate.getDate() + 7);
-                await this.addFollowUp(id, {
-                    scheduled_at: reengageDate.toISOString(),
-                    note: 'SYSTEM: Re-engagement loop - checking back with non-responded lead'
-                }, 'SYSTEM');
-            }
-
             const query = `
                 UPDATE leads
                 SET ${sets.join(', ')}, updated_at = CURRENT_TIMESTAMP
@@ -435,6 +429,16 @@ class LeadModel {
         // If items are provided, update them in a transaction
         if (data.items) {
             await this.updateItems(id, data.items);
+        }
+
+        // AUTO-REENGAGEMENT LOOP: If moving to NOT_RESPONSE, schedule a follow-up in 7 days
+        if (data.status === 'NOT_RESPONSE') {
+            const reengageDate = new Date();
+            reengageDate.setDate(reengageDate.getDate() + 7);
+            await this.addFollowUp(id, {
+                scheduled_at: reengageDate.toISOString(),
+                note: 'SYSTEM: Re-engagement loop - checking back with non-responded lead'
+            }, 'SYSTEM');
         }
 
         return this.getById(id, companyId);
@@ -450,9 +454,9 @@ class LeadModel {
             await client.query('DELETE FROM lead_items WHERE lead_id = $1', [leadId]);
             if (items && items.length > 0) {
                 const itemQuery = `
-                    INSERT INTO lead_items (lead_id, sku_code, item_name, quantity, unit, estimated_value)
-                    VALUES ($1, $2, $3, $4, $5, $6)
-                `;
+                        INSERT INTO lead_items (lead_id, sku_code, item_name, quantity, unit, estimated_value)
+                        VALUES ($1, $2, $3, $4, $5, $6)
+                    `;
                 for (const item of items) {
                     await client.query(itemQuery, [
                         leadId,
@@ -474,15 +478,29 @@ class LeadModel {
     }
 
     /**
+     * Toggle Pin Status
+     */
+    static async togglePin(id, companyId, isPinned) {
+        const query = `
+            UPDATE leads 
+            SET is_pinned = $3, updated_at = CURRENT_TIMESTAMP
+            WHERE id = $1 AND company_id = $2 AND deleted_at IS NULL
+            RETURNING *
+        `;
+        const result = await pool.query(query, [id, companyId, isPinned]);
+        return result.rows[0];
+    }
+
+    /**
      * Soft Delete Lead
      */
     static async delete(id, companyId) {
         const query = `
-            UPDATE leads 
-            SET deleted_at = CURRENT_TIMESTAMP 
-            WHERE id = $1 AND company_id = $2
-            RETURNING *
-        `;
+                UPDATE leads 
+                SET deleted_at = CURRENT_TIMESTAMP 
+                WHERE id = $1 AND company_id = $2
+                RETURNING *
+            `;
         const result = await pool.query(query, [id, companyId]);
         return result.rows[0];
     }
@@ -505,16 +523,16 @@ class LeadModel {
 
             // Business rule: one active follow-up per lead
             await client.query(`
-                UPDATE lead_followups
-                SET status = 'CANCELLED'
-                WHERE lead_id = $1 AND status = 'PENDING'
-            `, [leadId]);
+                    UPDATE lead_followups
+                    SET status = 'CANCELLED'
+                    WHERE lead_id = $1 AND status = 'PENDING'
+                `, [leadId]);
 
             const query = `
-                INSERT INTO lead_followups (lead_id, scheduled_at, note, created_by)
-                VALUES ($1, $2, $3, $4)
-                RETURNING *
-            `;
+                    INSERT INTO lead_followups (lead_id, scheduled_at, note, created_by)
+                    VALUES ($1, $2, $3, $4)
+                    RETURNING *
+                `;
             const result = await client.query(query, [leadId, data.scheduled_at, data.note, userId]);
 
             await client.query('COMMIT');
@@ -532,12 +550,12 @@ class LeadModel {
      */
     static async completeFollowUp(followUpId) {
         const query = `
-            UPDATE lead_followups
-            SET status = 'COMPLETED',
-                completed_at = now()
-            WHERE id = $1 AND status = 'PENDING'
-            RETURNING *
-        `;
+                UPDATE lead_followups
+                SET status = 'COMPLETED',
+                    completed_at = now()
+                WHERE id = $1 AND status = 'PENDING'
+                RETURNING *
+            `;
         const result = await pool.query(query, [followUpId]);
         return result.rows[0];
     }
@@ -547,10 +565,10 @@ class LeadModel {
      */
     static async addActivity(leadId, data, userId, companyId) {
         const query = `
-            INSERT INTO lead_activities (lead_id, company_id, type, note, logged_by, logged_at)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            RETURNING *
-        `;
+                INSERT INTO lead_activities (lead_id, company_id, type, note, logged_by, logged_at)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                RETURNING *
+            `;
         const loggedAt = data.logged_at || new Date().toISOString();
         const result = await pool.query(query, [
             leadId, companyId, data.type, data.note || null, userId, loggedAt
@@ -580,24 +598,24 @@ class LeadModel {
             totalValue: `SELECT COALESCE(SUM(estimated_value), 0) FROM leads l ${whereClause}`,
             wonValue: `SELECT COALESCE(SUM(estimated_value), 0) FROM leads l ${whereClause} AND status = 'WON'`,
             upcomingFollowUps: `
-                SELECT COUNT(*) 
-                FROM lead_followups f
-                JOIN leads l ON f.lead_id = l.id
-                ${whereClause} 
-                AND f.scheduled_at BETWEEN now() AND (now() + INTERVAL '7 days')
-                AND f.status = 'PENDING'
-            `,
+                    SELECT COUNT(*) 
+                    FROM lead_followups f
+                    JOIN leads l ON f.lead_id = l.id
+                    ${whereClause} 
+                    AND f.scheduled_at BETWEEN now() AND (now() + INTERVAL '7 days')
+                    AND f.status = 'PENDING'
+                `,
             totalCustomers: `SELECT COUNT(*) FROM customers WHERE company_id = $1`,
             upcomingFollowUpsList: `
-                SELECT f.*, l.customer_name, l.id as lead_id
-                FROM lead_followups f
-                JOIN leads l ON f.lead_id = l.id
-                ${whereClause}
-                AND f.scheduled_at BETWEEN now() AND (now() + INTERVAL '7 days')
-                AND f.status = 'PENDING'
-                ORDER BY f.scheduled_at ASC
-                LIMIT 10
-            `
+                    SELECT f.*, l.customer_name, l.id as lead_id
+                    FROM lead_followups f
+                    JOIN leads l ON f.lead_id = l.id
+                    ${whereClause}
+                    AND f.scheduled_at BETWEEN now() AND (now() + INTERVAL '7 days')
+                    AND f.status = 'PENDING'
+                    ORDER BY f.scheduled_at ASC
+                    LIMIT 10
+                `
         };
 
         // If user, query needs $2.

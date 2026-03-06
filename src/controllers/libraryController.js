@@ -1115,6 +1115,19 @@ const getCustomerCounts = async (req, res, next) => {
   }
 };
 
+const toggleCustomerPin = async (req, res, next) => {
+  try {
+    const companyId = getCompanyId(req);
+    const { id } = req.params;
+    const { isPinned } = req.body;
+    const customer = await CustomerModel.update(null, id, { is_pinned: isPinned }, companyId);
+    if (!customer) throw new NotFoundError('Customer not found');
+    res.json({ success: true, data: customer });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const createCustomer = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
@@ -2364,6 +2377,7 @@ module.exports = {
   createCustomer,
   uploadCustomers,
   updateCustomer,
+  toggleCustomerPin,
   deleteCustomer,
   // Transportors
   getTransportors,
