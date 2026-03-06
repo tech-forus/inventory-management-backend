@@ -26,7 +26,7 @@ app.use(requestLogger);
 const rawOrigins = process.env.CORS_ORIGINS || '';
 const allowedOrigins = rawOrigins
   .split(',')
-  .map((o) => o.trim())
+  .map((o) => o.trim().replace(/\/$/, ''))
   .filter(Boolean);
 
 // Log CORS config clearly
