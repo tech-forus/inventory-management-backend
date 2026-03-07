@@ -29,11 +29,11 @@ class LeadModel {
         let query = `
             SELECT l.*,
                    u.full_name as assigned_to_name,
-                   c.customer_name as linked_customer_name,
-                   c.company_name as customer_company,
-                   c.contact_person as customer_contact_person,
-                   c.email as customer_email,
-                   c.city as customer_city,
+                   cc.name as linked_customer_name,
+                   comp.name as customer_company,
+                   cc.name as customer_contact_person,
+                   cc.email as customer_email,
+                   comp.billing_city as customer_city,
                    l.is_pinned,
                    fu.scheduled_at AS next_followup_at,
                    fu.id AS next_followup_id,
@@ -55,7 +55,8 @@ class LeadModel {
                    COUNT(*) OVER() AS total_count
             FROM leads l
             LEFT JOIN users u ON l.assigned_to = u.id
-            LEFT JOIN customers c ON l.customer_id = c.id
+            LEFT JOIN customer_contacts cc ON l.customer_id = cc.id
+            LEFT JOIN customer_companies comp ON cc.customer_company_id = comp.id
             LEFT JOIN LATERAL (
               SELECT id, scheduled_at, note
               FROM lead_followups
@@ -99,10 +100,10 @@ class LeadModel {
                 l.customer_name ILIKE $${paramIndex} OR
                 l.customer_phone ILIKE $${paramIndex} OR
                 l.notes ILIKE $${paramIndex} OR
-                c.company_name ILIKE $${paramIndex} OR
-                c.customer_name ILIKE $${paramIndex} OR
-                c.city ILIKE $${paramIndex} OR
-                c.state ILIKE $${paramIndex} OR
+                comp.name ILIKE $${paramIndex} OR
+                cc.name ILIKE $${paramIndex} OR
+                comp.billing_city ILIKE $${paramIndex} OR
+                comp.billing_state ILIKE $${paramIndex} OR
                 EXISTS (SELECT 1 FROM lead_items li WHERE li.lead_id = l.id AND (li.item_name ILIKE $${paramIndex} OR li.sku_code ILIKE $${paramIndex}))
             )`;
             params.push(`%${filters.search}%`);
@@ -326,18 +327,17 @@ class LeadModel {
         const query = `
             SELECT l.*,
                    u.full_name as assigned_to_name,
-                   c.customer_name as linked_customer_name,
-                   c.company_name as customer_company,
-                   c.contact_person as customer_contact_person,
-                   c.email as customer_email,
-                   c.city as customer_city,
-                   c.phone as customer_phone_alt,
-                   c.gst_number as customer_gst_number,
-                   c.address_line1 as customer_address_line1,
-                   c.address_line2 as customer_address_line2,
-                   c.state as customer_state,
-                   c.country as customer_country,
-                   c.postal_code as customer_postal_code,
+                   cc.name as linked_customer_name,
+                   comp.name as customer_company,
+                   cc.name as customer_contact_person,
+                   cc.email as customer_email,
+                   comp.billing_city as customer_city,
+                   cc.phone as customer_phone_alt,
+                   comp.gst_number as customer_gst_number,
+                   comp.billing_address as customer_address_line1,
+                   comp.postal_code as customer_postal_code,
+                   comp.billing_state as customer_state,
+                   comp.billing_pin as customer_postal_code,
                    fu.scheduled_at AS next_followup_at,
                    fu.note AS next_followup_note,
                    (SELECT json_agg(json_build_object(
@@ -371,7 +371,8 @@ class LeadModel {
                    ) ORDER BY q.created_at DESC) FROM quotations q WHERE q.lead_id = l.id) as quotations
             FROM leads l
             LEFT JOIN users u ON l.assigned_to = u.id
-            LEFT JOIN customers c ON l.customer_id = c.id
+            LEFT JOIN customer_contacts cc ON l.customer_id = cc.id
+            LEFT JOIN customer_companies comp ON cc.customer_company_id = comp.id
             LEFT JOIN LATERAL (
               SELECT scheduled_at, note
               FROM lead_followups
@@ -612,7 +613,7 @@ class LeadModel {
                     AND f.scheduled_at BETWEEN now() AND (now() + INTERVAL '7 days')
                     AND f.status = 'PENDING'
                 `,
-            totalCustomers: `SELECT COUNT(*) FROM customers WHERE company_id = $1`,
+            totalCustomers: `SELECT COUNT(*) FROM customer_companies WHERE company_id = $1`,
             upcomingFollowUpsList: `
                     SELECT f.*, l.customer_name, l.id as lead_id
                     FROM lead_followups f
