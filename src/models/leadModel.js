@@ -3,12 +3,12 @@ const { ValidationError } = require('../middlewares/errorHandler');
 
 const LEAD_STATUS_TRANSITIONS = {
     'OPEN': ['MEETING', 'LOST', 'NOT_RESPONSE'],
-    'MEETING': ['QUOTATION', 'LOST', 'OPEN', 'NOT_RESPONSE'],
-    'QUOTATION': ['NEGOTIATION', 'LOST', 'OPEN', 'NOT_RESPONSE'],
-    'NEGOTIATION': ['WON', 'LOST', 'OPEN', 'NOT_RESPONSE'],
-    'NOT_RESPONSE': ['OPEN', 'LOST'],
-    'WON': [],
-    'LOST': []
+    'MEETING': ['QUOTATION', 'LOST', 'NOT_RESPONSE'],
+    'QUOTATION': ['NEGOTIATION', 'LOST', 'NOT_RESPONSE'],
+    'NEGOTIATION': ['WON', 'LOST', 'NOT_RESPONSE'],
+    'NOT_RESPONSE': ['MEETING'],  // revival path only
+    'LOST': ['MEETING'],          // re-engage path only
+    'WON': []                     // terminal
 };
 
 const STAGE_PROBABILITY = {
@@ -593,7 +593,7 @@ class LeadModel {
 
         const queries = {
             totalLeads: `SELECT COUNT(*) FROM leads l ${whereClause}`,
-            openLeads: `SELECT COUNT(*) FROM leads l ${whereClause} AND status IN ('OPEN', 'NEGOTIATION', 'NOT_RESPONSE')`,
+            openLeads: `SELECT COUNT(*) FROM leads l ${whereClause} AND status IN ('OPEN', 'MEETING', 'QUOTATION', 'NEGOTIATION', 'NOT_RESPONSE')`,
             wonLeads: `SELECT COUNT(*) FROM leads l ${whereClause} AND status = 'WON'`,
             totalValue: `SELECT COALESCE(SUM(estimated_value), 0) FROM leads l ${whereClause}`,
             wonValue: `SELECT COALESCE(SUM(estimated_value), 0) FROM leads l ${whereClause} AND status = 'WON'`,
