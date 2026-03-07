@@ -361,7 +361,14 @@ class LeadModel {
                        'note', a.note,
                        'logged_at', a.logged_at,
                        'logged_by', a.logged_by
-                   ) ORDER BY a.logged_at DESC) FROM lead_activities a WHERE a.lead_id = l.id) as activities
+                   ) ORDER BY a.logged_at DESC) FROM lead_activities a WHERE a.lead_id = l.id) as activities,
+                   (SELECT json_agg(json_build_object(
+                       'id', q.id,
+                       'quote_no', q.quote_no,
+                       'status', q.status,
+                       'grand_total', q.grand_total,
+                       'quote_date', q.quote_date
+                   ) ORDER BY q.created_at DESC) FROM quotations q WHERE q.lead_id = l.id) as quotations
             FROM leads l
             LEFT JOIN users u ON l.assigned_to = u.id
             LEFT JOIN customers c ON l.customer_id = c.id
