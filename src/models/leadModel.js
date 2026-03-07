@@ -335,7 +335,6 @@ class LeadModel {
                    cc.phone as customer_phone_alt,
                    comp.gst_number as customer_gst_number,
                    comp.billing_address as customer_address_line1,
-                   comp.postal_code as customer_postal_code,
                    comp.billing_state as customer_state,
                    comp.billing_pin as customer_postal_code,
                    fu.scheduled_at AS next_followup_at,
