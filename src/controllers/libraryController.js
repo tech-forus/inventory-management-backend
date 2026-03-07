@@ -112,11 +112,12 @@ const getCustomerContacts = async (req, res, next) => {
 const createCustomerContact = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
-    const { customerCompanyId, ...contactData } = req.body;
+    const { customer_company_id, customerCompanyId, ...contactData } = req.body;
+    const resolvedCompanyId = customer_company_id || customerCompanyId;
 
-    if (!customerCompanyId) throw new ValidationError('customerCompanyId is required');
+    if (!resolvedCompanyId) throw new ValidationError('customerCompanyId is required');
 
-    const contact = await CustomerContactModel.create(customerCompanyId, companyId, contactData);
+    const contact = await CustomerContactModel.create(resolvedCompanyId, companyId, contactData);
     res.json({ success: true, data: contact });
   } catch (error) {
     next(error);

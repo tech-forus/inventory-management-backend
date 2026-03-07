@@ -226,8 +226,9 @@ router.get('/customer-contacts', async (req, res, next) => {
 router.post('/customer-contacts', async (req, res, next) => {
   try {
     const companyId = req.user.companyId;
-    const { customer_company_id, ...data } = req.body;
-    const contact = await customerContactModel.create(customer_company_id, companyId, data);
+    const { customer_company_id, customerCompanyId, ...data } = req.body;
+    const resolvedCompanyId = customer_company_id || customerCompanyId;
+    const contact = await customerContactModel.create(resolvedCompanyId, companyId, data);
     res.status(201).json({ success: true, contact });
   } catch (err) { next(err); }
 });
