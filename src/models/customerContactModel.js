@@ -11,8 +11,8 @@ class CustomerContactModel {
       INSERT INTO customer_contacts (
         customer_company_id, company_id, name, department, 
         designation, phone, whatsapp_number, email, 
-        is_primary, is_active
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        is_primary, is_active, loyalty_tier, interests, billing_address, shipping_address, contact_stage
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
       RETURNING *
     `;
 
@@ -26,7 +26,12 @@ class CustomerContactModel {
             data.whatsappNumber || data.whatsapp_number || null,
             data.email || null,
             data.isPrimary || false,
-            data.isActive !== undefined ? data.isActive : true
+            data.isActive !== undefined ? data.isActive : true,
+            data.loyaltyTier || null,
+            data.interests ? JSON.stringify(data.interests) : null,
+            data.billingAddress || null,
+            data.shippingAddress || null,
+            data.contactStage || 'potential'
         ];
 
         const result = await db.query(query, params);
@@ -88,15 +93,23 @@ class CustomerContactModel {
         const params = [id, tenantCompanyId];
         let paramIndex = 3;
 
-        const allowedFields = ['name', 'department', 'designation', 'phone', 'whatsapp_number', 'email', 'is_primary', 'is_active'];
+        const allowedFields = ['name', 'department', 'designation', 'phone', 'whatsapp_number', 'email', 'is_primary', 'is_active', 'loyalty_tier', 'interests', 'billing_address', 'shipping_address', 'contact_stage'];
 
         for (let [key, value] of Object.entries(data)) {
             // Handle camelCase from frontend
             if (key === 'whatsappNumber') key = 'whatsapp_number';
+            if (key === 'loyaltyTier') key = 'loyalty_tier';
+            if (key === 'billingAddress') key = 'billing_address';
+            if (key === 'shippingAddress') key = 'shipping_address';
+            if (key === 'contactStage') key = 'contact_stage';
 
             if (allowedFields.includes(key)) {
                 sets.push(`${key} = $${paramIndex}`);
-                params.push(value);
+                if (key === 'interests') {
+                    params.push(value ? JSON.stringify(value) : null);
+                } else {
+                    params.push(value);
+                }
                 paramIndex++;
             }
         }
