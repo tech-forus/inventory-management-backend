@@ -12,8 +12,8 @@ class CustomerCompanyModel {
         company_id, unit_id, name, customer_code, customer_type, 
         customer_stage, gst_number, billing_address, billing_city, 
         billing_state, billing_pin, credit_period, payment_terms, 
-        loyalty_tier, tags, interests, is_active
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+        loyalty_tier, tags, interests, is_active, number_of_units
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
       RETURNING *
     `;
 
@@ -32,9 +32,9 @@ class CustomerCompanyModel {
             data.creditPeriod || 0,
             data.paymentTerms || 'Open Credit',
             data.loyaltyTier || null,
-            JSON.stringify(data.tags || []),
             JSON.stringify(data.interests || []),
-            data.isActive !== undefined ? data.isActive : true
+            data.isActive !== undefined ? data.isActive : true,
+            data.numberOfUnits || 1
         ];
 
         const result = await db.query(query, params);
@@ -134,8 +134,12 @@ class CustomerCompanyModel {
         let paramIndex = 3;
 
         for (const [key, value] of Object.entries(data)) {
-            if (['name', 'customer_code', 'customer_type', 'customer_stage', 'gst_number', 'billing_address', 'billing_city', 'billing_state', 'billing_pin', 'credit_period', 'payment_terms', 'loyalty_tier', 'is_active'].includes(key)) {
-                sets.push(`${key} = $${paramIndex}`);
+            // handle camel case
+            let dbKey = key;
+            if (key === 'numberOfUnits') dbKey = 'number_of_units';
+
+            if (['name', 'customer_code', 'customer_type', 'customer_stage', 'gst_number', 'billing_address', 'billing_city', 'billing_state', 'billing_pin', 'credit_period', 'payment_terms', 'loyalty_tier', 'is_active', 'number_of_units'].includes(dbKey)) {
+                sets.push(`${dbKey} = $${paramIndex}`);
                 params.push(value);
                 paramIndex++;
             }

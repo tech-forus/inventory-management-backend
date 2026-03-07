@@ -149,7 +149,13 @@ const getCustomers = getCustomerContacts;
 const createCustomer = createCustomerContact;
 const updateCustomer = updateCustomerContact;
 const deleteCustomer = deleteCustomerContact;
-const getCustomerCounts = async (req, res) => res.json({ success: true, data: { potential: 0, existing: 0 } });
+const getCustomerCounts = async (req, res, next) => {
+  try {
+    const companyId = getCompanyId(req);
+    const counts = await CustomerContactModel.getCounts(companyId);
+    res.json({ success: true, data: counts });
+  } catch (err) { next(err); }
+};
 const toggleCustomerPin = async (req, res) => res.json({ success: true });
 const uploadCustomers = async (req, res) => res.json({ success: true, message: 'Upload temporary disabled' });
 

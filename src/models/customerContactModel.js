@@ -134,6 +134,26 @@ class CustomerContactModel {
         const result = await pool.query(query, [id, tenantCompanyId]);
         return result.rows[0];
     }
+
+    /**
+     * Get counts for contacts grouping by stage
+     */
+    static async getCounts(tenantCompanyId) {
+        const query = `
+      SELECT contact_stage, COUNT(*) as count
+      FROM customer_contacts
+      WHERE company_id = $1 AND deleted_at IS NULL
+      GROUP BY contact_stage
+    `;
+        const result = await pool.query(query, [tenantCompanyId]);
+        const counts = { potential: 0, existing: 0, total: 0 };
+        result.rows.forEach(row => {
+            const stage = row.contact_stage || 'potential';
+            counts[stage] = parseInt(row.count);
+            counts.total += parseInt(row.count);
+        });
+        return counts;
+    }
 }
 
 module.exports = CustomerContactModel;
