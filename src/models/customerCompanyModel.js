@@ -32,6 +32,7 @@ class CustomerCompanyModel {
             data.creditPeriod || 0,
             data.paymentTerms || 'Open Credit',
             data.loyaltyTier || null,
+            JSON.stringify(data.tags || []),
             JSON.stringify(data.interests || []),
             data.isActive !== undefined ? data.isActive : true,
             data.numberOfUnits || 1
