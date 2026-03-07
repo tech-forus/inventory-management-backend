@@ -61,7 +61,7 @@ class CustomerContactModel {
         const query = `
       SELECT cc.*, comp.name as company_name
       FROM customer_contacts cc
-      JOIN customer_companies comp ON cc.customer_company_id = comp.id
+      LEFT JOIN customer_companies comp ON cc.customer_company_id = comp.id
       ${whereClause}
       ORDER BY cc.name ASC
     `;
