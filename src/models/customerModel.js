@@ -5,63 +5,19 @@ class CustomerModel {
    * Get all customers with filters and role-based access control
    */
   static async getAll(companyId, userId, role, filters = {}) {
-    let whereClause = `WHERE c.company_id = $1`;
+    let whereClause = `WHERE cc.company_id = $1 AND cc.deleted_at IS NULL`;
     const params = [companyId];
     let paramIndex = 2;
-
-    // Role-based filtering
-    if (role === 'user') {
-      whereClause += ` AND c.assigned_to = $${paramIndex}`;
-      params.push(userId);
-      paramIndex++;
-    }
-
-    // Stage filter
-    if (filters.stage && filters.stage !== 'ALL' && filters.stage !== 'NEWLY_ADDED' && filters.stage !== 'NOT_CONTACTED') {
-      whereClause += ` AND c.customer_stage = $${paramIndex}`;
-      params.push(filters.stage.toLowerCase());
-      paramIndex++;
-    }
-
-    // Newly Added filter
-    if (filters.newlyAddedDays) {
-      whereClause += ` AND c.created_at > NOW() - (INTERVAL '1 day' * $${paramIndex})`;
-      params.push(parseInt(filters.newlyAddedDays));
-      paramIndex++;
-    } else if (filters.customFrom && filters.customTo) {
-      whereClause += ` AND c.created_at BETWEEN $${paramIndex} AND $${paramIndex + 1}`;
-      params.push(filters.customFrom, filters.customTo);
-      paramIndex += 2;
-    }
-
-    // Not Contacted filter (No leads in last X days)
-    if (filters.notContactedDays) {
-      whereClause += ` AND NOT EXISTS (
-        SELECT 1 FROM leads l 
-        WHERE l.customer_id = c.id 
-        AND l.created_at > NOW() - (INTERVAL '1 day' * $${paramIndex})
-      )`;
-      params.push(parseInt(filters.notContactedDays));
-      paramIndex++;
-    } else if (filters.notContactedFrom && filters.notContactedTo) {
-      whereClause += ` AND NOT EXISTS (
-        SELECT 1 FROM leads l 
-        WHERE l.customer_id = c.id 
-        AND l.created_at BETWEEN $${paramIndex} AND $${paramIndex + 1}
-      )`;
-      params.push(filters.notContactedFrom, filters.notContactedTo);
-      paramIndex += 2;
-    }
 
     // Search filter
     if (filters.search) {
       whereClause += ` AND (
-                c.customer_name ILIKE $${paramIndex} OR 
-                c.phone ILIKE $${paramIndex} OR 
-                c.email ILIKE $${paramIndex} OR 
-                c.company_name ILIKE $${paramIndex} OR
-                c.gst_number ILIKE $${paramIndex} OR
-                c.customer_code ILIKE $${paramIndex}
+                cc.name ILIKE $${paramIndex} OR 
+                cc.phone ILIKE $${paramIndex} OR 
+                cc.email ILIKE $${paramIndex} OR 
+                comp.name ILIKE $${paramIndex} OR
+                comp.gst_number ILIKE $${paramIndex} OR
+                comp.customer_code ILIKE $${paramIndex}
             )`;
       params.push(`%${filters.search}%`);
       paramIndex++;
@@ -69,71 +25,61 @@ class CustomerModel {
 
     // Status filter
     if (filters.status) {
-      whereClause += ` AND c.is_active = $${paramIndex}`;
+      whereClause += ` AND cc.is_active = $${paramIndex}`;
       params.push(filters.status === 'active');
       paramIndex++;
     }
 
-    // NEW FILTERS
-    if (filters.assignedTo) {
-      whereClause += ` AND c.assigned_to = $${paramIndex}`;
-      params.push(filters.assignedTo);
-      paramIndex++;
-    }
+    // Role-based filtering (if applicable to new structure)
+    // Assuming assigned_to might be added to companies or contacts later, 
+    // for now we filter by companyId which is tenant id.
 
-    if (filters.state) {
-      whereClause += ` AND c.state = $${paramIndex}`;
-      params.push(filters.state);
-      paramIndex++;
-    }
-
-    if (filters.hasGst !== undefined && filters.hasGst !== null && filters.hasGst !== '') {
-      if (filters.hasGst === 'true' || filters.hasGst === true) {
-        whereClause += ` AND (c.gst_number IS NOT NULL AND c.gst_number != '')`;
-      } else {
-        whereClause += ` AND (c.gst_number IS NULL OR c.gst_number = '')`;
-      }
-    }
-
-    const countQuery = `SELECT COUNT(*) FROM customers c ${whereClause}`;
+    const countQuery = `
+      SELECT COUNT(*) 
+      FROM customer_contacts cc
+      JOIN customer_companies comp ON cc.customer_company_id = comp.id
+      ${whereClause}
+    `;
     const totalResult = await pool.query(countQuery, params);
     const total = parseInt(totalResult.rows[0].count);
 
     // Sorting logic
-    let orderBy = 'c.is_pinned DESC, c.created_at DESC';
+    let orderBy = 'cc.created_at DESC';
     if (filters.sortBy) {
       switch (filters.sortBy) {
         case 'ALPHABETICAL':
-          orderBy = 'c.is_pinned DESC, c.company_name ASC';
+          orderBy = 'comp.name ASC, cc.name ASC';
           break;
         case 'CITY':
-          orderBy = 'c.is_pinned DESC, c.city ASC';
-          break;
-        case 'LAST_INTERACTED':
-          orderBy = 'c.is_pinned DESC, stats.last_interaction_at DESC NULLS LAST';
-          break;
-        case 'TOTAL_REVENUE':
-          orderBy = 'c.is_pinned DESC, stats.total_revenue DESC NULLS LAST';
+          orderBy = 'comp.billing_city ASC';
           break;
         default:
-          orderBy = 'c.is_pinned DESC, c.created_at DESC';
+          orderBy = 'cc.created_at DESC';
       }
     }
 
     let query = `
-            SELECT c.*, u.full_name as assigned_to_name,
-                   stats.last_interaction_at,
-                   stats.total_revenue
-            FROM customers c
-            LEFT JOIN users u ON c.assigned_to = u.id
-            LEFT JOIN (
-              SELECT 
-                customer_id, 
-                MAX(created_at) as last_interaction_at,
-                SUM(CASE WHEN status = 'WON' THEN estimated_value ELSE 0 END) as total_revenue
-              FROM leads
-              GROUP BY customer_id
-            ) stats ON c.id = stats.customer_id
+            SELECT 
+                cc.id,
+                cc.name,
+                cc.phone,
+                cc.email,
+                cc.department,
+                cc.designation,
+                cc.is_active,
+                cc.created_at,
+                comp.id as customer_company_id,
+                comp.name as company_name,
+                comp.customer_code,
+                comp.customer_type,
+                comp.customer_stage,
+                comp.gst_number,
+                comp.billing_address,
+                comp.billing_city as city,
+                comp.billing_state as state,
+                comp.billing_pin as postal_code
+            FROM customer_contacts cc
+            JOIN customer_companies comp ON cc.customer_company_id = comp.id
             ${whereClause}
             ORDER BY ${orderBy}
         `;
@@ -151,7 +97,20 @@ class CustomerModel {
     }
 
     const result = await pool.query(query, params);
-    return { customers: result.rows, total };
+
+    // Map fields to match legacy frontend expectations
+    const customers = result.rows.map(row => ({
+      ...row,
+      // Frontend expects 'name' to be the primary display name, 
+      // which we've already set as cc.name. 
+      // 'company_name' is also correct.
+      isActive: row.is_active,
+      address_line1: row.billing_address,
+      postal_code: row.postal_code,
+      gst_number: row.gst_number
+    }));
+
+    return { customers, total };
   }
 
   /**
