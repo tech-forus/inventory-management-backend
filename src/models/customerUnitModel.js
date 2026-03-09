@@ -11,37 +11,46 @@ class CustomerUnitModel {
         try {
             if (shouldRelease) await db.query('BEGIN');
 
-            // 1. Fetch parent company code first
+            // 1. Fetch parent company tenant info
             const companyRes = await db.query(
-                `SELECT customer_code FROM customer_companies WHERE id = $1`,
+                `SELECT company_id FROM customer_companies WHERE id = $1`,
                 [companyId]
             );
 
             if (companyRes.rows.length === 0) {
                 throw new Error('Parent company not found');
             }
-            const parentCode = companyRes.rows[0].customer_code;
+            const tenantCompanyId = companyRes.rows[0].company_id;
 
-            // 2. Generate unit code
-            const codeRes = await db.query(
-                `SELECT generate_customer_unit_code($1) AS code`,
-                [parentCode]
+            // 1.5 Get company initials for the prefix
+            const initialsRes = await db.query('SELECT get_company_initials($1) as initials', [tenantCompanyId]);
+            const initials = initialsRes.rows[0].initials;
+
+            // 2. Generate unit code (legacy one, keep for backwards compatibility if needed, or remove)
+            const legacyCodeRes = await db.query(
+                `SELECT generate_customer_unit_code(customer_code) AS code FROM customer_companies WHERE id = $1`,
+                [companyId]
             );
-            const code = codeRes.rows[0].code;
+            const legacyCode = legacyCodeRes.rows[0].code;
+
+            // 2.5 Generate top-level CID code for the unit
+            const cidCodeRes = await db.query('SELECT generate_customer_company_code($1) as code', [initials]);
+            const customerCode = cidCodeRes.rows[0].code;
 
             // 3. Insert unit
             const query = `
                 INSERT INTO customer_units (
-                    company_id, unit_name, unit_code, address, 
+                    company_id, unit_name, unit_code, customer_code, address, 
                     gst_number, billing_address, shipping_address, is_shipping_same_as_billing
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 RETURNING *
             `;
             const params = [
                 companyId,
                 data.unitName || data.name || 'Main Unit',
-                code,
+                legacyCode,
+                customerCode,
                 data.address || null,
                 data.gstNumber || null,
                 data.billingAddress || null,
