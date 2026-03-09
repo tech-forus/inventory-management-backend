@@ -2373,6 +2373,8 @@ module.exports = {
   createCustomerUnit,
   updateCustomerUnit,
   deleteCustomerUnit,
+  // Customer Previews
+  getCustomerCodePreview,
 };
 
 
