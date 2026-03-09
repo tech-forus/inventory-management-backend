@@ -13,32 +13,24 @@ class CustomerCompanyModel {
         try {
             if (shouldRelease) await db.query('BEGIN');
 
-            // 1. Get company initials for the prefix
+            // Get company initials — needed for unit code generation
             const initialsRes = await db.query('SELECT get_company_initials($1) as initials', [companyId]);
             const initials = initialsRes.rows[0].initials;
 
-            // 2. Insert the company row
-            const query = `
+            // Insert the company row — NO customer_code generated here.
+            // The company is purely an internal grouping record.
+            const result = await db.query(`
                 INSERT INTO customer_companies (
-                    company_id, unit_id, name, customer_type, 
-                    customer_stage, gst_number, billing_address, billing_city, 
-                    billing_state, billing_pin, credit_period, payment_terms, 
-                    loyalty_tier, tags, interests, is_active, number_of_units
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+                    company_id, name, customer_type, customer_stage,
+                    credit_period, payment_terms, loyalty_tier,
+                    tags, interests, is_active, number_of_units
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                 RETURNING *
-            `;
-
-            const params = [
+            `, [
                 companyId,
-                data.unitId || null,
                 data.name,
                 data.customerType || 'Industry',
                 data.customerStage || 'potential',
-                data.gstNumber || null,
-                data.billingAddress || null,
-                data.billingCity || null,
-                data.billingState || null,
-                data.billingPin || null,
                 data.creditPeriod || 0,
                 data.paymentTerms || 'Open Credit',
                 data.loyaltyTier || null,
@@ -46,26 +38,17 @@ class CustomerCompanyModel {
                 JSON.stringify(data.interests || []),
                 data.isActive !== undefined ? data.isActive : true,
                 data.numberOfUnits || 1
-            ];
+            ]);
 
-            const result = await db.query(query, params);
-            let company = result.rows[0];
+            const company = result.rows[0];
 
-            // 3. Generate and update code
-            const codeRes = await db.query('SELECT generate_customer_company_code($1) as code', [initials]);
-            const code = codeRes.rows[0].code;
-
-            await db.query('UPDATE customer_companies SET customer_code = $1 WHERE id = $2', [code, company.id]);
-            company.customer_code = code;
-
-            // 4. Add units if provided
+            // Create all units — each gets its own CID code
             if (units && units.length > 0) {
                 for (const unitData of units) {
-                    await CustomerUnitModel.create(company.id, unitData, db);
+                    await CustomerUnitModel.create(company.id, { ...unitData, initials }, db);
                 }
             }
 
-            // 5. Add consignee addresses if provided
             if (consigneeAddresses && consigneeAddresses.length > 0) {
                 for (const addr of consigneeAddresses) {
                     await this.addConsigneeAddress(company.id, addr, db);
@@ -107,60 +90,47 @@ class CustomerCompanyModel {
     }
 
     /**
-     * Get all customer companies for a tenant
+     * Get all customer units for a tenant (units-only list — companies are internal grouping only)
      */
     static async getAll(companyId, filters = {}) {
-        let whereCompany = `cc.company_id = $1 AND cc.deleted_at IS NULL`;
-        let unitSearchClause = '';
         const params = [companyId];
+        let searchClause = '';
         let paramIndex = 2;
 
         if (filters.search) {
-            whereCompany += ` AND (cc.name ILIKE $${paramIndex} OR cc.customer_code ILIKE $${paramIndex} OR cc.gst_number ILIKE $${paramIndex})`;
-            unitSearchClause = ` AND (cu.unit_name ILIKE $${paramIndex} OR cu.customer_code ILIKE $${paramIndex} OR cu.gst_number ILIKE $${paramIndex})`;
+            searchClause = `AND (
+                cu.unit_name ILIKE $${paramIndex}
+                OR cu.customer_code ILIKE $${paramIndex}
+                OR cu.gst_number ILIKE $${paramIndex}
+                OR cc.name ILIKE $${paramIndex}
+            )`;
             params.push(`%${filters.search}%`);
             paramIndex++;
         }
 
         const query = `
-          SELECT 
-            cc.id as id,
-            cc.customer_code,
-            cc.name,
-            cc.gst_number,
-            cc.customer_type,
-            cc.billing_address,
-            cc.billing_city as city,
-            cc.is_active,
-            FALSE::boolean as is_pinned,
-            'company' as row_type,
-            cc.id as company_id,
-            NULL::integer as unit_id,
-            (SELECT COUNT(*) FROM customer_contacts WHERE customer_company_id = cc.id AND deleted_at IS NULL) as contact_count
-          FROM customer_companies cc
-          WHERE ${whereCompany}
-          
-          UNION ALL
-          
-          SELECT
-            cu.id as id,
-            COALESCE(cu.customer_code, cu.unit_code) as customer_code,
-            cu.unit_name as name,
-            cu.gst_number,
-            cc.customer_type,
-            cu.billing_address,
-            NULL as city,
-            cc.is_active,
-            FALSE::boolean as is_pinned,
-            'unit' as row_type,
-            cc.id as company_id,
-            cu.id as unit_id,
-            0::bigint as contact_count
-          FROM customer_units cu
-          JOIN customer_companies cc ON cu.company_id = cc.id
-          WHERE cc.company_id = $1 AND cc.deleted_at IS NULL${unitSearchClause}
-          
-          ORDER BY customer_code ASC NULLS LAST
+            SELECT
+                cu.id                       AS id,
+                cu.customer_code,
+                cu.unit_name                AS name,
+                cu.gst_number,
+                cu.billing_address,
+                cu.shipping_address,
+                cc.customer_type,
+                cc.credit_period,
+                cc.payment_terms,
+                cc.is_active,
+                cc.id                       AS company_id,
+                cc.name                     AS company_name,
+                cu.id                       AS unit_id,
+                (SELECT COUNT(*) FROM customer_contacts
+                 WHERE customer_company_id = cc.id AND deleted_at IS NULL) AS contact_count
+            FROM customer_units cu
+            JOIN customer_companies cc ON cu.company_id = cc.id
+            WHERE cc.company_id = $1
+              AND cc.deleted_at IS NULL
+              ${searchClause}
+            ORDER BY cu.customer_code ASC NULLS LAST
         `;
 
         const result = await pool.query(query, params);

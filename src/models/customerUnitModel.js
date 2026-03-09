@@ -11,56 +11,41 @@ class CustomerUnitModel {
         try {
             if (shouldRelease) await db.query('BEGIN');
 
-            // 1. Fetch parent company tenant info
-            const companyRes = await db.query(
-                `SELECT company_id FROM customer_companies WHERE id = $1`,
-                [companyId]
-            );
-
-            if (companyRes.rows.length === 0) {
-                throw new Error('Parent company not found');
+            // Use initials passed from parent create(), or fetch if standalone
+            let initials = data.initials;
+            if (!initials) {
+                const companyRes = await db.query(
+                    `SELECT cc.company_id FROM customer_companies cc WHERE cc.id = $1`,
+                    [companyId]
+                );
+                if (companyRes.rows.length === 0) throw new Error('Parent company not found');
+                const tenantId = companyRes.rows[0].company_id;
+                const initialsRes = await db.query('SELECT get_company_initials($1) as initials', [tenantId]);
+                initials = initialsRes.rows[0].initials;
             }
-            const tenantCompanyId = companyRes.rows[0].company_id;
 
-            // 1.5 Get company initials for the prefix
-            const initialsRes = await db.query('SELECT get_company_initials($1) as initials', [tenantCompanyId]);
-            const initials = initialsRes.rows[0].initials;
+            // Generate a unique top-level CID code for this unit
+            const cidRes = await db.query('SELECT generate_customer_company_code($1) as code', [initials]);
+            const customerCode = cidRes.rows[0].code;
 
-            // 2. Generate unit code (legacy one, keep for backwards compatibility if needed, or remove)
-            const legacyCodeRes = await db.query(
-                `SELECT generate_customer_unit_code(customer_code) AS code FROM customer_companies WHERE id = $1`,
-                [companyId]
-            );
-            const legacyCode = legacyCodeRes.rows[0].code;
-
-            // 2.5 Generate top-level CID code for the unit
-            const cidCodeRes = await db.query('SELECT generate_customer_company_code($1) as code', [initials]);
-            const customerCode = cidCodeRes.rows[0].code;
-
-            // 3. Insert unit
-            const query = `
+            const result = await db.query(`
                 INSERT INTO customer_units (
-                    company_id, unit_name, unit_code, customer_code, address, 
+                    company_id, unit_name, customer_code,
                     gst_number, billing_address, shipping_address, is_shipping_same_as_billing
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
                 RETURNING *
-            `;
-            const params = [
+            `, [
                 companyId,
-                data.unitName || data.name || 'Main Unit',
-                legacyCode,
+                data.unitName || data.name || 'Unit 1',
                 customerCode,
-                data.address || null,
                 data.gstNumber || null,
                 data.billingAddress || null,
                 data.shippingAddress || null,
                 data.isShippingSameAsBilling || false
-            ];
+            ]);
 
-            const result = await db.query(query, params);
             const unit = result.rows[0];
-
             if (shouldRelease) await db.query('COMMIT');
             return unit;
         } catch (error) {
