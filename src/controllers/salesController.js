@@ -109,6 +109,18 @@ const toggleCustomerPin = async (req, res, next) => {
     }
 };
 
+const deleteCustomer = async (req, res, next) => {
+    try {
+        const companyId = getCompanyId(req);
+        const { id } = req.params;
+        const customer = await CustomerModel.delete(id, companyId);
+        if (!customer) throw new NotFoundError('Customer not found');
+        res.json({ success: true, data: customer, message: 'Customer deleted successfully' });
+    } catch (error) {
+        next(error);
+    }
+};
+
 // --- Leads ---
 
 const getAllLeads = async (req, res, next) => {
@@ -298,6 +310,7 @@ module.exports = {
     createCustomer,
     updateCustomer,
     reassignCustomer,
+    deleteCustomer,
     getAllLeads,
     getLeadCounts,
     getLead,

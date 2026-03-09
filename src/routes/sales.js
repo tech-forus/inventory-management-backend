@@ -14,6 +14,8 @@ router.post('/customers', salesController.createCustomer);
 router.put('/customers/:id', salesController.updateCustomer);
 router.put('/customers/:id/reassign', salesController.reassignCustomer);
 router.put('/customers/:id/pin', salesController.toggleCustomerPin);
+router.delete('/customers/:id', salesController.deleteCustomer);
+
 
 // --- Leads ---
 router.get('/leads', salesController.getAllLeads);
