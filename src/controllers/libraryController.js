@@ -2368,6 +2368,11 @@ module.exports = {
   createSubCategoryDefault,
   updateSubCategoryDefault,
   deleteSubCategoryDefault,
+  // Customer Units
+  getCustomerUnits,
+  createCustomerUnit,
+  updateCustomerUnit,
+  deleteCustomerUnit,
 };
 
 
