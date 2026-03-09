@@ -198,8 +198,8 @@ router.get('/customer-companies/:id', async (req, res, next) => {
 router.post('/customer-companies', async (req, res, next) => {
   try {
     const companyId = req.user.companyId;
-    const { consignee_addresses, ...data } = req.body;
-    const company = await customerCompanyModel.create(companyId, data, consignee_addresses || []);
+    const { consignee_addresses, units, ...data } = req.body;
+    const company = await customerCompanyModel.create(companyId, data, consignee_addresses || [], units || []);
     res.status(201).json({ success: true, company });
   } catch (err) { next(err); }
 });
@@ -207,7 +207,8 @@ router.post('/customer-companies', async (req, res, next) => {
 router.put('/customer-companies/:id', async (req, res, next) => {
   try {
     const companyId = req.user.companyId;
-    const company = await customerCompanyModel.update(req.params.id, companyId, req.body);
+    const { units, ...data } = req.body;
+    const company = await customerCompanyModel.update(req.params.id, companyId, data, units || []);
     res.json({ success: true, company });
   } catch (err) { next(err); }
 });

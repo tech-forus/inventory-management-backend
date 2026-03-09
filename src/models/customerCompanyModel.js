@@ -195,7 +195,7 @@ class CustomerCompanyModel {
     /**
      * Update a company record
      */
-    static async update(id, companyId, data, client = null) {
+    static async update(id, companyId, data, units = [], client = null) {
         const pool = require('./database');
         const db = client || await pool.connect();
         const shouldRelease = !client;
@@ -265,9 +265,9 @@ class CustomerCompanyModel {
             }
 
             // Sync units
-            if (data.units && Array.isArray(data.units)) {
+            if (units && Array.isArray(units) && units.length > 0) {
                 const CustomerUnitModel = require('./customerUnitModel');
-                for (const unit of data.units) {
+                for (const unit of units) {
                     if (unit.id) {
                         await CustomerUnitModel.update(unit.id, unit, db);
                     } else {
