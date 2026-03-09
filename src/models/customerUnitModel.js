@@ -40,7 +40,7 @@ class CustomerUnitModel {
             `;
             const params = [
                 companyId,
-                data.unitName || data.name,
+                data.unitName || data.name || 'Main Unit',
                 code,
                 data.address || null,
                 data.gstNumber || null,
@@ -83,7 +83,8 @@ class CustomerUnitModel {
     /**
      * Update unit
      */
-    static async update(id, data) {
+    static async update(id, data, client = null) {
+        const db = client || pool;
         const sets = [];
         const params = [id];
         let paramIndex = 2;
@@ -132,7 +133,7 @@ class CustomerUnitModel {
             WHERE id = $1 
             RETURNING *
         `;
-        const result = await pool.query(query, params);
+        const result = await db.query(query, params);
         return result.rows[0];
     }
 

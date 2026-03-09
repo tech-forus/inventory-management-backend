@@ -160,33 +160,94 @@ class CustomerCompanyModel {
      * Update a company record
      */
     static async update(id, companyId, data, client = null) {
-        const db = client || pool;
-        const sets = [];
-        const params = [id, companyId];
-        let paramIndex = 3;
+        const pool = require('./database');
+        const db = client || await pool.connect();
+        const shouldRelease = !client;
 
-        for (const [key, value] of Object.entries(data)) {
-            // handle camel case
-            let dbKey = key;
-            if (key === 'numberOfUnits') dbKey = 'number_of_units';
+        try {
+            if (shouldRelease) await db.query('BEGIN');
 
-            if (['name', 'customer_code', 'customer_type', 'customer_stage', 'gst_number', 'billing_address', 'billing_city', 'billing_state', 'billing_pin', 'credit_period', 'payment_terms', 'loyalty_tier', 'is_active', 'number_of_units'].includes(dbKey)) {
-                sets.push(`${dbKey} = $${paramIndex}`);
-                params.push(value);
-                paramIndex++;
+            const sets = [];
+            const params = [id, companyId];
+            let paramIndex = 3;
+
+            for (const [key, value] of Object.entries(data)) {
+                // map frontend camelCase to database snake_case
+                const mapping = {
+                    'customerType': 'customer_type',
+                    'customerStage': 'customer_stage',
+                    'customerCode': 'customer_code',
+                    'gstNumber': 'gst_number',
+                    'billingAddress': 'billing_address',
+                    'billingCity': 'billing_city',
+                    'billingState': 'billing_state',
+                    'billingPin': 'billing_pin',
+                    'creditPeriod': 'credit_period',
+                    'paymentTerms': 'payment_terms',
+                    'loyaltyTier': 'loyalty_tier',
+                    'isActive': 'is_active',
+                    'numberOfUnits': 'number_of_units'
+                };
+
+                const dbKey = mapping[key] || key;
+
+                const allowedFields = [
+                    'name', 'customer_code', 'customer_type', 'customer_stage',
+                    'gst_number', 'billing_address', 'billing_city', 'billing_state',
+                    'billing_pin', 'credit_period', 'payment_terms', 'loyalty_tier',
+                    'is_active', 'number_of_units', 'deleted_at'
+                ];
+
+                if (allowedFields.includes(dbKey)) {
+                    sets.push(`${dbKey} = $${paramIndex}`);
+                    params.push(value);
+                    paramIndex++;
+                }
             }
+
+            let company = null;
+
+            if (sets.length > 0) {
+                const query = `
+                    UPDATE customer_companies 
+                    SET ${sets.join(', ')}, updated_at = CURRENT_TIMESTAMP 
+                    WHERE id = $1 AND company_id = $2
+                    RETURNING *
+                `;
+                const result = await db.query(query, params);
+                company = result.rows[0];
+            } else {
+                // If no company fields to update, fetch it to return
+                const getQuery = `SELECT * FROM customer_companies WHERE id = $1 AND company_id = $2`;
+                const getResult = await db.query(getQuery, [id, companyId]);
+                company = getResult.rows[0];
+            }
+
+            if (!company) {
+                if (shouldRelease) await db.query('ROLLBACK');
+                return null;
+            }
+
+            // Sync units
+            if (data.units && Array.isArray(data.units)) {
+                const CustomerUnitModel = require('./customerUnitModel');
+                for (const unit of data.units) {
+                    if (unit.id) {
+                        await CustomerUnitModel.update(unit.id, unit, db);
+                    } else {
+                        await CustomerUnitModel.create(company.id, unit, db);
+                    }
+                }
+            }
+
+            if (shouldRelease) await db.query('COMMIT');
+            return company;
+        } catch (error) {
+            if (shouldRelease) await db.query('ROLLBACK');
+            throw error;
+        } finally {
+            if (shouldRelease) db.release();
         }
-
-        if (sets.length === 0) return null;
-
-        const query = `
-      UPDATE customer_companies 
-      SET ${sets.join(', ')}, updated_at = CURRENT_TIMESTAMP 
-      WHERE id = $1 AND company_id = $2
-      RETURNING *
-    `;
-        const result = await db.query(query, params);
-        return result.rows[0];
     }
 
     /**
