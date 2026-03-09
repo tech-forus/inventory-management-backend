@@ -5,6 +5,7 @@ const TeamModel = require('../models/teamModel');
 const CustomerModel = require('../models/customerModel');
 const CustomerCompanyModel = require('../models/customerCompanyModel');
 const CustomerContactModel = require('../models/customerContactModel');
+const CustomerUnitModel = require('../models/customerUnitModel');
 const TransportorModel = require('../models/transportorModel');
 const WarehouseModel = require('../models/warehouseModel');
 const MaterialModel = require('../models/materialModel');
@@ -52,9 +53,9 @@ const createCustomerCompany = async (req, res, next) => {
   try {
     await client.query('BEGIN');
     const companyId = getCompanyId(req);
-    const { consigneeAddresses, ...companyData } = req.body;
+    const { consigneeAddresses, units, ...companyData } = req.body;
 
-    const company = await CustomerCompanyModel.create(companyId, companyData, consigneeAddresses, client);
+    const company = await CustomerCompanyModel.create(companyId, companyData, consigneeAddresses, units, client);
 
     await client.query('COMMIT');
     res.json({ success: true, data: company });
@@ -159,6 +160,78 @@ const getCustomerCounts = async (req, res, next) => {
 };
 const toggleCustomerPin = async (req, res) => res.json({ success: true });
 const uploadCustomers = async (req, res) => res.json({ success: true, message: 'Upload temporary disabled' });
+
+const getCustomerCodePreview = async (req, res, next) => {
+  const pool = require('../models/database');
+  try {
+    const companyId = getCompanyId(req);
+    const { type } = req.query; // 'company', 'unit', 'contact'
+
+    // 1. Get company initials
+    const initialsRes = await pool.query('SELECT get_company_initials($1) as initials', [companyId]);
+    const initials = initialsRes.rows[0].initials;
+
+    let code = '';
+    if (type === 'unit') {
+      const { parentCode } = req.query;
+      const codeRes = await pool.query('SELECT generate_customer_unit_code($1) as code', [parentCode]);
+      code = codeRes.rows[0].code;
+    } else if (type === 'contact') {
+      const { parentCode, unitCode } = req.query;
+      const codeRes = await pool.query('SELECT generate_customer_contact_code($1, $2) as code', [parentCode, unitCode || null]);
+      code = codeRes.rows[0].code;
+    } else {
+      // Default to company code
+      const codeRes = await pool.query('SELECT generate_customer_company_code($1) as code', [initials]);
+      code = codeRes.rows[0].code;
+    }
+
+    res.json({ success: true, code });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ==================== CUSTOMER UNITS ====================
+
+const getCustomerUnits = async (req, res, next) => {
+  try {
+    const units = await CustomerUnitModel.getByCompanyId(req.params.companyId);
+    res.json({ success: true, data: units });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const createCustomerUnit = async (req, res, next) => {
+  try {
+    const { company_id, ...data } = req.body;
+    const unit = await CustomerUnitModel.create(company_id, data);
+    res.json({ success: true, data: unit });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const updateCustomerUnit = async (req, res, next) => {
+  try {
+    const unit = await CustomerUnitModel.update(req.params.id, req.body);
+    if (!unit) throw new NotFoundError('Unit not found');
+    res.json({ success: true, data: unit });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const deleteCustomerUnit = async (req, res, next) => {
+  try {
+    const result = await CustomerUnitModel.delete(req.params.id);
+    if (!result) throw new NotFoundError('Unit not found');
+    res.json({ success: true, message: 'Unit deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
 
 // ==================== VENDORS ====================
 

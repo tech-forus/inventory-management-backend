@@ -168,6 +168,14 @@ router.put('/teams/:id', libraryController.updateTeam);
 router.delete('/teams/:id', libraryController.deleteTeam);
 
 /**
+ * CUSTOMER UNITS ROUTES
+ */
+router.get('/customer-companies/:companyId/units', libraryController.getCustomerUnits);
+router.post('/customer-units', libraryController.createCustomerUnit);
+router.put('/customer-units/:id', libraryController.updateCustomerUnit);
+router.delete('/customer-units/:id', libraryController.deleteCustomerUnit);
+
+/**
  * CUSTOMER COMPANIES ROUTES
  */
 router.get('/customer-companies', async (req, res, next) => {
@@ -248,6 +256,8 @@ router.delete('/customer-contacts/:id', async (req, res, next) => {
     res.json({ success: true });
   } catch (err) { next(err); }
 });
+
+router.get('/customers/preview-code', libraryController.getCustomerCodePreview);
 
 // Aliases for backward compatibility
 router.get('/customers', libraryController.getCustomers);

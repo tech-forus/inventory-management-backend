@@ -1,54 +1,85 @@
 const pool = require('./database');
+const CustomerUnitModel = require('./customerUnitModel');
 
 class CustomerCompanyModel {
     /**
      * Create a new customer company and its initial consignee addresses
      */
-    static async create(companyId, data, consigneeAddresses = [], client = null) {
-        const db = client || pool;
+    static async create(companyId, data, consigneeAddresses = [], units = [], client = null) {
+        const pool = require('./database');
+        const db = client || await pool.connect();
+        const shouldRelease = !client;
 
-        const query = `
-      INSERT INTO customer_companies (
-        company_id, unit_id, name, customer_code, customer_type, 
-        customer_stage, gst_number, billing_address, billing_city, 
-        billing_state, billing_pin, credit_period, payment_terms, 
-        loyalty_tier, tags, interests, is_active, number_of_units
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
-      RETURNING *
-    `;
+        try {
+            if (shouldRelease) await db.query('BEGIN');
 
-        const params = [
-            companyId,
-            data.unitId || null,
-            data.name,
-            data.customerCode || null,
-            data.customerType || 'Industry',
-            data.customerStage || 'potential',
-            data.gstNumber || null,
-            data.billingAddress || null,
-            data.billingCity || null,
-            data.billingState || null,
-            data.billingPin || null,
-            data.creditPeriod || 0,
-            data.paymentTerms || 'Open Credit',
-            data.loyaltyTier || null,
-            JSON.stringify(data.tags || []),
-            JSON.stringify(data.interests || []),
-            data.isActive !== undefined ? data.isActive : true,
-            data.numberOfUnits || 1
-        ];
+            // 1. Get company initials for the prefix
+            const initialsRes = await db.query('SELECT get_company_initials($1) as initials', [companyId]);
+            const initials = initialsRes.rows[0].initials;
 
-        const result = await db.query(query, params);
-        const company = result.rows[0];
+            // 2. Insert the company row
+            const query = `
+                INSERT INTO customer_companies (
+                    company_id, unit_id, name, customer_type, 
+                    customer_stage, gst_number, billing_address, billing_city, 
+                    billing_state, billing_pin, credit_period, payment_terms, 
+                    loyalty_tier, tags, interests, is_active, number_of_units
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+                RETURNING *
+            `;
 
-        // Add consignee addresses if provided
-        if (consigneeAddresses && consigneeAddresses.length > 0) {
-            for (const addr of consigneeAddresses) {
-                await this.addConsigneeAddress(company.id, addr, db);
+            const params = [
+                companyId,
+                data.unitId || null,
+                data.name,
+                data.customerType || 'Industry',
+                data.customerStage || 'potential',
+                data.gstNumber || null,
+                data.billingAddress || null,
+                data.billingCity || null,
+                data.billingState || null,
+                data.billingPin || null,
+                data.creditPeriod || 0,
+                data.paymentTerms || 'Open Credit',
+                data.loyaltyTier || null,
+                JSON.stringify(data.tags || []),
+                JSON.stringify(data.interests || []),
+                data.isActive !== undefined ? data.isActive : true,
+                data.numberOfUnits || 1
+            ];
+
+            const result = await db.query(query, params);
+            let company = result.rows[0];
+
+            // 3. Generate and update code
+            const codeRes = await db.query('SELECT generate_customer_company_code($1) as code', [initials]);
+            const code = codeRes.rows[0].code;
+
+            await db.query('UPDATE customer_companies SET customer_code = $1 WHERE id = $2', [code, company.id]);
+            company.customer_code = code;
+
+            // 4. Add units if provided
+            if (units && units.length > 0) {
+                for (const unitData of units) {
+                    await CustomerUnitModel.create(company.id, unitData, db);
+                }
             }
-        }
 
-        return company;
+            // 5. Add consignee addresses if provided
+            if (consigneeAddresses && consigneeAddresses.length > 0) {
+                for (const addr of consigneeAddresses) {
+                    await this.addConsigneeAddress(company.id, addr, db);
+                }
+            }
+
+            if (shouldRelease) await db.query('COMMIT');
+            return company;
+        } catch (error) {
+            if (shouldRelease) await db.query('ROLLBACK');
+            throw error;
+        } finally {
+            if (shouldRelease) db.release();
+        }
     }
 
     /**

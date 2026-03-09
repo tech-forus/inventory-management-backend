@@ -5,37 +5,79 @@ class CustomerContactModel {
      * Create a new customer contact linked to a company
      */
     static async create(companyId, tenantCompanyId, data, client = null) {
-        const db = client || pool;
+        const pool = require('./database');
+        const db = client || await pool.connect();
+        const shouldRelease = !client;
 
-        const query = `
-      INSERT INTO customer_contacts (
-        customer_company_id, company_id, name, department, 
-        designation, phone, whatsapp_number, email, 
-        is_primary, is_active, loyalty_tier, interests, billing_address, shipping_address, contact_stage
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-      RETURNING *
-    `;
+        try {
+            if (shouldRelease) await db.query('BEGIN');
 
-        const params = [
-            companyId,
-            tenantCompanyId,
-            data.name,
-            data.department || null,
-            data.designation || null,
-            data.phone || null,
-            data.whatsappNumber || data.whatsapp_number || null,
-            data.email || null,
-            data.isPrimary || false,
-            data.isActive !== undefined ? data.isActive : true,
-            data.loyaltyTier || null,
-            data.interests ? JSON.stringify(data.interests) : null,
-            data.billingAddress || null,
-            data.shippingAddress || null,
-            data.contactStage || 'potential'
-        ];
+            // 1. Fetch parent company code
+            const companyRes = await db.query(
+                `SELECT customer_code FROM customer_companies WHERE id = $1`,
+                [companyId]
+            );
+            if (companyRes.rows.length === 0) throw new Error('Parent company not found');
+            const companyCode = companyRes.rows[0].customer_code;
 
-        const result = await db.query(query, params);
-        return result.rows[0];
+            // 2. Fetch unit code if unit_id is provided
+            let unitCode = null;
+            if (data.unit_id || data.unitId) {
+                const unitRes = await db.query(
+                    `SELECT unit_code FROM customer_units WHERE id = $1`,
+                    [data.unit_id || data.unitId]
+                );
+                if (unitRes.rows.length > 0) {
+                    unitCode = unitRes.rows[0].unit_code;
+                }
+            }
+
+            // 3. Generate contact code
+            const codeRes = await db.query(
+                `SELECT generate_customer_contact_code($1, $2) AS code`,
+                [companyCode, unitCode]
+            );
+            const contactCode = codeRes.rows[0].code;
+
+            const query = `
+                INSERT INTO customer_contacts (
+                    customer_company_id, company_id, name, department, 
+                    designation, phone, whatsapp_number, email, 
+                    is_primary, is_active, loyalty_tier, interests, 
+                    contact_stage, unit_id, contact_code
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+                RETURNING *
+            `;
+
+            const params = [
+                companyId,
+                tenantCompanyId,
+                data.name,
+                data.department || null,
+                data.designation || null,
+                data.phone || null,
+                data.whatsappNumber || data.whatsapp_number || null,
+                data.email || null,
+                data.isPrimary || false,
+                data.isActive !== undefined ? data.isActive : true,
+                data.loyaltyTier || null,
+                data.interests ? JSON.stringify(data.interests) : null,
+                data.contactStage || 'potential',
+                data.unit_id || data.unitId || null,
+                contactCode
+            ];
+
+            const result = await db.query(query, params);
+            const contact = result.rows[0];
+
+            if (shouldRelease) await db.query('COMMIT');
+            return contact;
+        } catch (error) {
+            if (shouldRelease) await db.query('ROLLBACK');
+            throw error;
+        } finally {
+            if (shouldRelease) db.release();
+        }
     }
 
     /**
@@ -93,7 +135,7 @@ class CustomerContactModel {
         const params = [id, tenantCompanyId];
         let paramIndex = 3;
 
-        const allowedFields = ['name', 'department', 'designation', 'phone', 'whatsapp_number', 'email', 'is_primary', 'is_active', 'loyalty_tier', 'interests', 'billing_address', 'shipping_address', 'contact_stage'];
+        const allowedFields = ['name', 'department', 'designation', 'phone', 'whatsapp_number', 'email', 'is_primary', 'is_active', 'loyalty_tier', 'interests', 'contact_stage', 'unit_id'];
 
         for (let [key, value] of Object.entries(data)) {
             // Handle camelCase from frontend
