@@ -182,7 +182,7 @@ const getCustomerCodePreview = async (req, res, next) => {
       code = codeRes.rows[0].code;
     } else {
       // Default to company code
-      const codeRes = await pool.query('SELECT generate_customer_company_code($1) as code', [initials]);
+      const codeRes = await pool.query('SELECT peek_customer_company_code($1) as code', [initials]);
       code = codeRes.rows[0].code;
     }
 
