@@ -110,23 +110,47 @@ class CustomerCompanyModel {
      * Get all customer companies for a tenant
      */
     static async getAll(companyId, filters = {}) {
+        const isFlatten = filters.flatten === 'true' || filters.flatten === true;
         let whereClause = `WHERE cc.company_id = $1 AND cc.deleted_at IS NULL`;
         const params = [companyId];
         let paramIndex = 2;
 
         if (filters.search) {
-            whereClause += ` AND (cc.name ILIKE $${paramIndex} OR cc.customer_code ILIKE $${paramIndex} OR cc.gst_number ILIKE $${paramIndex})`;
+            if (isFlatten) {
+                whereClause += ` AND (cc.name ILIKE $${paramIndex} OR cu.unit_name ILIKE $${paramIndex} OR COALESCE(cu.unit_code, cc.customer_code) ILIKE $${paramIndex} OR COALESCE(cu.gst_number, cc.gst_number) ILIKE $${paramIndex})`;
+            } else {
+                whereClause += ` AND (cc.name ILIKE $${paramIndex} OR cc.customer_code ILIKE $${paramIndex} OR cc.gst_number ILIKE $${paramIndex})`;
+            }
             params.push(`%${filters.search}%`);
             paramIndex++;
         }
 
+        let selectClause = `
+          cc.*, 
+          cc.billing_city as city,
+          (SELECT COUNT(*) FROM customer_contacts WHERE customer_company_id = cc.id AND deleted_at IS NULL) as contact_count
+        `;
+        let fromClause = `customer_companies cc`;
+
+        if (isFlatten) {
+            selectClause = `
+              cc.*,
+              cc.billing_city as city,
+              COALESCE(cu.unit_code, cc.customer_code) as customer_code,
+              CASE WHEN cu.unit_name IS NOT NULL THEN CONCAT(cc.name, ' (', cu.unit_name, ')') ELSE cc.name END as name,
+              COALESCE(cu.gst_number, cc.gst_number) as gst_number,
+              COALESCE(cu.billing_address, cu.address, cc.billing_address) as billing_address,
+              (SELECT COUNT(*) FROM customer_contacts WHERE customer_company_id = cc.id AND deleted_at IS NULL) as contact_count
+            `;
+            fromClause = `customer_companies cc LEFT JOIN customer_units cu ON cc.id = cu.company_id`;
+        }
+
         const query = `
-      SELECT cc.*, 
-        (SELECT COUNT(*) FROM customer_contacts WHERE customer_company_id = cc.id AND deleted_at IS NULL) as contact_count
-      FROM customer_companies cc
-      ${whereClause}
-      ORDER BY cc.name ASC
-    `;
+          SELECT ${selectClause}
+          FROM ${fromClause}
+          ${whereClause}
+          ORDER BY cc.name ASC
+        `;
 
         const result = await pool.query(query, params);
         return result.rows;
