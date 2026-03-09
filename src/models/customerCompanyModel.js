@@ -111,13 +111,13 @@ class CustomerCompanyModel {
      */
     static async getAll(companyId, filters = {}) {
         let whereCompany = `cc.company_id = $1 AND cc.deleted_at IS NULL`;
-        let whereUnit = `cu.company_id = $1`;
+        let unitSearchClause = '';
         const params = [companyId];
         let paramIndex = 2;
 
         if (filters.search) {
             whereCompany += ` AND (cc.name ILIKE $${paramIndex} OR cc.customer_code ILIKE $${paramIndex} OR cc.gst_number ILIKE $${paramIndex})`;
-            whereUnit += ` AND (cu.unit_name ILIKE $${paramIndex} OR cu.customer_code ILIKE $${paramIndex} OR cu.gst_number ILIKE $${paramIndex})`;
+            unitSearchClause = ` AND (cu.unit_name ILIKE $${paramIndex} OR cu.customer_code ILIKE $${paramIndex} OR cu.gst_number ILIKE $${paramIndex})`;
             params.push(`%${filters.search}%`);
             paramIndex++;
         }
@@ -135,7 +135,7 @@ class CustomerCompanyModel {
             cc.is_pinned,
             'company' as row_type,
             cc.id as company_id,
-            NULL as unit_id,
+            NULL::integer as unit_id,
             (SELECT COUNT(*) FROM customer_contacts WHERE customer_company_id = cc.id AND deleted_at IS NULL) as contact_count
           FROM customer_companies cc
           WHERE ${whereCompany}
@@ -144,7 +144,7 @@ class CustomerCompanyModel {
           
           SELECT
             cu.id as id,
-            cu.customer_code,
+            COALESCE(cu.customer_code, cu.unit_code) as customer_code,
             cu.unit_name as name,
             cu.gst_number,
             cc.customer_type,
@@ -155,17 +155,18 @@ class CustomerCompanyModel {
             'unit' as row_type,
             cc.id as company_id,
             cu.id as unit_id,
-            0 as contact_count
+            0::bigint as contact_count
           FROM customer_units cu
           JOIN customer_companies cc ON cu.company_id = cc.id
-          WHERE ${whereCompany} AND ${whereUnit}
+          WHERE cc.company_id = $1 AND cc.deleted_at IS NULL${unitSearchClause}
           
-          ORDER BY is_pinned DESC, customer_code ASC
+          ORDER BY is_pinned DESC NULLS LAST, customer_code ASC NULLS LAST
         `;
 
         const result = await pool.query(query, params);
         return result.rows;
     }
+
 
     /**
      * Get a company by ID with its addresses and contacts
