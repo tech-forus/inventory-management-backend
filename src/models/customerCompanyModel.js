@@ -132,7 +132,7 @@ class CustomerCompanyModel {
             cc.billing_address,
             cc.billing_city as city,
             cc.is_active,
-            cc.is_pinned,
+            FALSE::boolean as is_pinned,
             'company' as row_type,
             cc.id as company_id,
             NULL::integer as unit_id,
@@ -151,7 +151,7 @@ class CustomerCompanyModel {
             cu.billing_address,
             NULL as city,
             cc.is_active,
-            cc.is_pinned,
+            FALSE::boolean as is_pinned,
             'unit' as row_type,
             cc.id as company_id,
             cu.id as unit_id,
@@ -160,7 +160,7 @@ class CustomerCompanyModel {
           JOIN customer_companies cc ON cu.company_id = cc.id
           WHERE cc.company_id = $1 AND cc.deleted_at IS NULL${unitSearchClause}
           
-          ORDER BY is_pinned DESC NULLS LAST, customer_code ASC NULLS LAST
+          ORDER BY customer_code ASC NULLS LAST
         `;
 
         const result = await pool.query(query, params);
