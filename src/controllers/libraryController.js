@@ -113,12 +113,12 @@ const getCustomerContacts = async (req, res, next) => {
 const createCustomerContact = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
-    const { customer_company_id, customerCompanyId, ...contactData } = req.body;
-    const resolvedCompanyId = customer_company_id || customerCompanyId;
+    const { unitId, unit_id, ...contactData } = req.body;
+    const resolvedUnitId = unitId || unit_id;
 
-    if (!resolvedCompanyId) throw new ValidationError('customerCompanyId is required');
+    if (!resolvedUnitId) throw new ValidationError('unitId is required');
 
-    const contact = await CustomerContactModel.create(resolvedCompanyId, companyId, contactData);
+    const contact = await CustomerContactModel.create(resolvedUnitId, companyId, contactData);
     res.json({ success: true, data: contact });
   } catch (error) {
     next(error);
@@ -177,8 +177,8 @@ const getCustomerCodePreview = async (req, res, next) => {
       const codeRes = await pool.query('SELECT generate_customer_unit_code($1) as code', [parentCode]);
       code = codeRes.rows[0].code;
     } else if (type === 'contact') {
-      const { parentCode, unitCode } = req.query;
-      const codeRes = await pool.query('SELECT generate_customer_contact_code($1, $2) as code', [parentCode, unitCode || null]);
+      const { unitCode } = req.query;
+      const codeRes = await pool.query('SELECT generate_customer_contact_code($1) as code', [unitCode]);
       code = codeRes.rows[0].code;
     } else {
       // Default to company code
@@ -197,6 +197,16 @@ const getCustomerCodePreview = async (req, res, next) => {
 const getCustomerUnits = async (req, res, next) => {
   try {
     const units = await CustomerUnitModel.getByCompanyId(req.params.companyId);
+    res.json({ success: true, data: units });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getAllUnits = async (req, res, next) => {
+  try {
+    const companyId = getCompanyId(req);
+    const units = await CustomerUnitModel.getAll(companyId);
     res.json({ success: true, data: units });
   } catch (error) {
     next(error);
@@ -2370,6 +2380,7 @@ module.exports = {
   deleteSubCategoryDefault,
   // Customer Units
   getCustomerUnits,
+  getAllUnits,
   createCustomerUnit,
   updateCustomerUnit,
   deleteCustomerUnit,

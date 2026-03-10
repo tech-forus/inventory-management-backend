@@ -2,9 +2,9 @@ const pool = require('./database');
 
 class CustomerContactModel {
     /**
-     * Create a new customer contact linked to a company
+     * Create a new customer contact linked to a unit
      */
-    static async create(companyId, tenantCompanyId, data, client = null) {
+    static async create(unitId, tenantCompanyId, data, client = null) {
         const pool = require('./database');
         const db = client || await pool.connect();
         const shouldRelease = !client;
@@ -12,45 +12,36 @@ class CustomerContactModel {
         try {
             if (shouldRelease) await db.query('BEGIN');
 
-            // 1. Fetch parent company code
-            const companyRes = await db.query(
-                `SELECT customer_code FROM customer_companies WHERE id = $1`,
-                [companyId]
+            // 1. Fetch unit + its parent company in one query
+            const unitRes = await db.query(
+                `SELECT cu.id, cu.customer_code as unit_code, cu.company_id as customer_company_id
+                 FROM customer_units cu
+                 WHERE cu.id = $1`,
+                [unitId]
             );
-            if (companyRes.rows.length === 0) throw new Error('Parent company not found');
-            const companyCode = companyRes.rows[0].customer_code;
+            if (unitRes.rows.length === 0) throw new Error('Unit not found');
+            const unit = unitRes.rows[0];
 
-            // 2. Fetch unit code if unit_id is provided
-            let unitCode = null;
-            if (data.unit_id || data.unitId) {
-                const unitRes = await db.query(
-                    `SELECT unit_code FROM customer_units WHERE id = $1`,
-                    [data.unit_id || data.unitId]
-                );
-                if (unitRes.rows.length > 0) {
-                    unitCode = unitRes.rows[0].unit_code;
-                }
-            }
-
-            // 3. Generate contact code
+            // 2. Generate contact code under unit code
             const codeRes = await db.query(
-                `SELECT generate_customer_contact_code($1, $2) AS code`,
-                [companyCode, unitCode]
+                `SELECT generate_customer_contact_code($1) AS code`,
+                [unit.unit_code]
             );
             const contactCode = codeRes.rows[0].code;
 
             const query = `
                 INSERT INTO customer_contacts (
-                    customer_company_id, company_id, name, department, 
+                    unit_id, customer_company_id, company_id, name, department, 
                     designation, phone, whatsapp_number, email, 
                     is_primary, is_active, loyalty_tier, interests, 
-                    contact_stage, unit_id, contact_code
+                    contact_stage, contact_code
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
                 RETURNING *
             `;
 
             const params = [
-                companyId,
+                unit.id,
+                unit.customer_company_id,
                 tenantCompanyId,
                 data.name,
                 data.department || null,
@@ -63,7 +54,6 @@ class CustomerContactModel {
                 data.loyaltyTier || null,
                 data.interests ? JSON.stringify(data.interests) : null,
                 data.contactStage || 'potential',
-                data.unit_id || data.unitId || null,
                 contactCode
             ];
 
@@ -88,9 +78,15 @@ class CustomerContactModel {
         const params = [tenantCompanyId];
         let paramIndex = 2;
 
-        if (filters.customerCompanyId) {
+        if (filters.customerCompanyId || filters.customer_company_id) {
             whereClause += ` AND cc.customer_company_id = $${paramIndex}`;
-            params.push(filters.customerCompanyId);
+            params.push(filters.customerCompanyId || filters.customer_company_id);
+            paramIndex++;
+        }
+
+        if (filters.unitId || filters.unit_id) {
+            whereClause += ` AND cc.unit_id = $${paramIndex}`;
+            params.push(filters.unitId || filters.unit_id);
             paramIndex++;
         }
 
@@ -119,7 +115,7 @@ class CustomerContactModel {
         const query = `
       SELECT cc.*, comp.name as company_name
       FROM customer_contacts cc
-      JOIN customer_companies comp ON cc.customer_company_id = comp.id
+      LEFT JOIN customer_companies comp ON cc.customer_company_id = comp.id
       WHERE cc.id = $1 AND cc.company_id = $2 AND cc.deleted_at IS NULL
     `;
         const result = await pool.query(query, [id, tenantCompanyId]);

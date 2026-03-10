@@ -57,6 +57,21 @@ class CustomerUnitModel {
     }
 
     /**
+     * Get all units for a tenant (all customer companies)
+     */
+    static async getAll(tenantCompanyId) {
+        const query = `
+            SELECT cu.*, cc.name as company_name
+            FROM customer_units cu
+            JOIN customer_companies cc ON cu.company_id = cc.id
+            WHERE cc.company_id = $1
+            ORDER BY cc.name ASC, cu.unit_name ASC
+        `;
+        const result = await pool.query(query, [tenantCompanyId]);
+        return result.rows;
+    }
+
+    /**
      * Get all units for a company
      */
     static async getByCompanyId(companyId) {

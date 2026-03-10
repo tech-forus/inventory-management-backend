@@ -171,6 +171,7 @@ router.delete('/teams/:id', libraryController.deleteTeam);
  * CUSTOMER UNITS ROUTES
  */
 router.get('/customer-companies/:companyId/units', libraryController.getCustomerUnits);
+router.get('/units/all', libraryController.getAllUnits);
 router.post('/customer-units', libraryController.createCustomerUnit);
 router.put('/customer-units/:id', libraryController.updateCustomerUnit);
 router.delete('/customer-units/:id', libraryController.deleteCustomerUnit);
@@ -235,9 +236,10 @@ router.get('/customer-contacts', async (req, res, next) => {
 router.post('/customer-contacts', async (req, res, next) => {
   try {
     const companyId = req.user.companyId;
-    const { customer_company_id, customerCompanyId, ...data } = req.body;
-    const resolvedCompanyId = customer_company_id || customerCompanyId;
-    const contact = await customerContactModel.create(resolvedCompanyId, companyId, data);
+    const { unitId, unit_id, ...data } = req.body;
+    const resolvedUnitId = unitId || unit_id;
+    if (!resolvedUnitId) return res.status(400).json({ success: false, error: 'unitId is required' });
+    const contact = await customerContactModel.create(resolvedUnitId, companyId, data);
     res.status(201).json({ success: true, contact });
   } catch (err) { next(err); }
 });
