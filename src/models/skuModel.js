@@ -67,6 +67,7 @@ class SKUModel {
       const searchFields = [
         { table: 's', column: 'sku_id', alias: 'sku_id' },
         { table: 's', column: 'item_name', alias: 'item_name' },
+        { table: 's', column: 'item_nickname', alias: 'item_nickname' },
         { table: 's', column: 'model', alias: 'model' },
         { table: 's', column: 'hsn_sac_code', alias: 'hsn_sac_code' },
         { table: 's', column: 'series', alias: 'series' },
@@ -238,6 +239,7 @@ class SKUModel {
       query += ` AND (
         s.sku_id ILIKE $${paramIndex}
         OR s.item_name ILIKE $${paramIndex}
+        OR s.item_nickname ILIKE $${paramIndex}
         OR s.model ILIKE $${paramIndex}
         OR s.hsn_sac_code ILIKE $${paramIndex}
         OR s.series ILIKE $${paramIndex}
@@ -442,7 +444,7 @@ class SKUModel {
       const result = await client.query(
         `INSERT INTO skus (
           company_id, sku_id, product_category_id, item_category_id, sub_category_id,
-          item_name, item_details, vendor_id, vendor_item_code, brand_id,
+          item_name, item_nickname, item_details, vendor_id, vendor_item_code, brand_id,
           hsn_sac_code, gst_rate, rating_size, model, series, unit,
           material, manufacture_or_import, color,
           weight, weight_unit, length, length_unit, width, width_unit, height, height_unit,
@@ -451,7 +453,7 @@ class SKUModel {
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
           $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27,
-          $28, $29, $30, $31, $32, $33, $34, $35, $36, $37
+          $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38
         ) RETURNING *`,
         [
           companyId.toUpperCase(),
@@ -460,6 +462,7 @@ class SKUModel {
           skuData.itemCategoryId,
           skuData.subCategoryId || null,
           skuData.itemName,
+          skuData.itemNickname || null,
           skuData.itemDetails || null,
           skuData.vendorId || null, // Now nullable
           skuData.vendorItemCode || null,
@@ -539,17 +542,17 @@ class SKUModel {
       }
     }
 
-    let paramIndex = 36;
+    let paramIndex = 37;
     let query = `
       UPDATE skus SET
         product_category_id = $1, item_category_id = $2, sub_category_id = $3,
-        item_name = $4, item_details = $5, vendor_id = $6, vendor_item_code = $7, brand_id = $8,
-        hsn_sac_code = $9, gst_rate = $10, rating_size = $11, model = $12, series = $13, unit = $14,
-        material = $15, manufacture_or_import = $16, color = $17,
-        weight = $18, weight_unit = $19, length = $20, length_unit = $21, width = $22, width_unit = $23, height = $24, height_unit = $25,
-        min_stock_level = $26, reorder_point = $27, default_storage_location = $28,
-        current_stock = $29, custom_fields = $30,
-        status = $31, is_active = $32, is_non_movable = $33, opening_stock = $34, warranty = $35, updated_at = CURRENT_TIMESTAMP
+        item_name = $4, item_nickname = $5, item_details = $6, vendor_id = $7, vendor_item_code = $8, brand_id = $9,
+        hsn_sac_code = $10, gst_rate = $11, rating_size = $12, model = $13, series = $14, unit = $15,
+        material = $16, manufacture_or_import = $17, color = $18,
+        weight = $19, weight_unit = $20, length = $21, length_unit = $22, width = $23, width_unit = $24, height = $25, height_unit = $26,
+        min_stock_level = $27, reorder_point = $28, default_storage_location = $29,
+        current_stock = $30, custom_fields = $31,
+        status = $32, is_active = $33, is_non_movable = $34, opening_stock = $35, warranty = $36, updated_at = CURRENT_TIMESTAMP
       WHERE id = $${paramIndex}
     `;
 
@@ -564,6 +567,7 @@ class SKUModel {
       skuData.itemCategoryId,
       skuData.subCategoryId || null,
       skuData.itemName,
+      skuData.itemNickname || null,
       skuData.itemDetails || null,
       skuData.vendorId || null, // Now nullable
       skuData.vendorItemCode || null,
@@ -599,7 +603,7 @@ class SKUModel {
     ];
 
     if (companyId) {
-      query = query.replace('WHERE id = $36', `WHERE id = $36 AND company_id = $37`);
+      query = query.replace('WHERE id = $37', `WHERE id = $37 AND company_id = $38`);
       params.push(companyId.toUpperCase());
     }
 
