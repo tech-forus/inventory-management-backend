@@ -444,7 +444,7 @@ class LeadModel {
             reengageDate.setDate(reengageDate.getDate() + 7);
             await this.addFollowUp(id, {
                 scheduled_at: reengageDate.toISOString(),
-                note: 'SYSTEM: Re-engagement loop - checking back with non-responded lead'
+                note: 'SYSTEM: Re-engagement loop - checking back with No Response lead'
             }, 'SYSTEM');
         }
 

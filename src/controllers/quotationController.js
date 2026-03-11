@@ -4,6 +4,7 @@ const { NotFoundError, ValidationError } = require('../middlewares/errorHandler'
 const { generateQuotationPDF } = require('../utils/pdfGenerator');
 const emailService = require('../utils/emailService');
 const { format } = require('date-fns');
+const LeadModel = require('../models/leadModel');
 
 // ─── Create ───────────────────────────────────────────────────────────────────
 
@@ -28,6 +29,20 @@ const createQuotation = async (req, res, next) => {
             userFullName,
             companyId
         );
+
+        // --- Auto-advance lead stage if applicable ---
+        if (rest.lead_id) {
+            try {
+                const lead = await LeadModel.getById(rest.lead_id, companyId);
+                if (lead && (lead.status === 'OPEN' || lead.status === 'MEETING')) {
+                    await LeadModel.update(rest.lead_id, companyId, { status: 'QUOTATION' });
+                }
+            } catch (leadErr) {
+                console.error('Error auto-advancing lead stage:', leadErr);
+                // Do not fail the quotation creation
+            }
+        }
+        // ---------------------------------------------
 
         res.status(201).json({ success: true, data: quotation });
     } catch (err) {
