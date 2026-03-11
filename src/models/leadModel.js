@@ -2,7 +2,7 @@ const pool = require('./database');
 const { ValidationError } = require('../middlewares/errorHandler');
 
 const LEAD_STATUS_TRANSITIONS = {
-    'OPEN': ['MEETING', 'LOST', 'NOT_RESPONSE'],
+    'OPEN': ['MEETING', 'QUOTATION', 'LOST', 'NOT_RESPONSE'],
     'MEETING': ['QUOTATION', 'LOST', 'NOT_RESPONSE'],
     'QUOTATION': ['NEGOTIATION', 'LOST', 'NOT_RESPONSE'],
     'NEGOTIATION': ['WON', 'LOST', 'NOT_RESPONSE'],
