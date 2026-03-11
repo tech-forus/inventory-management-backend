@@ -49,6 +49,7 @@ class LeadModel {
                    la.logged_at AS last_activity_at,
                    l.lead_type,
                    l.closure_time,
+                   l.expected_closure_date,
                    (SELECT COUNT(*) FROM lead_items li WHERE li.lead_id = l.id) as item_count,
                    (SELECT json_agg(json_build_object('id', li.id, 'item_name', li.item_name, 'quantity', li.quantity, 'unit', li.unit, 'estimated_value', li.estimated_value))
                     FROM lead_items li WHERE li.lead_id = l.id) as items,
@@ -254,9 +255,9 @@ class LeadModel {
                     company_id, assigned_to, customer_id, 
                     customer_name, customer_phone, type, status, 
                     source, priority, estimated_value, notes,
-                    lead_type, closure_time
+                    lead_type, closure_time, expected_closure_date
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
                 RETURNING *
             `;
             const leadParams = [
@@ -272,7 +273,8 @@ class LeadModel {
                 data.estimated_value || 0,
                 data.notes,
                 data.lead_type || null,
-                data.closure_time || null
+                data.closure_time || null,
+                data.expected_closure_date || null
             ];
 
             const leadResult = await client.query(leadQuery, leadParams);
@@ -396,7 +398,7 @@ class LeadModel {
 
         const updatableFields = [
             'status', 'probability', 'estimated_value', 'notes', 'priority',
-            'lead_type', 'closure_time', 'is_pinned'
+            'lead_type', 'closure_time', 'expected_closure_date', 'is_pinned'
         ];
 
         for (const field of updatableFields) {
