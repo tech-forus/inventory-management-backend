@@ -566,6 +566,7 @@ const uploadSKUs = async (req, res, next) => {
           itemCategoryId,
           subCategoryId,
           itemName: String(itemName).trim(),
+          itemNickname: getValue(row, 'item_nickname', 'itemNickname', 'Item Nickname') || null,
           itemDetails: getValue(row, 'item_details', 'itemDetails', 'Item Details', 'Item Details as per Vendor', 'description', 'Description') || null,
           vendorId,
           vendorItemCode: getValue(row, 'vendor_item_code', 'vendorItemCode', 'Vendor Item Code', 'Item Code as per Vendor') ? String(getValue(row, 'vendor_item_code', 'vendorItemCode', 'Vendor Item Code', 'Item Code as per Vendor')).trim() : null,

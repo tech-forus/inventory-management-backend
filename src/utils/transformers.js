@@ -277,6 +277,7 @@ const transformSKU = (sku) => {
     subCategoryId: sku.sub_category_id,
     subCategory: sku.sub_category,
     itemName: sku.item_name,
+    itemNickname: sku.item_nickname,
     itemDetails: sku.item_details,
     vendorId: sku.vendor_id,
     vendor: sku.vendor,
