@@ -751,7 +751,7 @@ router.put(
     // Determine if ID is numeric or alphanumeric
     const idParam = req.params.id;
     const isNumeric = /^\d+$/.test(idParam);
-    const whereClause = isNumeric ? 'id = $34' : 'sku_id = $34'; // Updated from $35 to $34 since we removed current_stock parameter
+    const whereClause = isNumeric ? 'id = $35' : 'sku_id = $35'; // Updated to $35 because item_nickname added a field to the SET clause
     const idValue = isNumeric ? parseInt(idParam, 10) : idParam;
     const companyId = getCompanyId(req).toUpperCase();
 
