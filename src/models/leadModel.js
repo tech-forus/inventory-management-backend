@@ -21,6 +21,32 @@ const STAGE_PROBABILITY = {
     'NOT_RESPONSE': 1
 };
 
+/**
+ * Calculate expected_closure_date from closure_time relative to a base date
+ */
+const calculateExpectedClosureDate = (closureTime, baseDate = new Date()) => {
+    if (!closureTime) return null;
+    const date = new Date(baseDate);
+    switch (closureTime) {
+        case 'immediate':
+        case 'immediately':
+            date.setDate(date.getDate() + 1);
+            break;
+        case 'upto_15_days':
+            date.setDate(date.getDate() + 15);
+            break;
+        case 'in_a_month':
+            date.setDate(date.getDate() + 30);
+            break;
+        case 'later':
+            date.setDate(date.getDate() + 90);
+            break;
+        default:
+            return null;
+    }
+    return date.toISOString().split('T')[0]; // Return YYYY-MM-DD
+};
+
 class LeadModel {
     /**
      * Get all leads with filters and role-based access control
@@ -274,7 +300,7 @@ class LeadModel {
                 data.notes,
                 data.lead_type || null,
                 data.closure_time || null,
-                data.expected_closure_date || null
+                data.expected_closure_date || calculateExpectedClosureDate(data.closure_time) || null
             ];
 
             const leadResult = await client.query(leadQuery, leadParams);
@@ -419,6 +445,16 @@ class LeadModel {
 
                 sets.push(`${field} = $${paramIndex}`);
                 params.push(data[field]);
+                paramIndex++;
+            }
+        }
+
+        // Auto-calculate expected_closure_date if closure_time changed but expected_closure_date wasn't explicitly set
+        if (data.closure_time && data.expected_closure_date === undefined) {
+            const calculated = calculateExpectedClosureDate(data.closure_time);
+            if (calculated) {
+                sets.push(`expected_closure_date = $${paramIndex}`);
+                params.push(calculated);
                 paramIndex++;
             }
         }
