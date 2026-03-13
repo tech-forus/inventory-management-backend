@@ -108,6 +108,20 @@ class CustomerCompanyModel {
             paramIndex++;
         }
 
+        let typeClause = '';
+        if (filters.customerType) {
+            typeClause = ` AND cc.customer_type = $${paramIndex}`;
+            params.push(filters.customerType);
+            paramIndex++;
+        }
+
+        let stageClause = '';
+        if (filters.stage && filters.stage !== 'ALL') {
+            stageClause = ` AND cc.customer_stage = $${paramIndex}`;
+            params.push(filters.stage);
+            paramIndex++;
+        }
+
         const query = `
             SELECT
                 cu.id                       AS id,
@@ -143,6 +157,8 @@ class CustomerCompanyModel {
             WHERE cc.company_id = $1
               AND cc.deleted_at IS NULL
               ${searchClause}
+              ${typeClause}
+              ${stageClause}
             ORDER BY cu.customer_code ASC NULLS LAST
         `;
 
