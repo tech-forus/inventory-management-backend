@@ -90,80 +90,127 @@ class CustomerCompanyModel {
     }
 
     /**
-     * Get all customer units for a tenant (units-only list — companies are internal grouping only)
+     * Get all customer companies for a tenant — one row per company.
+     * Supports: search, customerType, stage, state, hasGst, sortBy, limit, offset.
      */
     static async getAll(companyId, filters = {}) {
         const params = [companyId];
-        let searchClause = '';
+        const conditions = ['cc.company_id = $1', 'cc.deleted_at IS NULL'];
         let paramIndex = 2;
 
         if (filters.search) {
-            searchClause = `AND (
-                cu.unit_name ILIKE $${paramIndex}
-                OR cu.customer_code ILIKE $${paramIndex}
-                OR cu.gst_number ILIKE $${paramIndex}
-                OR cc.name ILIKE $${paramIndex}
-            )`;
+            conditions.push(`(
+                cc.name ILIKE $${paramIndex}
+                OR EXISTS (
+                    SELECT 1 FROM customer_units cu2
+                    WHERE cu2.company_id = cc.id
+                      AND cu2.deleted_at IS NULL
+                      AND (
+                          cu2.unit_name ILIKE $${paramIndex}
+                          OR cu2.customer_code ILIKE $${paramIndex}
+                          OR cu2.gst_number ILIKE $${paramIndex}
+                          OR cu2.billing_gst_number ILIKE $${paramIndex}
+                      )
+                )
+            )`);
             params.push(`%${filters.search}%`);
             paramIndex++;
         }
 
-        let typeClause = '';
         if (filters.customerType) {
-            typeClause = ` AND cc.customer_type = $${paramIndex}`;
+            conditions.push(`cc.customer_type = $${paramIndex}`);
             params.push(filters.customerType);
             paramIndex++;
         }
 
-        let stageClause = '';
         if (filters.stage && filters.stage !== 'ALL') {
-            stageClause = ` AND cc.customer_stage = $${paramIndex}`;
-            params.push(filters.stage);
+            conditions.push(`cc.customer_stage = $${paramIndex}`);
+            params.push(filters.stage.toLowerCase());
             paramIndex++;
         }
 
+        // State filter — company must have at least one unit in that state
+        if (filters.state) {
+            conditions.push(`EXISTS (
+                SELECT 1 FROM customer_units cu2
+                WHERE cu2.company_id = cc.id AND cu2.deleted_at IS NULL
+                  AND cu2.billing_state = $${paramIndex}
+            )`);
+            params.push(filters.state);
+            paramIndex++;
+        }
+
+        // GST filter — company must have at least one unit with/without GST
+        const hasGst = filters.hasGst;
+        if (hasGst === 'true' || hasGst === true) {
+            conditions.push(`EXISTS (
+                SELECT 1 FROM customer_units cu2
+                WHERE cu2.company_id = cc.id AND cu2.deleted_at IS NULL
+                  AND cu2.billing_gst_number IS NOT NULL AND cu2.billing_gst_number <> ''
+            )`);
+        } else if (hasGst === 'false' || hasGst === false) {
+            conditions.push(`NOT EXISTS (
+                SELECT 1 FROM customer_units cu2
+                WHERE cu2.company_id = cc.id AND cu2.deleted_at IS NULL
+                  AND cu2.billing_gst_number IS NOT NULL AND cu2.billing_gst_number <> ''
+            )`);
+        }
+
+        const whereClause = conditions.join(' AND ');
+
+        // Sort
+        const SORT_MAP = {
+            'RECENTLY_ADDED': 'cc.created_at DESC',
+            'ALPHABETICAL':   'cc.name ASC',
+            'LAST_INTERACTED': 'cc.updated_at DESC',
+            'TOTAL_REVENUE':  'cc.created_at DESC',
+            'CITY': '(SELECT cu3.billing_city FROM customer_units cu3 WHERE cu3.company_id = cc.id AND cu3.deleted_at IS NULL ORDER BY cu3.id ASC LIMIT 1) ASC NULLS LAST',
+        };
+        const orderClause = SORT_MAP[filters.sortBy] || 'cc.created_at DESC';
+
+        // Pagination
+        const limit  = Math.min(parseInt(filters.limit)  || 25, 200);
+        const offset = parseInt(filters.offset) || 0;
+
         const query = `
             SELECT
-                cu.id                       AS id,
-                cu.customer_code,
-                cu.unit_name                AS name,
-                cu.gst_number,
-                cu.billing_address,
-                cu.shipping_address,
-                cu.is_shipping_same_as_billing,
-                cu.billing_pincode,
-                cu.billing_pincode           AS pin,
-                cu.billing_city,
-                cu.billing_city              AS city,
-                cu.billing_state,
-                cu.billing_state             AS state,
-                cu.billing_gst_number,
-                cu.billing_gst_number        AS gst_number,
-                cu.shipping_pincode,
-                cu.shipping_city,
-                cu.shipping_state,
-                cu.shipping_gst_number,
+                cc.id,
+                cc.id                AS company_id,
+                cc.name,
                 cc.customer_type,
-                cc.credit_period,
-                cc.payment_terms,
+                cc.customer_stage,
                 cc.is_active,
-                cc.id                       AS company_id,
-                cc.name                     AS company_name,
-                cu.id                       AS unit_id,
-                (SELECT COUNT(*) FROM customer_contacts
-                 WHERE customer_company_id = cc.id AND deleted_at IS NULL) AS contact_count
-            FROM customer_units cu
-            JOIN customer_companies cc ON cu.company_id = cc.id
-            WHERE cc.company_id = $1
-              AND cc.deleted_at IS NULL
-              ${searchClause}
-              ${typeClause}
-              ${stageClause}
-            ORDER BY cu.customer_code ASC NULLS LAST
+                cc.created_at,
+                (SELECT cu.customer_code
+                 FROM customer_units cu WHERE cu.company_id = cc.id AND cu.deleted_at IS NULL
+                 ORDER BY cu.id ASC LIMIT 1)                             AS customer_code,
+                (SELECT cu.billing_gst_number
+                 FROM customer_units cu WHERE cu.company_id = cc.id AND cu.deleted_at IS NULL
+                 ORDER BY cu.id ASC LIMIT 1)                             AS gst_number,
+                (SELECT cu.billing_city
+                 FROM customer_units cu WHERE cu.company_id = cc.id AND cu.deleted_at IS NULL
+                 ORDER BY cu.id ASC LIMIT 1)                             AS city,
+                (SELECT cu.billing_state
+                 FROM customer_units cu WHERE cu.company_id = cc.id AND cu.deleted_at IS NULL
+                 ORDER BY cu.id ASC LIMIT 1)                             AS state,
+                (SELECT cu.billing_address
+                 FROM customer_units cu WHERE cu.company_id = cc.id AND cu.deleted_at IS NULL
+                 ORDER BY cu.id ASC LIMIT 1)                             AS billing_address,
+                (SELECT COUNT(*)
+                 FROM customer_contacts cont
+                 WHERE cont.customer_company_id = cc.id AND cont.deleted_at IS NULL) AS contact_count,
+                COUNT(*) OVER()      AS total_count
+            FROM customer_companies cc
+            WHERE ${whereClause}
+            ORDER BY ${orderClause}
+            LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
         `;
+        params.push(limit, offset);
 
         const result = await pool.query(query, params);
-        return result.rows;
+        const total  = parseInt(result.rows[0]?.total_count) || 0;
+        const rows   = result.rows.map(({ total_count, ...r }) => r);
+        return { rows, total };
     }
 
 

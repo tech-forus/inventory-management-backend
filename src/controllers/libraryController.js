@@ -103,8 +103,8 @@ const addConsigneeAddress = async (req, res, next) => {
 const getCustomerContacts = async (req, res, next) => {
   try {
     const companyId = getCompanyId(req);
-    const contacts = await CustomerContactModel.getAll(companyId, req.query || {});
-    res.json({ success: true, data: contacts });
+    const { rows, total } = await CustomerContactModel.getAll(companyId, req.query || {});
+    res.json({ success: true, data: rows, total });
   } catch (error) {
     next(error);
   }

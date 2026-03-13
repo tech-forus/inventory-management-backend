@@ -240,6 +240,7 @@ class QuotationModel {
 
     /**
      * Get all quotations for a company (list view).
+     * Supports: status, search, lead_id, dateFrom, dateTo, sortBy, sortOrder, limit, offset.
      */
     static async getAll(companyId, filters = {}) {
         const conditions = ['q.company_id = $1'];
@@ -259,10 +260,28 @@ class QuotationModel {
             params.push(`%${filters.search}%`);
             idx++;
         }
+        if (filters.dateFrom) {
+            conditions.push(`q.quote_date >= $${idx++}`);
+            params.push(filters.dateFrom);
+        }
+        if (filters.dateTo) {
+            conditions.push(`q.quote_date <= $${idx++}`);
+            params.push(filters.dateTo);
+        }
 
         const where = conditions.join(' AND ');
-        const limit = Math.min(parseInt(filters.limit) || 50, 200);
+        const limit  = Math.min(parseInt(filters.limit)  || 50, 200);
         const offset = parseInt(filters.offset) || 0;
+
+        // Sort
+        const SORT_MAP = {
+            'DATE_ASC':    'q.created_at ASC',
+            'DATE_DESC':   'q.created_at DESC',
+            'AMOUNT_ASC':  'q.grand_total ASC',
+            'AMOUNT_DESC': 'q.grand_total DESC',
+            'STATUS':      'q.status ASC, q.created_at DESC',
+        };
+        const orderClause = SORT_MAP[filters.sortBy] || 'q.created_at DESC';
 
         const result = await pool.query(`
             SELECT
@@ -273,7 +292,7 @@ class QuotationModel {
             FROM quotations q
             LEFT JOIN users u ON u.id = q.assigned_to
             WHERE ${where}
-            ORDER BY q.created_at DESC
+            ORDER BY ${orderClause}
             LIMIT $${idx} OFFSET $${idx + 1}
         `, [...params, limit, offset]);
 

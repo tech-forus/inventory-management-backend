@@ -182,8 +182,8 @@ router.delete('/customer-units/:id', libraryController.deleteCustomerUnit);
 router.get('/customer-companies', async (req, res, next) => {
   try {
     const companyId = req.user.companyId;
-    const rows = await customerCompanyModel.getAll(companyId, req.query);
-    res.json({ success: true, data: rows, total: rows.length });
+    const { rows, total } = await customerCompanyModel.getAll(companyId, req.query);
+    res.json({ success: true, data: rows, total });
   } catch (err) { next(err); }
 });
 

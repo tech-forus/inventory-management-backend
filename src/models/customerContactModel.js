@@ -71,7 +71,8 @@ class CustomerContactModel {
     }
 
     /**
-     * Get all contacts for a specific company or tenant
+     * Get all contacts for a specific company or tenant.
+     * Supports: search, stage, state, hasGst, assignedTo, sortBy, limit, offset.
      */
     static async getAll(tenantCompanyId, filters = {}) {
         let whereClause = `WHERE cc.company_id = $1 AND cc.deleted_at IS NULL`;
@@ -91,21 +92,98 @@ class CustomerContactModel {
         }
 
         if (filters.search) {
-            whereClause += ` AND (cc.name ILIKE $${paramIndex} OR cc.phone ILIKE $${paramIndex} OR cc.email ILIKE $${paramIndex})`;
+            whereClause += ` AND (
+                cc.name  ILIKE $${paramIndex}
+                OR cc.phone ILIKE $${paramIndex}
+                OR cc.email ILIKE $${paramIndex}
+                OR comp.name ILIKE $${paramIndex}
+            )`;
             params.push(`%${filters.search}%`);
             paramIndex++;
         }
 
+        // Stage filter
+        const stage = (filters.stage || '').toUpperCase();
+        if (stage && stage !== 'ALL') {
+            if (stage === 'POTENTIAL') {
+                whereClause += ` AND cc.contact_stage = 'potential'`;
+            } else if (stage === 'EXISTING') {
+                whereClause += ` AND cc.contact_stage = 'existing'`;
+            } else if (stage === 'NEWLY_ADDED') {
+                const period = filters.newlyAddedPeriod || '1M';
+                if (period === 'CUSTOM' && filters.customFrom && filters.customTo) {
+                    whereClause += ` AND cc.created_at >= $${paramIndex} AND cc.created_at <= $${paramIndex + 1}`;
+                    params.push(filters.customFrom, filters.customTo);
+                    paramIndex += 2;
+                } else {
+                    const INTERVAL_MAP = { '1W': '7 days', '1M': '30 days', '3M': '3 months', '6M': '6 months', '1Y': '1 year' };
+                    const interval = INTERVAL_MAP[period] || '30 days';
+                    whereClause += ` AND cc.created_at >= NOW() - INTERVAL '${interval}'`;
+                }
+            } else if (stage === 'NOT_CONTACTED') {
+                const period = filters.notContactedPeriod || '1M';
+                if (period === 'CUSTOM' && filters.ncCustomFrom && filters.ncCustomTo) {
+                    whereClause += ` AND cc.created_at >= $${paramIndex} AND cc.created_at <= $${paramIndex + 1} AND cc.contact_stage = 'potential'`;
+                    params.push(filters.ncCustomFrom, filters.ncCustomTo);
+                    paramIndex += 2;
+                } else {
+                    const INTERVAL_MAP = { '15D': '15 days', '1M': '30 days', '3M': '3 months', '6M': '6 months', '1Y': '1 year' };
+                    const interval = INTERVAL_MAP[period] || '30 days';
+                    whereClause += ` AND cc.created_at <= NOW() - INTERVAL '${interval}' AND cc.contact_stage = 'potential'`;
+                }
+            }
+        }
+
+        // State filter (via joined customer_units)
+        if (filters.state) {
+            whereClause += ` AND cu.billing_state = $${paramIndex}`;
+            params.push(filters.state);
+            paramIndex++;
+        }
+
+        // GST filter (via joined customer_units)
+        const hasGst = filters.hasGst;
+        if (hasGst === 'true' || hasGst === true) {
+            whereClause += ` AND cu.billing_gst_number IS NOT NULL AND cu.billing_gst_number <> ''`;
+        } else if (hasGst === 'false' || hasGst === false) {
+            whereClause += ` AND (cu.billing_gst_number IS NULL OR cu.billing_gst_number = '')`;
+        }
+
+        // Sort
+        const SORT_MAP = {
+            'RECENTLY_ADDED':   'cc.created_at DESC',
+            'ALPHABETICAL':     'cc.name ASC',
+            'LAST_INTERACTED':  'cc.updated_at DESC',
+            'TOTAL_REVENUE':    'cc.created_at DESC',
+            'CITY':             'cu.billing_city ASC NULLS LAST',
+        };
+        const orderClause = SORT_MAP[filters.sortBy] || 'cc.created_at DESC';
+
+        // Pagination
+        const limit  = Math.min(parseInt(filters.limit)  || 25, 200);
+        const offset = parseInt(filters.offset) || 0;
+
         const query = `
-      SELECT cc.*, comp.name as company_name
-      FROM customer_contacts cc
-      LEFT JOIN customer_companies comp ON cc.customer_company_id = comp.id
-      ${whereClause}
-      ORDER BY cc.name ASC
-    `;
+            SELECT
+                cc.*,
+                comp.name  AS company_name,
+                cu.billing_state AS state,
+                cu.billing_city  AS city,
+                cu.billing_gst_number AS unit_gst_number,
+                COUNT(*) OVER() AS total_count
+            FROM customer_contacts cc
+            LEFT JOIN customer_companies comp ON cc.customer_company_id = comp.id
+            LEFT JOIN customer_units     cu   ON cc.unit_id = cu.id
+            ${whereClause}
+            ORDER BY ${orderClause}
+            LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+        `;
+        params.push(limit, offset);
 
         const result = await pool.query(query, params);
-        return result.rows;
+        const total  = parseInt(result.rows[0]?.total_count) || 0;
+        const rows   = result.rows.map(({ total_count, ...r }) => r);
+        return { rows, total };
     }
 
     /**
