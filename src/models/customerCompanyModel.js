@@ -118,7 +118,7 @@ class CustomerCompanyModel {
                 cu.shipping_address,
                 cu.is_shipping_same_as_billing,
                 cu.billing_pincode,
-                cu.billing_city,
+                cu.billing_city             AS city,
                 cu.billing_state,
                 cu.billing_gst_number,
                 cu.shipping_pincode,
