@@ -31,18 +31,28 @@ class CustomerUnitModel {
             const result = await db.query(`
                 INSERT INTO customer_units (
                     company_id, unit_name, customer_code,
-                    gst_number, billing_address, shipping_address, is_shipping_same_as_billing
+                    gst_number, billing_address, shipping_address, is_shipping_same_as_billing,
+                    billing_pincode, billing_city, billing_state, billing_gst_number,
+                    shipping_pincode, shipping_city, shipping_state, shipping_gst_number
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
                 RETURNING *
             `, [
                 companyId,
                 data.unitName || data.name || 'Unit 1',
                 customerCode,
-                data.gstNumber || null,
+                data.billingGstNumber || data.gstNumber || null,
                 data.billingAddress || null,
                 data.shippingAddress || null,
-                data.isShippingSameAsBilling || false
+                data.isShippingSameAsBilling || false,
+                data.billingPincode || null,
+                data.billingCity || null,
+                data.billingState || null,
+                data.billingGstNumber || data.gstNumber || null,
+                data.shippingPincode || null,
+                data.shippingCity || null,
+                data.shippingState || null,
+                data.shippingGstNumber || null
             ]);
 
             const unit = result.rows[0];
@@ -98,40 +108,31 @@ class CustomerUnitModel {
         const params = [id];
         let paramIndex = 2;
 
-        if (data.unitName || data.name) {
-            sets.push(`unit_name = $${paramIndex}`);
-            params.push(data.unitName || data.name);
-            paramIndex++;
-        }
+        // Field mapping: camelCase from frontend -> snake_case DB column
+        const fieldMap = {
+            unitName: 'unit_name',
+            name: 'unit_name',
+            address: 'address',
+            gstNumber: 'gst_number',
+            billingAddress: 'billing_address',
+            shippingAddress: 'shipping_address',
+            isShippingSameAsBilling: 'is_shipping_same_as_billing',
+            billingPincode: 'billing_pincode',
+            billingCity: 'billing_city',
+            billingState: 'billing_state',
+            billingGstNumber: 'billing_gst_number',
+            shippingPincode: 'shipping_pincode',
+            shippingCity: 'shipping_city',
+            shippingState: 'shipping_state',
+            shippingGstNumber: 'shipping_gst_number'
+        };
 
-        if (data.address !== undefined) {
-            sets.push(`address = $${paramIndex}`);
-            params.push(data.address);
-            paramIndex++;
-        }
-
-        if (data.gstNumber !== undefined) {
-            sets.push(`gst_number = $${paramIndex}`);
-            params.push(data.gstNumber);
-            paramIndex++;
-        }
-
-        if (data.billingAddress !== undefined) {
-            sets.push(`billing_address = $${paramIndex}`);
-            params.push(data.billingAddress);
-            paramIndex++;
-        }
-
-        if (data.shippingAddress !== undefined) {
-            sets.push(`shipping_address = $${paramIndex}`);
-            params.push(data.shippingAddress);
-            paramIndex++;
-        }
-
-        if (data.isShippingSameAsBilling !== undefined) {
-            sets.push(`is_shipping_same_as_billing = $${paramIndex}`);
-            params.push(data.isShippingSameAsBilling);
-            paramIndex++;
+        for (const [jsKey, dbCol] of Object.entries(fieldMap)) {
+            if (data[jsKey] !== undefined) {
+                sets.push(`${dbCol} = $${paramIndex}`);
+                params.push(data[jsKey]);
+                paramIndex++;
+            }
         }
 
         if (sets.length === 0) return null;
