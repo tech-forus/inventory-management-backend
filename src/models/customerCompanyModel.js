@@ -104,7 +104,6 @@ class CustomerCompanyModel {
                 OR EXISTS (
                     SELECT 1 FROM customer_units cu2
                     WHERE cu2.company_id = cc.id
-                      AND cu2.deleted_at IS NULL
                       AND (
                           cu2.unit_name ILIKE $${paramIndex}
                           OR cu2.customer_code ILIKE $${paramIndex}
@@ -133,7 +132,7 @@ class CustomerCompanyModel {
         if (filters.state) {
             conditions.push(`EXISTS (
                 SELECT 1 FROM customer_units cu2
-                WHERE cu2.company_id = cc.id AND cu2.deleted_at IS NULL
+                WHERE cu2.company_id = cc.id
                   AND cu2.billing_state = $${paramIndex}
             )`);
             params.push(filters.state);
@@ -145,13 +144,13 @@ class CustomerCompanyModel {
         if (hasGst === 'true' || hasGst === true) {
             conditions.push(`EXISTS (
                 SELECT 1 FROM customer_units cu2
-                WHERE cu2.company_id = cc.id AND cu2.deleted_at IS NULL
+                WHERE cu2.company_id = cc.id
                   AND cu2.billing_gst_number IS NOT NULL AND cu2.billing_gst_number <> ''
             )`);
         } else if (hasGst === 'false' || hasGst === false) {
             conditions.push(`NOT EXISTS (
                 SELECT 1 FROM customer_units cu2
-                WHERE cu2.company_id = cc.id AND cu2.deleted_at IS NULL
+                WHERE cu2.company_id = cc.id
                   AND cu2.billing_gst_number IS NOT NULL AND cu2.billing_gst_number <> ''
             )`);
         }
@@ -164,7 +163,7 @@ class CustomerCompanyModel {
             'ALPHABETICAL': 'cc.name ASC',
             'LAST_INTERACTED': 'cc.updated_at DESC',
             'TOTAL_REVENUE': 'cc.created_at DESC',
-            'CITY': '(SELECT cu3.billing_city FROM customer_units cu3 WHERE cu3.company_id = cc.id AND cu3.deleted_at IS NULL ORDER BY cu3.id ASC LIMIT 1) ASC NULLS LAST',
+            'CITY': '(SELECT cu3.billing_city FROM customer_units cu3 WHERE cu3.company_id = cc.id ORDER BY cu3.id ASC LIMIT 1) ASC NULLS LAST',
         };
         const orderClause = SORT_MAP[filters.sortBy] || 'cc.created_at DESC';
 
@@ -182,19 +181,19 @@ class CustomerCompanyModel {
                 cc.is_active,
                 cc.created_at,
                 (SELECT cu.customer_code
-                 FROM customer_units cu WHERE cu.company_id = cc.id AND cu.deleted_at IS NULL
+                 FROM customer_units cu WHERE cu.company_id = cc.id
                  ORDER BY cu.id ASC LIMIT 1)                             AS customer_code,
                 (SELECT cu.billing_gst_number
-                 FROM customer_units cu WHERE cu.company_id = cc.id AND cu.deleted_at IS NULL
+                 FROM customer_units cu WHERE cu.company_id = cc.id
                  ORDER BY cu.id ASC LIMIT 1)                             AS gst_number,
                 (SELECT cu.billing_city
-                 FROM customer_units cu WHERE cu.company_id = cc.id AND cu.deleted_at IS NULL
+                 FROM customer_units cu WHERE cu.company_id = cc.id
                  ORDER BY cu.id ASC LIMIT 1)                             AS city,
                 (SELECT cu.billing_state
-                 FROM customer_units cu WHERE cu.company_id = cc.id AND cu.deleted_at IS NULL
+                 FROM customer_units cu WHERE cu.company_id = cc.id
                  ORDER BY cu.id ASC LIMIT 1)                             AS state,
                 (SELECT cu.billing_address
-                 FROM customer_units cu WHERE cu.company_id = cc.id AND cu.deleted_at IS NULL
+                 FROM customer_units cu WHERE cu.company_id = cc.id
                  ORDER BY cu.id ASC LIMIT 1)                             AS billing_address,
                 (SELECT COUNT(*)
                  FROM customer_contacts cont
