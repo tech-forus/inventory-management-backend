@@ -150,6 +150,18 @@ class LeadModel {
             paramIndex++;
         }
 
+        if (filters.lead_type) {
+            query += ` AND l.lead_type = $${paramIndex}`;
+            params.push(filters.lead_type);
+            paramIndex++;
+        }
+
+        if (filters.closure_time) {
+            query += ` AND l.closure_time = $${paramIndex}`;
+            params.push(filters.closure_time);
+            paramIndex++;
+        }
+
         if (filters.min_value) {
             query += ` AND l.estimated_value >= $${paramIndex}`;
             params.push(filters.min_value);
