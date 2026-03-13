@@ -161,15 +161,15 @@ class CustomerCompanyModel {
         // Sort
         const SORT_MAP = {
             'RECENTLY_ADDED': 'cc.created_at DESC',
-            'ALPHABETICAL':   'cc.name ASC',
+            'ALPHABETICAL': 'cc.name ASC',
             'LAST_INTERACTED': 'cc.updated_at DESC',
-            'TOTAL_REVENUE':  'cc.created_at DESC',
+            'TOTAL_REVENUE': 'cc.created_at DESC',
             'CITY': '(SELECT cu3.billing_city FROM customer_units cu3 WHERE cu3.company_id = cc.id AND cu3.deleted_at IS NULL ORDER BY cu3.id ASC LIMIT 1) ASC NULLS LAST',
         };
         const orderClause = SORT_MAP[filters.sortBy] || 'cc.created_at DESC';
 
         // Pagination
-        const limit  = Math.min(parseInt(filters.limit)  || 25, 200);
+        const limit = Math.min(parseInt(filters.limit) || 25, 200);
         const offset = parseInt(filters.offset) || 0;
 
         const query = `
@@ -208,8 +208,8 @@ class CustomerCompanyModel {
         params.push(limit, offset);
 
         const result = await pool.query(query, params);
-        const total  = parseInt(result.rows[0]?.total_count) || 0;
-        const rows   = result.rows.map(({ total_count, ...r }) => r);
+        const total = parseInt(result.rows[0]?.total_count) || 0;
+        const rows = result.rows.map(({ total_count, ...r }) => r);
         return { rows, total };
     }
 
